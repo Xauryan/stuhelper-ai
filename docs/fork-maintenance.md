@@ -1,0 +1,138 @@
+# 分叉仓库维护规范
+
+本文档定义 StuHelper AI 分叉仓库如何长期跟进和维护
+`QuantumNous/new-api` 上游仓库。
+
+## 仓库信息
+
+- 上游仓库：https://github.com/QuantumNous/new-api
+- 上游远程名：`upstream`
+- 本项目仓库：`git@github.com:Xauryan/stuhelper-ai.git`
+- 本项目远程名：`origin`
+- 主分支：`main`
+- 项目身份：`StuHelper AI`
+- 组织和作者身份：`Xauryan`
+
+## 改动来源
+
+本分叉仓库包含三类改动：
+
+1. StuHelper AI 本地二开。
+2. 从 `QuantumNous/new-api` 同步的上游发版更新。
+3. 未被上游合并、但本项目需要引入的外部 PR 或补丁。
+
+这些来源必须在提交、分支命名和维护日志中保持可区分。如果某个改动来自
+第三方 PR，即使是手工移植，也必须记录到 `docs/external-prs.md`。
+
+## StuHelper AI 本地基线
+
+以下行为属于 StuHelper AI 产品基线。同步上游时必须保留，除非某个明确的
+StuHelper AI 本地任务决定修改它们：
+
+- 默认前端是 classic 前端。后端默认值、系统设置默认值、管理员 UI 默认值
+  都应继续选择 `classic`，而不是新版 default 前端；除非管理员显式修改设置。
+- classic 顶部导航包含排行榜入口，位置在模型广场之后、文档之前。该入口由
+  管理员顶部导航设置管理，包括启用开关和可选的登录后可见开关。
+- 用户排行榜包含消耗排行和充值排行，并支持总榜、近一月、近一周、近一天
+  统计周期。充值排行总额包括成功在线充值、兑换码兑换、管理员手动增加余额。
+- GHCR 镜像工作流是面向发布版本的。它只在版本 tag 或针对既有版本 tag 的
+  显式手动触发时构建，只发布版本 tag 镜像和 `latest`，不发布 `main` 或
+  commit-SHA 镜像 tag。`latest` 应指向最新发布版本镜像。
+- 项目身份必须保持为 `StuHelper AI`；组织、作者、联系方式、包名、Docker、
+  workflow 和元数据身份必须保持为 `Xauryan`。
+
+只有在标识上游来源、上游 release 或导入的上游 PR 时，才允许引用原上游仓库。
+这些引用不得重新作为本分叉仓库的产品品牌、包身份、镜像名称、可见 UI 文案
+或归属信息出现。
+
+## 分支策略
+
+上游同步和外部补丁导入使用短生命周期分支：
+
+- `main`：StuHelper AI 稳定主线。
+- `sync/upstream-vX.Y.Z`：同步某个上游 release tag 的分支。
+- `patch/upstream-pr-NNNN`：导入某个上游 PR 或外部补丁的分支。
+- `feature/<topic>`：StuHelper AI 本地功能开发分支。
+
+不要在脏的 `main` 工作树中直接同步上游。同步前应先提交、stash，或把无关
+本地改动移动到单独分支。
+
+## 上游同步策略
+
+优先同步上游 release tag，而不是随意同步某个上游提交。只有在需要紧急修复，
+或明确决定跟进 release 之后的上游工作时，才使用 `upstream/main`。
+
+同步前执行：
+
+```powershell
+git fetch upstream --tags --prune
+git status --short --branch
+git rev-list --left-right --count HEAD...<upstream-tag>
+git log --oneline HEAD..<upstream-tag>
+```
+
+创建独立同步分支：
+
+```powershell
+git switch -c sync/upstream-<upstream-tag>
+git merge <upstream-tag>
+```
+
+如果某个 release 冲突太多，应按领域审查上游提交，并考虑分组 cherry-pick。
+实际采用的策略必须记录到 `docs/upstream-sync-log.md`。
+
+## 冲突处理策略
+
+解决上游冲突时：
+
+- 保留 `StuHelper AI` 项目品牌。
+- 保留 `Xauryan` 组织、作者、包、服务和元数据身份。
+- 不得重新引入旧项目名、旧服务名、旧 Docker 镜像名、旧 Go module path、
+  旧前端标题、旧页脚文案或旧版权联系方式。
+- 保留本地计费、订阅、Codex、OAuth、排行榜、支付、仪表盘、i18n 和部署行为，
+  除非明确选择用上游改动替换它们。
+- 生成文件与源文件分开处理。如果项目工具链要求生成，应重新生成，不要手工
+  大规模编辑生成产物。
+- 数据库相关改动必须同时保持 SQLite、MySQL 和 PostgreSQL 兼容。
+
+如果某个冲突无法明确判断，应在同步日志中留下说明，而不是静默选择某一边。
+
+## 外部 PR 策略
+
+对于上游尚未合并的 PR：
+
+1. 阅读 PR 描述、diff、提交历史和 review comments。
+2. 判断应该 cherry-pick 还是手工移植。
+3. 如果行为发生变化，添加聚焦测试。
+4. 在 `docs/external-prs.md` 记录导入的补丁。
+5. 后续每次同步上游时，检查上游是否已经吸收该补丁。
+
+如果上游后来合并了等价修复，应在下一次同步时协调本地补丁，并更新外部 PR
+记录。
+
+## 验证策略
+
+根据触及文件选择验证命令。常用命令：
+
+```powershell
+go test ./...
+go test ./middleware -count=1
+Set-Location web/default; bun run typecheck
+Set-Location web/default; bun run build
+Set-Location web/default; bun run i18n:sync
+```
+
+如果全量命令因为仓库已有状态失败，应记录失败原因，以及能够证明本次变更
+范围的更窄验证命令。
+
+## 本分叉仓库的发布说明
+
+每个 StuHelper AI 本地发布都应该可以追溯到：
+
+- 对应的上游 release tag 或上游提交范围。
+- 包含的 StuHelper AI 本地提交。
+- 包含的外部 PR。
+- 验证命令和已知失败。
+
+当某个本地版本基于上游 tag 加本地分叉改动发布时，可使用类似
+`stuhelper-v1.0.0-rc.5-sync.1` 的 tag。
