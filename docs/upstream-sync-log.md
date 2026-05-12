@@ -2,9 +2,9 @@
 
 本文档记录从 `QuantumNous/new-api` 同步到 StuHelper AI 分叉仓库的过程。
 
-## 2026-05-13 - 待同步到 v1.0.0-rc.5
+## 2026-05-13 - 已同步到 upstream/main `aa56667b`
 
-- 状态：待处理，尚未合并。
+- 状态：已按语义分批 cherry-pick / 手工移植，已提交。
 - 上游 release：https://github.com/QuantumNous/new-api/releases/tag/v1.0.0-rc.5
 - 上游 release 日期：2026-05-12
 - 上游 tag commit：`469d3747`
@@ -55,9 +55,9 @@
 
 ### 同步前的本地覆盖层状态
 
-当前本地线尚未合并上面列出的 `v1.0.0-rc.5` 或更新的 `upstream/main` 提交。
-执行待处理的上游同步时，必须明确检查并保留本地排行榜功能、classic 默认
-前端策略、仅面向 release 的 GHCR workflow，以及身份清理改动。
+本次同步执行前，本地线尚未合并上面列出的 `v1.0.0-rc.5` 或更新的
+`upstream/main` 提交。同步时已明确保留本地排行榜功能、classic 默认前端
+策略、仅面向 release 的 GHCR workflow，以及身份清理改动。
 
 ### 生成本条记录时使用的预同步命令
 
@@ -74,8 +74,44 @@ git log --oneline v1.0.0-rc.5..upstream/main
 
 ### 同步结果
 
-- 合并策略：TBD
-- 结果提交：TBD
-- 冲突：TBD
-- 验证：TBD
-- 备注：本条记录只是同步前的规划基线。实际同步分支合并后，需要更新本节。
+- 合并策略：按语义分批 cherry-pick / 手工移植；不直接合并
+  `upstream/main`，避免恢复上游 README、workflow、Go module/import path、
+  项目身份和 classic/default 前端策略。
+- 结果提交：
+  - `53e31839` feat: track upstream request ids
+  - `49c8c933` fix: make payment return paths theme-aware
+  - `3d2f70a8` fix(default): port upstream UI compatibility fixes
+  - `fce87074` fix(default): port route guards and ranking access checks
+  - `8bfbaa28` feat(default): refresh performance dashboard
+  - `d4d32822` chore: refresh upstream related resources
+- 覆盖的上游提交：
+  - `19fc384e` feat(performance): update performance metrics handling and UI components
+  - `03d53732` fix(default): improve performance health panel layout
+  - `3057f04a` fix(wallet): read topup gateway flags from topupInfo instead of status (#4599)
+  - `7fe896d2` fix: use getUserGroups for ratio display to respect GroupGroupRatio (#4772)
+  - `2b89989f` fix(default): support DropdownMenuItem onSelect (#4787)
+  - `fde2cac9` fix(web/default): guard playground messages against legacy classic shape (#4650)
+  - `469d3747` fix: defaut ui triage (#4802)
+  - `3856b9d2` chore(deps): bump axios from 1.15.0 to 1.15.2 in /web/classic (#4634)
+  - `428e3d91` chore: refresh related resources
+  - `aa56667b` feat: track upstream request ID and prevent response header override
+- 未直接合并：
+  - `a720064d` 只是上游 merge commit，本次按其有效内容所在提交移植。
+  - 上游多语言 README 恢复/改写没有移植；本分叉当前只跟踪本地
+    `README.md`，且必须保持 StuHelper AI/Xauryan 身份。
+  - 上游 CI/workflow、Docker 镜像发布策略、Go module/import path 和大范围
+    品牌信息没有移植；这些会覆盖本地二开基线。
+- 排行榜说明：上游本次排行榜相关改动主要是 `web/default` 新版前端路由守卫
+  和 `/api/rankings` 后端开关校验。本地 classic 前端排行榜页面、
+  `/api/rankings/users`、classic 顶栏入口和后台管理开关已保留。
+- 验证：
+  - `go test ./common ./model ./service ./relay/channel ./relay/channel/minimax ./relay/channel/openai ./controller -run TestDoesNotExist -count=1`
+  - `go test ./common ./service ./controller -run TestDoesNotExist -count=1`
+  - `go test ./pkg/perf_metrics ./controller -run TestDoesNotExist -count=1`
+  - `bun test src/components/ui/dropdown-menu.test.tsx`
+  - `bun run typecheck`（`web/default`）
+  - `node` 解析 `web/default/src/i18n/locales/{en,fr,ja,ru,vi,zh}.json`
+  - `git diff --check`
+- 备注：由于本地品牌、module path、classic 默认前端、classic 排行榜和 GHCR
+  发布策略与上游不同，`git log --cherry-pick --right-only HEAD...upstream/main`
+  仍可能列出上游提交；判断同步状态应以本节的语义覆盖记录为准。
