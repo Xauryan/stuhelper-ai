@@ -11,6 +11,7 @@ import (
 
 	"github.com/Xauryan/stuhelper-ai/dto"
 	relaycommon "github.com/Xauryan/stuhelper-ai/relay/common"
+	"github.com/Xauryan/stuhelper-ai/service"
 	"github.com/Xauryan/stuhelper-ai/types"
 	"github.com/gin-gonic/gin"
 )
@@ -184,6 +185,9 @@ func handleChatCompletionResponse(c *gin.Context, resp *http.Response, info *rel
 
 	// Set response headers
 	for key, values := range resp.Header {
+		if !service.ShouldCopyUpstreamHeader(c, key, values) {
+			continue
+		}
 		for _, value := range values {
 			c.Header(key, value)
 		}
