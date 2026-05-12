@@ -1,0 +1,213 @@
+package model
+
+import (
+	"sort"
+
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
+)
+
+const userRankingDefaultLimit = 20
+
+type UserRankingTotal struct {
+	UserId     int    `json:"user_id"`
+	Username   string `json:"username"`
+	TotalQuota int64  `json:"total_quota"`
+}
+
+func GetUserConsumptionRankingTotals(startTime int64, endTime int64, limit int) ([]UserRankingTotal, int64, error) {
+	rows, total, err := scanUserRankingTotals(
+		applyUnixTimeRange(
+			LOG_DB.Table("logs").
+				Select("user_id, sum(quota) as total_quota").
+				Where("type = ? AND quota > 0", LogTypeConsume).
+				Group("user_id").
+				Having("sum(quota) > 0"),
+			"created_at",
+			startTime,
+			endTime,
+		),
+		limit,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+func GetUserRechargeRankingTotals(startTime int64, endTime int64, limit int) ([]UserRankingTotal, int64, error) {
+	aggregates := make(map[int]*UserRankingTotal)
+	if err := mergeSuccessfulTopUpRankingRows(aggregates, startTime, endTime); err != nil {
+		return nil, 0, err
+	}
+	if err := mergeUserRankingRows(aggregates, getRedeemedCodeRankingRows(startTime, endTime)); err != nil {
+		return nil, 0, err
+	}
+	if err := mergeUserRankingRows(aggregates, getAdminAddedQuotaRankingRows(startTime, endTime)); err != nil {
+		return nil, 0, err
+	}
+
+	rows := userRankingMapToSortedRows(aggregates)
+	total := sumUserRankingQuota(rows)
+	if limit <= 0 {
+		limit = userRankingDefaultLimit
+	}
+	if len(rows) > limit {
+		rows = rows[:limit]
+	}
+	return rows, total, nil
+}
+
+func scanUserRankingTotals(query *gorm.DB, limit int) ([]UserRankingTotal, int64, error) {
+	if limit <= 0 {
+		limit = userRankingDefaultLimit
+	}
+	var rows []UserRankingTotal
+	if err := query.Order("total_quota DESC").Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	rows = normalizeUserRankingRows(rows)
+	sortUserRankingRows(rows)
+	total := sumUserRankingQuota(rows)
+	if len(rows) > limit {
+		rows = rows[:limit]
+	}
+	return rows, total, nil
+}
+
+func mergeSuccessfulTopUpRankingRows(aggregates map[int]*UserRankingTotal, startTime int64, endTime int64) error {
+	var topUps []TopUp
+	query := DB.Where("status = ?", common.TopUpStatusSuccess)
+	if startTime > 0 && endTime > 0 {
+		query = query.Where("(complete_time >= ? AND complete_time <= ?) OR (complete_time = 0 AND create_time >= ? AND create_time <= ?)", startTime, endTime, startTime, endTime)
+	} else if startTime > 0 {
+		query = query.Where("(complete_time >= ?) OR (complete_time = 0 AND create_time >= ?)", startTime, startTime)
+	} else if endTime > 0 {
+		query = query.Where("(complete_time <= ? AND complete_time > 0) OR (complete_time = 0 AND create_time <= ?)", endTime, endTime)
+	}
+	if err := query.Find(&topUps).Error; err != nil {
+		return err
+	}
+	for _, topUp := range topUps {
+		quota := topUpCreditedQuota(topUp)
+		if topUp.UserId <= 0 || quota <= 0 {
+			continue
+		}
+		item := aggregates[topUp.UserId]
+		if item == nil {
+			aggregates[topUp.UserId] = &UserRankingTotal{
+				UserId:     topUp.UserId,
+				Username:   usernameForRanking(topUp.UserId),
+				TotalQuota: quota,
+			}
+			continue
+		}
+		item.TotalQuota += quota
+	}
+	return nil
+}
+
+func getRedeemedCodeRankingRows(startTime int64, endTime int64) *gorm.DB {
+	query := DB.Table("redemptions").
+		Select("redemptions.used_user_id as user_id, sum(redemptions.quota) as total_quota").
+		Where("redemptions.status = ? AND redemptions.used_user_id > 0", common.RedemptionCodeStatusUsed).
+		Group("redemptions.used_user_id")
+	return applyUnixTimeRange(query, "redemptions.redeemed_time", startTime, endTime)
+}
+
+func getAdminAddedQuotaRankingRows(startTime int64, endTime int64) *gorm.DB {
+	query := LOG_DB.Table("logs").
+		Select("logs.user_id, sum(logs.quota) as total_quota").
+		Where("logs.type = ? AND logs.quota > 0 AND logs.content LIKE ?", LogTypeManage, "管理员增加用户额度%").
+		Group("logs.user_id")
+	return applyUnixTimeRange(query, "logs.created_at", startTime, endTime)
+}
+
+func mergeUserRankingRows(aggregates map[int]*UserRankingTotal, query *gorm.DB) error {
+	var rows []UserRankingTotal
+	if err := query.Scan(&rows).Error; err != nil {
+		return err
+	}
+	for _, row := range normalizeUserRankingRows(rows) {
+		if row.UserId <= 0 || row.TotalQuota <= 0 {
+			continue
+		}
+		item := aggregates[row.UserId]
+		if item == nil {
+			copyRow := row
+			aggregates[row.UserId] = &copyRow
+			continue
+		}
+		item.TotalQuota += row.TotalQuota
+		if item.Username == "" && row.Username != "" {
+			item.Username = row.Username
+		}
+	}
+	return nil
+}
+
+func applyUnixTimeRange(query *gorm.DB, column string, startTime int64, endTime int64) *gorm.DB {
+	if startTime > 0 {
+		query = query.Where(column+" >= ?", startTime)
+	}
+	if endTime > 0 {
+		query = query.Where(column+" <= ?", endTime)
+	}
+	return query
+}
+
+func normalizeUserRankingRows(rows []UserRankingTotal) []UserRankingTotal {
+	for i := range rows {
+		if rows[i].Username == "" && rows[i].UserId > 0 {
+			rows[i].Username, _ = GetUsernameById(rows[i].UserId, false)
+		}
+	}
+	return rows
+}
+
+func sumUserRankingQuota(rows []UserRankingTotal) int64 {
+	total := int64(0)
+	for _, row := range rows {
+		if row.TotalQuota > 0 {
+			total += row.TotalQuota
+		}
+	}
+	return total
+}
+
+func userRankingMapToSortedRows(aggregates map[int]*UserRankingTotal) []UserRankingTotal {
+	rows := make([]UserRankingTotal, 0, len(aggregates))
+	for _, row := range aggregates {
+		if row.TotalQuota > 0 {
+			rows = append(rows, *row)
+		}
+	}
+	sortUserRankingRows(rows)
+	return rows
+}
+
+func sortUserRankingRows(rows []UserRankingTotal) {
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].TotalQuota == rows[j].TotalQuota {
+			return rows[i].UserId < rows[j].UserId
+		}
+		return rows[i].TotalQuota > rows[j].TotalQuota
+	})
+}
+
+func topUpCreditedQuota(topUp TopUp) int64 {
+	switch topUp.PaymentProvider {
+	case PaymentProviderCreem:
+		return topUp.Amount
+	case PaymentProviderStripe:
+		return decimal.NewFromFloat(topUp.Money).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).IntPart()
+	default:
+		return decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).IntPart()
+	}
+}
+
+func usernameForRanking(userId int) string {
+	username, _ := GetUsernameById(userId, false)
+	return username
+}
