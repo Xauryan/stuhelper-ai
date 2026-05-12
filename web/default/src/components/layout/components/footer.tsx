@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2023-2026 QuantumNous
+Copyright (C) 2023-2026 Xauryan
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-For commercial licensing, please contact support@quantumnous.com
+For commercial licensing, please contact support@Xauryan.com
 */
 import { useMemo } from 'react'
 import { Link } from '@tanstack/react-router'
@@ -40,9 +40,9 @@ interface FooterProps {
   className?: string
 }
 
-const NEW_API_FOOTER_ATTRIBUTION_KEY = [
+const STUHELPER_AI_FOOTER_ATTRIBUTION_KEY = [
   'footer',
-  'new' + 'api',
+  'stuhelperAi',
   'projectAttributionSuffix',
 ].join('.')
 
@@ -82,14 +82,14 @@ function ProjectAttribution(props: { currentYear: number }) {
       <span className='text-muted-foreground/45'>
         &copy; {props.currentYear}{' '}
         <a
-          href='https://github.com/QuantumNous/new-api'
+          href='https://github.com/Xauryan/stuhelper-ai'
           target='_blank'
           rel='noopener noreferrer'
           className='text-foreground/70 hover:text-foreground font-medium transition-colors'
         >
-          {t('New API')}
+          {t('StuHelper AI')}
         </a>
-        . {t(NEW_API_FOOTER_ATTRIBUTION_KEY)}
+        . {t(STUHELPER_AI_FOOTER_ATTRIBUTION_KEY)}
       </span>
     </div>
   )
@@ -105,7 +105,7 @@ export function Footer(props: FooterProps) {
   } = useSystemConfig()
 
   const displayLogo = systemLogo || props.logo || '/logo.png'
-  const displayName = systemName || props.name || 'New API'
+  const displayName = systemName || props.name || 'StuHelper AI'
   const isDemoSiteMode = Boolean(demoSiteEnabled)
   const currentYear = new Date().getFullYear()
 
@@ -116,15 +116,15 @@ export function Footer(props: FooterProps) {
         links: [
           {
             text: t('footer.columns.about.links.aboutProject'),
-            href: 'https://docs.newapi.pro/wiki/project-introduction/',
+            href: 'https://github.com/Xauryan/stuhelper-ai',
           },
           {
             text: t('footer.columns.about.links.contact'),
-            href: 'https://docs.newapi.pro/support/community-interaction/',
+            href: 'https://github.com/Xauryan/stuhelper-ai/issues',
           },
           {
             text: t('footer.columns.about.links.features'),
-            href: 'https://docs.newapi.pro/wiki/features-introduction/',
+            href: 'https://github.com/Xauryan/stuhelper-ai',
           },
         ],
       },
@@ -133,15 +133,15 @@ export function Footer(props: FooterProps) {
         links: [
           {
             text: t('footer.columns.docs.links.quickStart'),
-            href: 'https://docs.newapi.pro/getting-started/',
+            href: 'https://github.com/Xauryan/stuhelper-ai',
           },
           {
             text: t('footer.columns.docs.links.installation'),
-            href: 'https://docs.newapi.pro/installation/',
+            href: 'https://github.com/Xauryan/stuhelper-ai',
           },
           {
             text: t('footer.columns.docs.links.apiDocs'),
-            href: 'https://docs.newapi.pro/api/',
+            href: 'https://github.com/Xauryan/stuhelper-ai',
           },
         ],
       },

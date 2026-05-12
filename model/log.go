@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/logger"
+	"github.com/Xauryan/stuhelper-ai/types"
 
 	"github.com/gin-gonic/gin"
 
@@ -91,7 +91,7 @@ func RecordLog(userId int, logType int, content string) {
 }
 
 // RecordLogWithAdminInfo 记录操作日志，并将管理员相关信息存入 Other.admin_info，
-func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo map[string]interface{}) {
+func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo map[string]interface{}, quota ...int) {
 	if logType == LogTypeConsume && !common.LogConsumeEnabled {
 		return
 	}
@@ -102,6 +102,9 @@ func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo m
 		CreatedAt: common.GetTimestamp(),
 		Type:      logType,
 		Content:   content,
+	}
+	if len(quota) > 0 {
+		log.Quota = quota[0]
 	}
 	if len(adminInfo) > 0 {
 		other := map[string]interface{}{

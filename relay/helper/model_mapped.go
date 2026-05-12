@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/relay/common"
-	relayconstant "github.com/QuantumNous/new-api/relay/constant"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/Xauryan/stuhelper-ai/dto"
+	"github.com/Xauryan/stuhelper-ai/relay/common"
+	relayconstant "github.com/Xauryan/stuhelper-ai/relay/constant"
+	"github.com/Xauryan/stuhelper-ai/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 )
 

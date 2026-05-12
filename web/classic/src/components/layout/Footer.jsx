@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2025 QuantumNous
+Copyright (C) 2025 Xauryan
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-For commercial licensing, please contact support@quantumnous.com
+For commercial licensing, please contact support@xauryan.com
 */
 
 import React, { useEffect, useState, useMemo, useContext } from 'react';
@@ -63,7 +63,7 @@ const FooterBar = () => {
                 </p>
                 <div className='flex flex-col gap-4'>
                   <a
-                    href='https://docs.newapi.pro/wiki/project-introduction/'
+                    href='https://github.com/Xauryan/stuhelper-ai'
                     target='_blank'
                     rel='noopener noreferrer'
                     className='!text-semi-color-text-1'
@@ -71,7 +71,7 @@ const FooterBar = () => {
                     {t('关于项目')}
                   </a>
                   <a
-                    href='https://docs.newapi.pro/support/community-interaction/'
+                    href='https://github.com/Xauryan/stuhelper-ai/issues'
                     target='_blank'
                     rel='noopener noreferrer'
                     className='!text-semi-color-text-1'
@@ -79,7 +79,7 @@ const FooterBar = () => {
                     {t('联系我们')}
                   </a>
                   <a
-                    href='https://docs.newapi.pro/wiki/features-introduction/'
+                    href='https://github.com/Xauryan/stuhelper-ai'
                     target='_blank'
                     rel='noopener noreferrer'
                     className='!text-semi-color-text-1'
@@ -95,7 +95,7 @@ const FooterBar = () => {
                 </p>
                 <div className='flex flex-col gap-4'>
                   <a
-                    href='https://docs.newapi.pro/getting-started/'
+                    href='https://github.com/Xauryan/stuhelper-ai'
                     target='_blank'
                     rel='noopener noreferrer'
                     className='!text-semi-color-text-1'
@@ -103,7 +103,7 @@ const FooterBar = () => {
                     {t('快速开始')}
                   </a>
                   <a
-                    href='https://docs.newapi.pro/installation/'
+                    href='https://github.com/Xauryan/stuhelper-ai'
                     target='_blank'
                     rel='noopener noreferrer'
                     className='!text-semi-color-text-1'
@@ -111,7 +111,7 @@ const FooterBar = () => {
                     {t('安装指南')}
                   </a>
                   <a
-                    href='https://docs.newapi.pro/api/'
+                    href='https://github.com/Xauryan/stuhelper-ai'
                     target='_blank'
                     rel='noopener noreferrer'
                     className='!text-semi-color-text-1'
@@ -159,14 +159,6 @@ const FooterBar = () => {
                 </p>
                 <div className='flex flex-col gap-4'>
                   <a
-                    href='https://github.com/Calcium-Ion/new-api-horizon'
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    className='!text-semi-color-text-1'
-                  >
-                    new-api-horizon
-                  </a>
-                  <a
                     href='https://github.com/coaidev/coai'
                     target='_blank'
                     rel='noopener noreferrer'
@@ -200,12 +192,12 @@ const FooterBar = () => {
               {t('设计与开发由')}{' '}
             </span>
             <a
-              href='https://github.com/QuantumNous/new-api'
+              href='https://github.com/Xauryan/stuhelper-ai'
               target='_blank'
               rel='noopener noreferrer'
               className='!text-semi-color-primary font-medium'
             >
-              New API
+              StuHelper AI
             </a>
           </div>
         </div>
@@ -232,12 +224,12 @@ const FooterBar = () => {
                 {t('设计与开发由')}{' '}
               </span>
               <a
-                href='https://github.com/QuantumNous/new-api'
+                href='https://github.com/Xauryan/stuhelper-ai'
                 target='_blank'
                 rel='noopener noreferrer'
                 className='!text-semi-color-primary font-medium'
               >
-                New API
+                StuHelper AI
               </a>
             </div>
           </div>

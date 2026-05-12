@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/model"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/model"
 
 	"github.com/samber/lo"
 
@@ -19,12 +19,12 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pkg/errors"
 
-	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/relay/channel"
-	taskcommon "github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/service"
+	"github.com/Xauryan/stuhelper-ai/constant"
+	"github.com/Xauryan/stuhelper-ai/dto"
+	"github.com/Xauryan/stuhelper-ai/relay/channel"
+	taskcommon "github.com/Xauryan/stuhelper-ai/relay/channel/task/taskcommon"
+	relaycommon "github.com/Xauryan/stuhelper-ai/relay/common"
+	"github.com/Xauryan/stuhelper-ai/service"
 )
 
 // ============================
@@ -136,7 +136,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	path := lo.Ternary(info.Action == constant.TaskActionGenerate, "/v1/videos/image2video", "/v1/videos/text2video")
 
-	if isNewAPIRelay(info.ApiKey) {
+	if isStuHelperAIRelay(info.ApiKey) {
 		return fmt.Sprintf("%s/kling%s", a.baseURL, path), nil
 	}
 
@@ -226,7 +226,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	}
 	path := lo.Ternary(action == constant.TaskActionGenerate, "/v1/videos/image2video", "/v1/videos/text2video")
 	url := fmt.Sprintf("%s%s/%s", baseUrl, path, taskID)
-	if isNewAPIRelay(key) {
+	if isStuHelperAIRelay(key) {
 		url = fmt.Sprintf("%s/kling%s/%s", baseUrl, path, taskID)
 	}
 
@@ -311,7 +311,7 @@ func (a *TaskAdaptor) createJWTToken() (string, error) {
 }
 
 func (a *TaskAdaptor) createJWTTokenWithKey(apiKey string) (string, error) {
-	if isNewAPIRelay(apiKey) {
+	if isStuHelperAIRelay(apiKey) {
 		return apiKey, nil // new api relay
 	}
 	keyParts := strings.Split(apiKey, "|")
@@ -372,7 +372,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	return taskInfo, nil
 }
 
-func isNewAPIRelay(apiKey string) bool {
+func isStuHelperAIRelay(apiKey string) bool {
 	return strings.HasPrefix(apiKey, "sk-")
 }
 

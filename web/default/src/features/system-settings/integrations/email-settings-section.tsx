@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2023-2026 QuantumNous
+Copyright (C) 2023-2026 Xauryan
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-For commercial licensing, please contact support@quantumnous.com
+For commercial licensing, please contact support@Xauryan.com
 */
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
@@ -272,7 +272,7 @@ export function EmailSettingsSection({
                 <FormControl>
                   <Input
                     autoComplete='off'
-                    placeholder={t('New API &lt;noreply@example.com&gt;')}
+                    placeholder={t('StuHelper AI &lt;noreply@example.com&gt;')}
                     {...field}
                     onChange={(event) => field.onChange(event.target.value)}
                   />
