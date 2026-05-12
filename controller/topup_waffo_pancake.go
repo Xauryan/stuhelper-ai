@@ -13,7 +13,6 @@ import (
 	"github.com/Xauryan/stuhelper-ai/service"
 	"github.com/Xauryan/stuhelper-ai/setting"
 	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
-	"github.com/Xauryan/stuhelper-ai/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"github.com/thanhpk/randstr"
@@ -107,7 +106,7 @@ func getWaffoPancakeReturnURL() string {
 	if strings.TrimSpace(setting.WaffoPancakeReturnURL) != "" {
 		return setting.WaffoPancakeReturnURL
 	}
-	return strings.TrimRight(system_setting.ServerAddress, "/") + "/console/topup?show_history=true"
+	return paymentReturnPath("/console/topup?show_history=true")
 }
 
 func RequestWaffoPancakePay(c *gin.Context) {
