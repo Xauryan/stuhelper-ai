@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/dto"
+	relaycommon "github.com/Xauryan/stuhelper-ai/relay/common"
 
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"

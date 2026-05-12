@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/logger"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relay/helper"
-	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/dto"
+	"github.com/Xauryan/stuhelper-ai/logger"
+	relaycommon "github.com/Xauryan/stuhelper-ai/relay/common"
+	"github.com/Xauryan/stuhelper-ai/relay/helper"
+	"github.com/Xauryan/stuhelper-ai/service"
+	"github.com/Xauryan/stuhelper-ai/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -38,7 +38,7 @@ func stringDeltaFromPrefix(prev string, next string) string {
 	return next
 }
 
-func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.StuHelperAIError) {
 	if resp == nil || resp.Body == nil {
 		return nil, types.NewOpenAIError(fmt.Errorf("invalid response"), types.ErrorCodeBadResponse, http.StatusInternalServerError)
 	}
@@ -90,7 +90,7 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	return usage, nil
 }
 
-func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.StuHelperAIError) {
 	if resp == nil || resp.Body == nil {
 		return nil, types.NewOpenAIError(fmt.Errorf("invalid response"), types.ErrorCodeBadResponse, http.StatusInternalServerError)
 	}
@@ -108,7 +108,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		sentStart   bool
 		sentStop    bool
 		sawToolCall bool
-		streamErr   *types.NewAPIError
+		streamErr   *types.StuHelperAIError
 	)
 
 	toolCallIndexByID := make(map[string]int)

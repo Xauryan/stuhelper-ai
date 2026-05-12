@@ -15,20 +15,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/middleware"
-	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
-	"github.com/QuantumNous/new-api/relay"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	relayconstant "github.com/QuantumNous/new-api/relay/constant"
-	"github.com/QuantumNous/new-api/relay/helper"
-	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/constant"
+	"github.com/Xauryan/stuhelper-ai/dto"
+	"github.com/Xauryan/stuhelper-ai/middleware"
+	"github.com/Xauryan/stuhelper-ai/model"
+	"github.com/Xauryan/stuhelper-ai/pkg/billingexpr"
+	"github.com/Xauryan/stuhelper-ai/relay"
+	relaycommon "github.com/Xauryan/stuhelper-ai/relay/common"
+	relayconstant "github.com/Xauryan/stuhelper-ai/relay/constant"
+	"github.com/Xauryan/stuhelper-ai/relay/helper"
+	"github.com/Xauryan/stuhelper-ai/service"
+	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
+	"github.com/Xauryan/stuhelper-ai/setting/ratio_setting"
+	"github.com/Xauryan/stuhelper-ai/types"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/samber/lo"
@@ -40,7 +40,7 @@ import (
 type testResult struct {
 	context     *gin.Context
 	localErr    error
-	newAPIError *types.NewAPIError
+	newAPIError *types.StuHelperAIError
 }
 
 func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
@@ -402,7 +402,7 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 				return testResult{
 					context:     c,
 					localErr:    fixedErr,
-					newAPIError: relaycommon.NewAPIErrorFromParamOverride(fixedErr),
+					newAPIError: relaycommon.StuHelperAIErrorFromParamOverride(fixedErr),
 				}
 			}
 			return testResult{

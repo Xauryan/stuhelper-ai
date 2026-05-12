@@ -5,13 +5,13 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relay/helper"
-	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/constant"
+	"github.com/Xauryan/stuhelper-ai/dto"
+	relaycommon "github.com/Xauryan/stuhelper-ai/relay/common"
+	"github.com/Xauryan/stuhelper-ai/relay/helper"
+	"github.com/Xauryan/stuhelper-ai/service"
+	"github.com/Xauryan/stuhelper-ai/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -50,7 +50,7 @@ func streamResponsePaLM2OpenAI(palmResponse *PaLMChatResponse) *dto.ChatCompleti
 	return &response
 }
 
-func palmStreamHandler(c *gin.Context, resp *http.Response) (*types.NewAPIError, string) {
+func palmStreamHandler(c *gin.Context, resp *http.Response) (*types.StuHelperAIError, string) {
 	responseText := ""
 	responseId := helper.GetResponseID(c)
 	createdTime := common.GetTimestamp()
@@ -101,7 +101,7 @@ func palmStreamHandler(c *gin.Context, resp *http.Response) (*types.NewAPIError,
 	return nil, responseText
 }
 
-func palmHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+func palmHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.StuHelperAIError) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)

@@ -13,10 +13,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/constant"
+	"github.com/Xauryan/stuhelper-ai/logger"
+	"github.com/Xauryan/stuhelper-ai/types"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/image/webp"

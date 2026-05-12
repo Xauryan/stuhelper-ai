@@ -3,10 +3,10 @@ package controller
 import (
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/constant"
+	"github.com/Xauryan/stuhelper-ai/model"
+	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 )
 

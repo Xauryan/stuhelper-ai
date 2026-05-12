@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/logger"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/dto"
+	"github.com/Xauryan/stuhelper-ai/logger"
+	relaycommon "github.com/Xauryan/stuhelper-ai/relay/common"
+	"github.com/Xauryan/stuhelper-ai/service"
+	"github.com/Xauryan/stuhelper-ai/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
@@ -277,7 +277,7 @@ func responseAli2OpenAIImage(c *gin.Context, response *AliResponse, originBody [
 	return &imageResponse
 }
 
-func aliImageHandler(a *Adaptor, c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*types.NewAPIError, *dto.Usage) {
+func aliImageHandler(a *Adaptor, c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*types.StuHelperAIError, *dto.Usage) {
 	responseFormat := c.GetString("response_format")
 
 	var aliTaskResponse AliResponse

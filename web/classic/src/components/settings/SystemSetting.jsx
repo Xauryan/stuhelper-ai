@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2025 QuantumNous
+Copyright (C) 2025 Xauryan
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-For commercial licensing, please contact support@quantumnous.com
+For commercial licensing, please contact support@xauryan.com
 */
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -745,15 +745,7 @@ const SystemSetting = () => {
                     style={{ marginBottom: 20, marginTop: 16 }}
                   />
                   <Text>
-                    {t('仅支持')}{' '}
-                    <a
-                      href='https://github.com/Calcium-Ion/new-api-worker'
-                      target='_blank'
-                      rel='noreferrer'
-                    >
-                      new-api-worker
-                    </a>{' '}
-                    {t('或其兼容new-api-worker格式的其他版本')}
+                    {t('仅支持兼容 StuHelper AI Worker 格式的服务')}
                   </Text>
                   <Row
                     gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
@@ -1211,7 +1203,7 @@ const SystemSetting = () => {
                         label={t('允许的 Origins')}
                         placeholder={t('填写带https的域名，逗号分隔')}
                         extraText={t(
-                          '为空则默认使用服务器地址，多个 Origin 用逗号分隔，例如 https://newapi.pro,https://newapi.com ,注意不能携带[]，需使用https',
+                          '为空则默认使用服务器地址，多个 Origin 用逗号分隔，例如 https://stuhelper-ai.example.com,https://stuhelperai.com ,注意不能携带[]，需使用https',
                         )}
                       />
                     </Col>

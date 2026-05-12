@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/setting/billing_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/constant"
+	"github.com/Xauryan/stuhelper-ai/setting/billing_setting"
+	"github.com/Xauryan/stuhelper-ai/setting/ratio_setting"
+	"github.com/Xauryan/stuhelper-ai/types"
 )
 
 type Pricing struct {

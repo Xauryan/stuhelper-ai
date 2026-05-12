@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2023-2026 QuantumNous
+Copyright (C) 2023-2026 Xauryan
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-For commercial licensing, please contact support@quantumnous.com
+For commercial licensing, please contact support@Xauryan.com
 */
 import { useEffect, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
@@ -281,7 +281,7 @@ export function ApiKeysMutateDrawer({
           <SheetDescription className='pr-6 text-xs sm:text-sm'>
             {isUpdate
               ? t('Update the API key by providing necessary info.')
-              : t('Add a new API key by providing necessary info.')}{' '}
+              : t('Add a StuHelper AI key by providing necessary info.')}{' '}
             {t("Click save when you're done.")}
           </SheetDescription>
         </SheetHeader>

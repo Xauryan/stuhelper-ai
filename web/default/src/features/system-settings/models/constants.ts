@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2023-2026 QuantumNous
+Copyright (C) 2023-2026 Xauryan
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-For commercial licensing, please contact support@quantumnous.com
+For commercial licensing, please contact support@Xauryan.com
 */
 export const DEFAULT_ENDPOINT = '/api/pricing'
 
@@ -35,7 +35,7 @@ export const OFFICIAL_CHANNEL_ID = -100
 export const OFFICIAL_CHANNEL_NAME = '官方倍率预设'
 export const OFFICIAL_CHANNEL_BASE_URL = 'https://basellm.github.io'
 export const OFFICIAL_CHANNEL_ENDPOINT =
-  '/llm-metadata/api/newapi/ratio_config-v1-base.json'
+  '/llm-metadata/api/stuhelper-ai/ratio_config-v1-base.json'
 
 export const MODELS_DEV_PRESET_ID = -101
 export const MODELS_DEV_PRESET_NAME = 'models.dev 价格预设'

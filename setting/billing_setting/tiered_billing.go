@@ -3,8 +3,8 @@ package billing_setting
 import (
 	"fmt"
 
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
-	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/Xauryan/stuhelper-ai/pkg/billingexpr"
+	"github.com/Xauryan/stuhelper-ai/setting/config"
 	"github.com/samber/lo"
 )
 

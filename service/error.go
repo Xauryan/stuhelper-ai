@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/dto"
+	"github.com/Xauryan/stuhelper-ai/logger"
+	"github.com/Xauryan/stuhelper-ai/types"
 )
 
 func MidjourneyErrorWrapper(code int, desc string) *dto.MidjourneyResponse {
@@ -83,7 +83,7 @@ func ClaudeErrorWrapperLocal(err error, code string, statusCode int) *dto.Claude
 	return claudeErr
 }
 
-func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFail bool) (newApiErr *types.NewAPIError) {
+func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFail bool) (newApiErr *types.StuHelperAIError) {
 	newApiErr = types.InitOpenAIError(types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
 
 	responseBody, err := io.ReadAll(resp.Body)
@@ -128,7 +128,7 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 	return
 }
 
-func ResetStatusCode(newApiErr *types.NewAPIError, statusCodeMappingStr string) {
+func ResetStatusCode(newApiErr *types.StuHelperAIError, statusCodeMappingStr string) {
 	if newApiErr == nil {
 		return
 	}
@@ -207,8 +207,8 @@ func TaskErrorWrapper(err error, code string, statusCode int) *dto.TaskError {
 	return taskError
 }
 
-// TaskErrorFromAPIError 将 PreConsumeBilling 返回的 NewAPIError 转换为 TaskError。
-func TaskErrorFromAPIError(apiErr *types.NewAPIError) *dto.TaskError {
+// TaskErrorFromAPIError 将 PreConsumeBilling 返回的 StuHelperAIError 转换为 TaskError。
+func TaskErrorFromAPIError(apiErr *types.StuHelperAIError) *dto.TaskError {
 	if apiErr == nil {
 		return nil
 	}

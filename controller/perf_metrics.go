@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
+	perfmetrics "github.com/Xauryan/stuhelper-ai/pkg/perf_metrics"
 
 	"github.com/gin-gonic/gin"
 )

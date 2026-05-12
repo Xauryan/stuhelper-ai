@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/QuantumNous/new-api/model"
+	"github.com/Xauryan/stuhelper-ai/model"
 
 	webauthn "github.com/go-webauthn/webauthn/webauthn"
 )

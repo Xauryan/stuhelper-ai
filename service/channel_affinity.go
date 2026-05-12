@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/pkg/cachex"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/dto"
+	"github.com/Xauryan/stuhelper-ai/pkg/cachex"
+	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
+	"github.com/Xauryan/stuhelper-ai/types"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/hot"
 	"github.com/tidwall/gjson"
@@ -26,8 +26,8 @@ const (
 	ginKeyChannelAffinityLogInfo    = "channel_affinity_log_info"
 	ginKeyChannelAffinitySkipRetry  = "channel_affinity_skip_retry_on_failure"
 
-	channelAffinityCacheNamespace           = "new-api:channel_affinity:v1"
-	channelAffinityUsageCacheStatsNamespace = "new-api:channel_affinity_usage_cache_stats:v1"
+	channelAffinityCacheNamespace           = "StuHelper AI:channel_affinity:v1"
+	channelAffinityUsageCacheStatsNamespace = "StuHelper AI:channel_affinity_usage_cache_stats:v1"
 )
 
 var (

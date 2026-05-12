@@ -1,0 +1,18 @@
+# File path: /etc/systemd/system/stuhelper-ai.service
+# sudo systemctl daemon-reload
+# sudo systemctl start stuhelper-ai
+# sudo systemctl enable stuhelper-ai
+# sudo systemctl status stuhelper-ai
+[Unit]
+Description=StuHelper AI Service
+After=network.target
+
+[Service]
+User=ubuntu  # 注意修改用户名
+WorkingDirectory=/path/to/stuhelper-ai  # 注意修改路径
+ExecStart=/path/to/stuhelper-ai/stuhelper-ai --port 3000 --log-dir /path/to/stuhelper-ai/logs  # 注意修改路径和端口号
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
