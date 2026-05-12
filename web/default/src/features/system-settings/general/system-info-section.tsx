@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2023-2026 QuantumNous
+Copyright (C) 2023-2026 Xauryan
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-For commercial licensing, please contact support@quantumnous.com
+For commercial licensing, please contact support@Xauryan.com
 */
 import * as z from 'zod'
 import type { Resolver } from 'react-hook-form'
@@ -154,11 +154,11 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                   <FormLabel>{t('Frontend Theme')}</FormLabel>
                   <Select
                     items={[
-                      { value: 'default', label: t('Default (New Frontend)') },
                       {
                         value: 'classic',
-                        label: t('Classic (Legacy Frontend)'),
+                        label: t('Classic Frontend'),
                       },
+                      { value: 'default', label: t('New Frontend') },
                     ]}
                     onValueChange={field.onChange}
                     value={field.value}
@@ -170,11 +170,11 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                     </FormControl>
                     <SelectContent alignItemWithTrigger={false}>
                       <SelectGroup>
-                        <SelectItem value='default'>
-                          {t('Default (New Frontend)')}
-                        </SelectItem>
                         <SelectItem value='classic'>
-                          {t('Classic (Legacy Frontend)')}
+                          {t('Classic Frontend')}
+                        </SelectItem>
+                        <SelectItem value='default'>
+                          {t('New Frontend')}
                         </SelectItem>
                       </SelectGroup>
                     </SelectContent>
@@ -196,7 +196,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                 <FormItem>
                   <FormLabel>{t('System Name')}</FormLabel>
                   <FormControl>
-                    <Input placeholder={t('New API')} {...field} />
+                    <Input placeholder={t('StuHelper AI')} {...field} />
                   </FormControl>
                   <FormDescription>
                     {t('The name displayed across the application')}
@@ -300,7 +300,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                   <FormLabel>{t('Home Page Content')}</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder={t('Welcome to our New API...')}
+                      placeholder={t('Welcome to our StuHelper AI...')}
                       rows={6}
                       {...field}
                     />

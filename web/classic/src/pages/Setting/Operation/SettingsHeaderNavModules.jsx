@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2025 QuantumNous
+Copyright (C) 2025 Xauryan
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-For commercial licensing, please contact support@quantumnous.com
+For commercial licensing, please contact support@xauryan.com
 */
 
 import React, { useEffect, useState, useContext } from 'react';
@@ -46,6 +46,10 @@ export default function SettingsHeaderNavModules(props) {
       enabled: true,
       requireAuth: false, // 默认不需要登录鉴权
     },
+    rankings: {
+      enabled: true,
+      requireAuth: false,
+    },
     docs: true,
     about: true,
   });
@@ -54,8 +58,7 @@ export default function SettingsHeaderNavModules(props) {
   function handleHeaderNavModuleChange(moduleKey) {
     return (checked) => {
       const newModules = { ...headerNavModules };
-      if (moduleKey === 'pricing') {
-        // 对于pricing模块，只更新enabled属性
+      if (moduleKey === 'pricing' || moduleKey === 'rankings') {
         newModules[moduleKey] = {
           ...newModules[moduleKey],
           enabled: checked,
@@ -77,12 +80,25 @@ export default function SettingsHeaderNavModules(props) {
     setHeaderNavModules(newModules);
   }
 
+  function handleRankingsAuthChange(checked) {
+    const newModules = { ...headerNavModules };
+    newModules.rankings = {
+      ...newModules.rankings,
+      requireAuth: checked,
+    };
+    setHeaderNavModules(newModules);
+  }
+
   // 重置顶栏模块为默认配置
   function resetHeaderNavModules() {
     const defaultModules = {
       home: true,
       console: true,
       pricing: {
+        enabled: true,
+        requireAuth: false,
+      },
+      rankings: {
         enabled: true,
         requireAuth: false,
       },
@@ -134,11 +150,23 @@ export default function SettingsHeaderNavModules(props) {
       try {
         const modules = JSON.parse(props.options.HeaderNavModules);
 
-        // 处理向后兼容性：如果pricing是boolean，转换为对象格式
+        // 处理向后兼容性：如果 pricing/rankings 是 boolean，转换为对象格式
         if (typeof modules.pricing === 'boolean') {
           modules.pricing = {
             enabled: modules.pricing,
             requireAuth: false, // 默认不需要登录鉴权
+          };
+        }
+        if (typeof modules.rankings === 'boolean') {
+          modules.rankings = {
+            enabled: modules.rankings,
+            requireAuth: false,
+          };
+        }
+        if (modules.rankings === undefined) {
+          modules.rankings = {
+            enabled: true,
+            requireAuth: false,
           };
         }
 
@@ -149,6 +177,10 @@ export default function SettingsHeaderNavModules(props) {
           home: true,
           console: true,
           pricing: {
+            enabled: true,
+            requireAuth: false,
+          },
+          rankings: {
             enabled: true,
             requireAuth: false,
           },
@@ -177,6 +209,12 @@ export default function SettingsHeaderNavModules(props) {
       title: t('模型广场'),
       description: t('模型定价，需要登录访问'),
       hasSubConfig: true, // 标识该模块有子配置
+    },
+    {
+      key: 'rankings',
+      title: t('排行榜'),
+      description: t('用户消耗与充值排行'),
+      hasSubConfig: true,
     },
     {
       key: 'docs',
@@ -247,7 +285,9 @@ export default function SettingsHeaderNavModules(props) {
                       checked={
                         module.key === 'pricing'
                           ? headerNavModules[module.key]?.enabled
-                          : headerNavModules[module.key]
+                          : module.key === 'rankings'
+                            ? headerNavModules[module.key]?.enabled
+                            : headerNavModules[module.key]
                       }
                       onChange={handleHeaderNavModuleChange(module.key)}
                       size='default'
@@ -255,11 +295,9 @@ export default function SettingsHeaderNavModules(props) {
                   </div>
                 </div>
 
-                {/* 为模型广场添加权限控制子开关 */}
-                {module.key === 'pricing' &&
-                  (module.key === 'pricing'
-                    ? headerNavModules[module.key]?.enabled
-                    : headerNavModules[module.key]) && (
+                {/* 为需要访问权限的顶栏模块添加权限控制子开关 */}
+                {(module.key === 'pricing' || module.key === 'rankings') &&
+                  headerNavModules[module.key]?.enabled && (
                     <div
                       style={{
                         borderTop: '1px solid var(--semi-color-border)',
@@ -295,15 +333,24 @@ export default function SettingsHeaderNavModules(props) {
                               display: 'block',
                             }}
                           >
-                            {t('开启后未登录用户无法访问模型广场')}
+                            {module.key === 'pricing'
+                              ? t('开启后未登录用户无法访问模型广场')
+                              : t('开启后未登录用户无法访问排行榜')}
                           </Text>
                         </div>
                         <div style={{ marginLeft: '16px' }}>
                           <Switch
                             checked={
-                              headerNavModules.pricing?.requireAuth || false
+                              module.key === 'pricing'
+                                ? headerNavModules.pricing?.requireAuth || false
+                                : headerNavModules.rankings?.requireAuth ||
+                                  false
                             }
-                            onChange={handlePricingAuthChange}
+                            onChange={
+                              module.key === 'pricing'
+                                ? handlePricingAuthChange
+                                : handleRankingsAuthChange
+                            }
                             size='default'
                           />
                         </div>
