@@ -19,6 +19,7 @@ For commercial licensing, please contact support@Xauryan.com
 import { z } from 'zod'
 import type { TFunction } from 'i18next'
 import type { SubscriptionPlan, PlanPayload } from '../types'
+import { getPlanModelLimits, getPlanModelLimitsCsv } from './model-limits'
 
 export function getPlanFormSchema(t: TFunction) {
   return z.object({
@@ -43,6 +44,7 @@ export function getPlanFormSchema(t: TFunction) {
     upgrade_group: z.string().optional(),
     stripe_price_id: z.string().optional(),
     creem_product_id: z.string().optional(),
+    model_limits: z.array(z.string()).default([]),
   })
 }
 
@@ -64,6 +66,7 @@ export const PLAN_FORM_DEFAULTS: PlanFormValues = {
   upgrade_group: '',
   stripe_price_id: '',
   creem_product_id: '',
+  model_limits: [],
 }
 
 export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
@@ -83,10 +86,12 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     upgrade_group: plan.upgrade_group || '',
     stripe_price_id: plan.stripe_price_id || '',
     creem_product_id: plan.creem_product_id || '',
+    model_limits: getPlanModelLimits(plan),
   }
 }
 
 export function formValuesToPlanPayload(values: PlanFormValues): PlanPayload {
+  const modelLimits = getPlanModelLimitsCsv(values.model_limits)
   return {
     plan: {
       ...values,
@@ -103,6 +108,8 @@ export function formValuesToPlanPayload(values: PlanFormValues): PlanPayload {
       max_purchase_per_user: Number(values.max_purchase_per_user || 0),
       total_amount: Number(values.total_amount || 0),
       upgrade_group: values.upgrade_group || '',
+      model_limits_enabled: modelLimits.length > 0,
+      model_limits: modelLimits,
     },
   }
 }

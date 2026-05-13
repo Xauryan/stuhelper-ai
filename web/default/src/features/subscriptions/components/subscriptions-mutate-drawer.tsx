@@ -16,12 +16,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@Xauryan.com
 */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { CalendarClock, CreditCard, RefreshCw, Settings2 } from 'lucide-react'
+import {
+  AlertCircle,
+  CalendarClock,
+  CreditCard,
+  Loader2,
+  RefreshCw,
+  Settings2,
+  SlidersHorizontal,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { MultiSelect } from '@/components/multi-select'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -51,7 +61,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
-import { createPlan, updatePlan, getGroups } from '../api'
+import { createPlan, updatePlan, getGroups, getEnabledModels } from '../api'
 import { getDurationUnitOptions, getResetPeriodOptions } from '../constants'
 import {
   getPlanFormSchema,
@@ -79,6 +89,11 @@ export function SubscriptionsMutateDrawer({
   const { triggerRefresh } = useSubscriptions()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [groupOptions, setGroupOptions] = useState<string[]>([])
+  const [modelOptions, setModelOptions] = useState<
+    Array<{ label: string; value: string }>
+  >([])
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [modelsLoadError, setModelsLoadError] = useState(false)
 
   const schema = getPlanFormSchema(t)
   const form = useForm<PlanFormValues>({
@@ -86,25 +101,51 @@ export function SubscriptionsMutateDrawer({
     defaultValues: PLAN_FORM_DEFAULTS,
   })
 
-  useEffect(() => {
-    if (open) {
-      if (currentRow?.plan) {
-        form.reset(planToFormValues(currentRow.plan))
-      } else {
-        form.reset(PLAN_FORM_DEFAULTS)
+  const loadModels = useCallback(async () => {
+    setModelsLoading(true)
+    setModelsLoadError(false)
+    try {
+      const res = await getEnabledModels()
+      if (!res.success || !Array.isArray(res.data)) {
+        setModelsLoadError(true)
+        return
       }
-      getGroups()
-        .then((res) => {
-          if (res.success) setGroupOptions(res.data || [])
-        })
-        .catch(() => {})
+      setModelOptions(
+        res.data.map((model) => ({
+          label: model,
+          value: model,
+        }))
+      )
+    } catch {
+      setModelsLoadError(true)
+    } finally {
+      setModelsLoading(false)
     }
-  }, [open, currentRow, form])
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    if (currentRow?.plan) {
+      form.reset(planToFormValues(currentRow.plan))
+    } else {
+      form.reset(PLAN_FORM_DEFAULTS)
+    }
+    getGroups()
+      .then((res) => {
+        if (res.success) setGroupOptions(res.data || [])
+      })
+      .catch(() => {})
+    loadModels()
+  }, [open, currentRow, form, loadModels])
 
   const durationUnit = form.watch('duration_unit')
   const resetPeriod = form.watch('quota_reset_period')
 
   const onSubmit = async (values: PlanFormValues) => {
+    if (modelsLoadError) {
+      toast.error(t('Model list failed to load. Retry before saving.'))
+      return
+    }
     setIsSubmitting(true)
     try {
       const payload = formValuesToPlanPayload(values)
@@ -512,6 +553,76 @@ export function SubscriptionsMutateDrawer({
               </div>
             </div>
 
+            {/* Model Restrictions */}
+            <div className='space-y-4'>
+              <h3 className='flex items-center gap-2 text-sm font-medium'>
+                <SlidersHorizontal className='h-4 w-4' />
+                {t('Model Restrictions')}
+              </h3>
+
+              {modelsLoadError && (
+                <Alert variant='destructive' className='flex items-center'>
+                  <AlertCircle className='h-4 w-4 shrink-0' />
+                  <AlertDescription>
+                    {t(
+                      'Model list failed to load. Retry before configuring restrictions.'
+                    )}
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      className='ml-3'
+                      onClick={loadModels}
+                      disabled={modelsLoading}
+                    >
+                      {modelsLoading ? (
+                        <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                      ) : null}
+                      {t('Retry')}
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <FormField
+                control={form.control}
+                name='model_limits'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Allowed Models')}</FormLabel>
+                    <FormControl>
+                      <div className='relative'>
+                        <MultiSelect
+                          options={modelOptions}
+                          selected={field.value || []}
+                          onChange={field.onChange}
+                          placeholder={t(
+                            'Select allowed models, leave empty for all models'
+                          )}
+                          className={
+                            modelsLoading || modelsLoadError
+                              ? 'pointer-events-none opacity-60'
+                              : ''
+                          }
+                        />
+                        {modelsLoading && (
+                          <Loader2 className='text-muted-foreground absolute right-3 top-3 h-4 w-4 animate-spin' />
+                        )}
+                      </div>
+                    </FormControl>
+                    <FormDescription>
+                      {modelsLoadError
+                        ? t('Current model list is unavailable.')
+                        : t(
+                            'When set, subscription-billed requests can only use selected models.'
+                          )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             {/* Payment Config */}
             <div className='space-y-4'>
               <h3 className='flex items-center gap-2 text-sm font-medium'>
@@ -556,7 +667,7 @@ export function SubscriptionsMutateDrawer({
           <Button
             form='subscription-form'
             type='submit'
-            disabled={isSubmitting}
+            disabled={isSubmitting || modelsLoading || modelsLoadError}
           >
             {isSubmitting ? t('Saving...') : t('Save changes')}
           </Button>

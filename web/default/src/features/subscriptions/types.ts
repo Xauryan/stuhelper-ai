@@ -40,6 +40,8 @@ export const subscriptionPlanSchema = z.object({
   upgrade_group: z.string().optional(),
   stripe_price_id: z.string().optional(),
   creem_product_id: z.string().optional(),
+  model_limits_enabled: z.boolean().optional(),
+  model_limits: z.string().optional(),
 })
 
 export type SubscriptionPlan = z.infer<typeof subscriptionPlanSchema>

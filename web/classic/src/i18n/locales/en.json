@@ -3813,6 +3813,13 @@
     "Leaderboards": "Leaderboards",
     "New Frontend": "New Frontend",
     "StuHelper AI项目仓库地址：": "StuHelper AI project repository address: ",
-    "stuhelper-ai 默认不会将入口请求的 User-Agent 透传到上游渠道；该条件仅用于识别访问本站点的客户端。": "stuhelper-ai does not pass the incoming request's User-Agent to upstream channels by default; this condition is only used to identify clients accessing this site."
+    "stuhelper-ai 默认不会将入口请求的 User-Agent 透传到上游渠道；该条件仅用于识别访问本站点的客户端。": "stuhelper-ai does not pass the incoming request's User-Agent to upstream channels by default; this condition is only used to identify clients accessing this site.",
+    "模型列表加载失败，当前无法安全配置模型限制": "Model list failed to load. Model restrictions cannot be configured safely right now.",
+    "模型列表加载失败，无法提交，请重试": "Model list failed to load. Retry before submitting.",
+    "模型列表加载失败，请重试": "Model list failed to load. Please retry.",
+    "模型限制": "Model restrictions",
+    "请选择该套餐支持的模型，留空支持所有模型": "Select models supported by this plan, leave empty for all models",
+    "选择后，通过该订阅套餐计费的请求只能使用选中的模型；留空则不限制": "After selection, requests billed by this subscription plan can only use selected models; leave empty for no restriction",
+    "限制该订阅套餐可使用的模型范围": "Limit which models this subscription plan can use"
   }
 }
