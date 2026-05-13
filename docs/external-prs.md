@@ -82,6 +82,69 @@ Set-Location web/classic; bun run build
 - 对比上游错误消息、字段名和前端模型来源，确保本地保留加载失败阻止保存、
   规范化保存和双前端展示行为。
 
+## QuantumNous/new-api#2787 - 密码登录和密码注册开关前台生效
+
+- 来源 PR：https://github.com/QuantumNous/new-api/pull/2787
+- 审查时的上游状态：closed，未合并。
+- 本地导入日期：2026-05-13
+- 导入方式：手工移植并适配 StuHelper AI 当前 default / classic 双前端结构。
+- 本地涉及文件：
+  - `controller/misc.go`
+  - `controller/misc_test.go`
+  - `web/default/src/features/auth/components/oauth-providers.tsx`
+  - `web/default/src/features/auth/sign-in/components/user-auth-form.tsx`
+  - `web/default/src/features/auth/sign-up/components/sign-up-form.tsx`
+  - `web/default/src/features/auth/types.ts`
+  - `web/default/src/i18n/locales/*.json`
+  - `web/classic/src/components/auth/LoginForm.jsx`
+  - `web/classic/src/components/auth/RegisterForm.jsx`
+  - `web/classic/src/i18n/locales/*.json`
+
+### 原因
+
+现有后端已经有 `PasswordLoginEnabled` 和 `PasswordRegisterEnabled` 管理项，
+并在登录、注册接口上执行最终拦截；后台设置页也能修改这两个选项。但
+`/api/status` 未向前台暴露对应开关，default 和 classic 前台登录 / 注册页
+也没有根据开关隐藏密码表单入口。
+
+### 审查记录
+
+- PR #2787 的原始 diff 面向旧 `web/src` 前端路径，不能直接套用到当前
+  StuHelper AI 的 `web/default` 和 `web/classic` 双前端结构。
+- 本地保留现有后端接口拦截作为最终安全边界，只新增状态字段和前端展示逻辑。
+- 状态接口使用 `password_login` / `password_register` 字段；前端对缺失字段按
+  启用处理，以兼容旧缓存或旧服务端状态。
+- default 前端在没有任何可见登录 / 注册方式时显示空状态文案；classic 前端
+  在相同场景显示联系管理员文案，避免空白认证页。
+
+### 本地行为
+
+- `PasswordLoginEnabled=false` 时：
+  - `/api/status` 返回 `password_login: false`。
+  - default 与 classic 登录页隐藏密码登录表单和密码登录入口。
+  - Passkey、OAuth、WeChat、Telegram 等登录方式继续按各自开关显示。
+- `PasswordRegisterEnabled=false` 时：
+  - `/api/status` 返回 `password_register: false`。
+  - default 与 classic 注册页隐藏用户名 / 密码注册表单和密码注册入口。
+  - 第三方注册入口继续按各自开关显示。
+
+### 验证
+
+```powershell
+go test ./controller -run TestGetStatusIncludesPasswordAuthSwitches -count=1
+Set-Location web/default; bun run typecheck
+Set-Location web/default; bun run build
+Set-Location web/classic; bun run build
+```
+
+### 未来上游同步检查点
+
+每次同步上游 release 时：
+
+- 检查上游是否已经合并 PR #2787 或等价修复。
+- 如果上游吸收了等价行为，确认字段名和前端语义是否一致，再协调本地补丁。
+- 保留 `controller/misc_test.go` 中的状态字段回归覆盖，除非上游已有等价测试。
+
 ## QuantumNous/new-api#4719 - 修复 auto 分组 token 返回 403
 
 - 来源 PR：https://github.com/QuantumNous/new-api/pull/4719
