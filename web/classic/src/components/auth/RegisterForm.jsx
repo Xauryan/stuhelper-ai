@@ -131,6 +131,7 @@ const RegisterForm = () => {
   }, [statusState?.status]);
   const hasCustomOAuthProviders =
     (status.custom_oauth_providers || []).length > 0;
+  const passwordRegisterEnabled = status.password_register !== false;
   const hasOAuthRegisterOptions = Boolean(
     status.github_oauth ||
       status.discord_oauth ||
@@ -216,6 +217,10 @@ const RegisterForm = () => {
   }
 
   async function handleSubmit(e) {
+    if (!passwordRegisterEnabled) {
+      showInfo(t('管理员已关闭密码注册'));
+      return;
+    }
     if (password.length < 8) {
       showInfo('密码长度不得小于 8 位！');
       return;
@@ -520,20 +525,30 @@ const RegisterForm = () => {
                   </div>
                 )}
 
-                <Divider margin='12px' align='center'>
-                  {t('或')}
-                </Divider>
+                {passwordRegisterEnabled && (
+                  <>
+                    <Divider margin='12px' align='center'>
+                      {t('或')}
+                    </Divider>
 
-                <Button
-                  theme='solid'
-                  type='primary'
-                  className='w-full h-12 flex items-center justify-center bg-black text-white !rounded-full hover:bg-gray-800 transition-colors'
-                  icon={<IconMail size='large' />}
-                  onClick={handleEmailRegisterClick}
-                  loading={emailRegisterLoading}
-                >
-                  <span className='ml-3'>{t('使用 用户名 注册')}</span>
-                </Button>
+                    <Button
+                      theme='solid'
+                      type='primary'
+                      className='w-full h-12 flex items-center justify-center bg-black text-white !rounded-full hover:bg-gray-800 transition-colors'
+                      icon={<IconMail size='large' />}
+                      onClick={handleEmailRegisterClick}
+                      loading={emailRegisterLoading}
+                    >
+                      <span className='ml-3'>{t('使用 用户名 注册')}</span>
+                    </Button>
+                  </>
+                )}
+
+                {!passwordRegisterEnabled && !hasOAuthRegisterOptions && (
+                  <Text className='block text-center text-gray-500'>
+                    {t('暂无可用注册方式，请联系管理员')}
+                  </Text>
+                )}
               </div>
 
               <div className='mt-6 text-center text-sm'>
@@ -781,22 +796,23 @@ const RegisterForm = () => {
         style={{ top: '50%', left: '-120px' }}
       />
       <div className='w-full max-w-sm mt-[60px]'>
-        {showEmailRegister ||
-        !hasOAuthRegisterOptions
+        {(passwordRegisterEnabled && showEmailRegister) ||
+        (passwordRegisterEnabled && !hasOAuthRegisterOptions)
           ? renderEmailRegisterForm()
           : renderOAuthOptions()}
         {renderWeChatLoginModal()}
 
-        {turnstileEnabled && (
-          <div className='flex justify-center mt-6'>
-            <Turnstile
-              sitekey={turnstileSiteKey}
-              onVerify={(token) => {
-                setTurnstileToken(token);
-              }}
-            />
-          </div>
-        )}
+        {turnstileEnabled &&
+          (passwordRegisterEnabled || status.wechat_login) && (
+            <div className='flex justify-center mt-6'>
+              <Turnstile
+                sitekey={turnstileSiteKey}
+                onVerify={(token) => {
+                  setTurnstileToken(token);
+                }}
+              />
+            </div>
+          )}
       </div>
     </div>
   );

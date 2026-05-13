@@ -1,5 +1,12 @@
 {
   "translation": {
+    "模型列表加载失败，当前无法安全配置模型限制": "Le chargement de la liste des modeles a echoue. Les restrictions de modeles ne peuvent pas etre configurees en securite pour le moment.",
+    "模型列表加载失败，无法提交，请重试": "Le chargement de la liste des modeles a echoue. Reessayez avant d'envoyer.",
+    "模型列表加载失败，请重试": "Le chargement de la liste des modeles a echoue. Veuillez reessayer.",
+    "模型限制": "Restrictions de modeles",
+    "请选择该套餐支持的模型，留空支持所有模型": "Selectionnez les modeles pris en charge par ce forfait, laissez vide pour tous les modeles",
+    "选择后，通过该订阅套餐计费的请求只能使用选中的模型；留空则不限制": "Apres selection, les requetes facturees par ce forfait ne peuvent utiliser que les modeles selectionnes ; laissez vide pour aucune restriction",
+    "限制该订阅套餐可使用的模型范围": "Limiter les modeles utilisables par ce forfait",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_one": " + Recherche Web {{count}} fois / 1K fois * {{symbol}}{{price}} * {{ratioType}} {{ratio}}",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_many": " + Recherche Web {{count}} fois / 1K fois * {{symbol}}{{price}} * {{ratioType}} {{ratio}}",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_other": " + Recherche Web {{count}} fois / 1K fois * {{symbol}}{{price}} * {{ratioType}} {{ratio}}",
@@ -1877,6 +1884,8 @@
     "暂无可复制的版本信息": "No version information to copy",
     "暂无可展示数据": "Aucune donnée à afficher",
     "暂无可用的支付方式，请联系管理员配置": "Aucune méthode de paiement disponible, veuillez contacter l'administrateur pour la configuration",
+    "暂无可用登录方式，请联系管理员": "Aucune méthode de connexion n'est disponible. Veuillez contacter l'administrateur",
+    "暂无可用注册方式，请联系管理员": "Aucune méthode d'inscription n'est disponible. Veuillez contacter l'administrateur",
     "暂无可购买套餐": "Aucun plan disponible à l'achat",
     "暂无响应数据": "Aucune donnée de réponse",
     "暂无容器信息": "No container information",
@@ -2623,6 +2632,8 @@
     "管理员未开启在线充值！": "L'administrateur n'a pas activé la recharge en ligne !",
     "管理员未开启在线充值功能，请联系管理员开启或使用兑换码充值。": "L'administrateur n'a pas activé la fonction de recharge en ligne, veuillez contacter l'administrateur pour l'activer ou recharger avec un code d'échange.",
     "管理员未开启在线支付功能，请联系管理员配置。": "Le paiement en ligne n'est pas activé par l'administrateur. Veuillez contacter l'administrateur.",
+    "管理员已关闭密码登录": "L'administrateur a désactivé la connexion par mot de passe",
+    "管理员已关闭密码注册": "L'administrateur a désactivé l'inscription par mot de passe",
     "管理员未设置用户可选分组": "L'administrateur n'a pas défini de groupes sélectionnables par l'utilisateur",
     "管理员给用户分配的分组（如 vip）不仅决定用户身份，还会影响后续两个功能：": "The group assigned to a user (e.g., vip) not only determines their identity, but also affects the following two features:",
     "管理员设置了外部链接，点击下方按钮访问": "L'administrateur a défini un lien externe, cliquez sur le bouton ci-dessous pour y accéder",
@@ -3668,13 +3679,6 @@
     "Leaderboards": "Classements",
     "New Frontend": "Nouveau frontend",
     "StuHelper AI项目仓库地址：": "Adresse du référentiel du projet StuHelper AI : ",
-    "stuhelper-ai 默认不会将入口请求的 User-Agent 透传到上游渠道；该条件仅用于识别访问本站点的客户端。": "stuhelper-ai ne transmet pas le User-Agent de la requête entrante aux canaux en amont par défaut ; cette condition sert uniquement à identifier les clients accédant à ce site.",
-    "模型列表加载失败，当前无法安全配置模型限制": "Le chargement de la liste des modeles a echoue. Les restrictions de modeles ne peuvent pas etre configurees en securite pour le moment.",
-    "模型列表加载失败，无法提交，请重试": "Le chargement de la liste des modeles a echoue. Reessayez avant d'envoyer.",
-    "模型列表加载失败，请重试": "Le chargement de la liste des modeles a echoue. Veuillez reessayer.",
-    "模型限制": "Restrictions de modeles",
-    "请选择该套餐支持的模型，留空支持所有模型": "Selectionnez les modeles pris en charge par ce forfait, laissez vide pour tous les modeles",
-    "选择后，通过该订阅套餐计费的请求只能使用选中的模型；留空则不限制": "Apres selection, les requetes facturees par ce forfait ne peuvent utiliser que les modeles selectionnes ; laissez vide pour aucune restriction",
-    "限制该订阅套餐可使用的模型范围": "Limiter les modeles utilisables par ce forfait"
+    "stuhelper-ai 默认不会将入口请求的 User-Agent 透传到上游渠道；该条件仅用于识别访问本站点的客户端。": "stuhelper-ai ne transmet pas le User-Agent de la requête entrante aux canaux en amont par défaut ; cette condition sert uniquement à identifier les clients accédant à ce site."
   }
 }
