@@ -29,7 +29,7 @@
   "Fallback tier": "Fallback tier",
   "FastGPT": "FastGPT",
   "footer.columns.related.links.midjourney": "Midjourney-Proxy",
-  "footer.columns.related.links.neko": "neko-api-key-tool",
+  "footer.columns.related.links.newApiKeyTool": "new-api-key-tool",
   "Gemini": "Gemini",
   "Gemini Image 4K": "Gemini Image 4K",
   "GitHub": "GitHub",
@@ -47,7 +47,6 @@
   "https://example.com/topup": "https://example.com/topup",
   "https://example.com/webhook": "https://example.com/webhook",
   "https://gateway.example.com": "https://gateway.example.com",
-  "https://github.com/Xauryan/stuhelper-ai": "https://github.com/Xauryan/stuhelper-ai",
   "https://gotify.example.com": "https://gotify.example.com",
   "https://pay.example.com": "https://pay.example.com",
   "https://provider.com/.well-known/openid-configuration": "https://provider.com/.well-known/openid-configuration",
@@ -67,7 +66,6 @@
   "MokaAI": "MokaAI",
   "Moonshot": "Moonshot",
   "name@example.com": "name@example.com",
-  "stuhelper-ai": "stuhelper-ai",
   "No separate media pricing configured.": "No separate media pricing configured.",
   "noreply@example.com": "noreply@example.com",
   "OAuth Client Secret": "OAuth Client Secret",
@@ -79,7 +77,6 @@
   "Passkey": "Passkey",
   "Perplexity": "Perplexity",
   "price_xxx": "price_xxx",
-  "Xauryan": "Xauryan",
   "Replicate": "Replicate",
   "Separate image/audio prices are enabled.": "Separate image/audio prices are enabled.",
   "Set separate prices for cache reads and writes.": "Set separate prices for cache reads and writes.",
@@ -105,5 +102,8 @@
   "Xunfei": "Xunfei",
   "Alipay": "Alipay",
   "WeChat Pay": "WeChat Pay",
-  "Zhipu V4": "Zhipu V4"
+  "Zhipu V4": "Zhipu V4",
+  "https://github.com/Xauryan/stuhelper-ai": "https://github.com/Xauryan/stuhelper-ai",
+  "stuhelper-ai": "stuhelper-ai",
+  "Xauryan": "Xauryan"
 }
