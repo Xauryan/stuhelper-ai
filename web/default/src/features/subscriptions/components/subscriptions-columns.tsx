@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
-import { formatDuration, formatResetPeriod } from '../lib'
+import { formatDuration, formatResetPeriod, getPlanModelLimits } from '../lib'
 import type { PlanRecord } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
 
@@ -182,6 +182,33 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
           )
         },
         size: 100,
+      },
+      {
+        id: 'model_limits',
+        meta: { label: t('Model Restrictions'), mobileHidden: true },
+        header: ({ column }) => (
+          <DataTableColumnHeader
+            column={column}
+            title={t('Model Restrictions')}
+          />
+        ),
+        cell: ({ row }) => {
+          const limits = getPlanModelLimits(row.original.plan)
+          if (limits.length === 0) {
+            return (
+              <span className='text-muted-foreground'>{t('No restriction')}</span>
+            )
+          }
+          return (
+            <StatusBadge
+              label={t('{{count}} models', { count: limits.length })}
+              variant='neutral'
+              copyable={false}
+              title={limits.join(', ')}
+            />
+          )
+        },
+        size: 120,
       },
       {
         id: 'upgrade_group',

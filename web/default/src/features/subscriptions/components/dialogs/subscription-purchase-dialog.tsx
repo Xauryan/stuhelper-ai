@@ -43,7 +43,7 @@ import {
   paySubscriptionCreem,
   paySubscriptionEpay,
 } from '../../api'
-import { formatDuration, formatResetPeriod } from '../../lib'
+import { formatDuration, formatResetPeriod, getPlanModelLimits } from '../../lib'
 import type { PlanRecord } from '../../types'
 
 interface PaymentMethod {
@@ -90,6 +90,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
     selectedEpayMethod ||
     t('Select payment method')
   const totalAmount = Number(plan.total_amount || 0)
+  const modelLimits = getPlanModelLimits(plan)
   const price = Number(plan.price_amount || 0).toFixed(2)
   const limitReached =
     (props.purchaseLimit || 0) > 0 &&
@@ -239,6 +240,19 @@ export function SubscriptionPurchaseDialog(props: Props) {
                   {t('Upgrade Group')}
                 </span>
                 <GroupBadge group={plan.upgrade_group} />
+              </div>
+            )}
+            {modelLimits.length > 0 && (
+              <div className='flex justify-between'>
+                <span className='text-muted-foreground text-sm'>
+                  {t('Available Models')}
+                </span>
+                <span
+                  className='max-w-[220px] truncate text-sm'
+                  title={modelLimits.join(', ')}
+                >
+                  {t('{{count}} models', { count: modelLimits.length })}
+                </span>
               </div>
             )}
             <Separator />

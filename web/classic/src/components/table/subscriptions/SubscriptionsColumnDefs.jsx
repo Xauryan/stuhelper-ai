@@ -31,6 +31,7 @@ import {
 } from '@douyinfe/semi-ui';
 import { renderQuota } from '../../../helpers';
 import { convertUSDToCurrency } from '../../../helpers/render';
+import { getSubscriptionModelLimits } from '../../../helpers/subscription';
 
 const { Text } = Typography;
 
@@ -67,6 +68,7 @@ function formatResetPeriod(plan, t) {
 const renderPlanTitle = (text, record, t) => {
   const subtitle = record?.plan?.subtitle;
   const plan = record?.plan;
+  const modelLimits = getSubscriptionModelLimits(plan);
   const popoverContent = (
     <div style={{ width: 260 }}>
       <Text strong>{text}</Text>
@@ -101,6 +103,12 @@ const renderPlanTitle = (text, record, t) => {
         <Text>{formatDuration(plan, t)}</Text>
         <Text type='tertiary'>{t('重置')}</Text>
         <Text>{formatResetPeriod(plan, t)}</Text>
+        <Text type='tertiary'>{t('模型限制')}</Text>
+        <Text>
+          {modelLimits.length > 0
+            ? `${modelLimits.length} ${t('个模型')}`
+            : t('不限')}
+        </Text>
       </div>
     </div>
   );
@@ -199,6 +207,20 @@ const renderResetPeriod = (text, record, t) => {
     <Text type={isNever ? 'tertiary' : 'secondary'}>
       {formatResetPeriod(record?.plan, t)}
     </Text>
+  );
+};
+
+const renderModelLimits = (text, record, t) => {
+  const modelLimits = getSubscriptionModelLimits(record?.plan);
+  if (modelLimits.length === 0) {
+    return <Text type='tertiary'>{t('不限')}</Text>;
+  }
+  return (
+    <Tooltip content={modelLimits.join(', ')}>
+      <Tag color='cyan' shape='circle'>
+        {modelLimits.length} {t('个模型')}
+      </Tag>
+    </Tooltip>
   );
 };
 
@@ -322,6 +344,11 @@ export const getSubscriptionsColumns = ({
       title: t('重置'),
       width: 80,
       render: (text, record) => renderResetPeriod(text, record, t),
+    },
+    {
+      title: t('模型限制'),
+      width: 100,
+      render: (text, record) => renderModelLimits(text, record, t),
     },
     {
       title: t('状态'),

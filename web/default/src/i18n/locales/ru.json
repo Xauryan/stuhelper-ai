@@ -4416,6 +4416,13 @@
     "stuhelper-ai": "stuhelper-ai",
     "Warning: Base URL should not end with /v1. StuHelper AI will handle it automatically. This may cause request failures.": "Предупреждение: базовый URL не должен заканчиваться на /v1. Новый API обработает это автоматически. Это может привести к сбоям запросов.",
     "Welcome to our StuHelper AI...": "Добро пожаловать в наш StuHelper AI...",
-    "Xauryan": "Xauryan"
+    "Xauryan": "Xauryan",
+    "Allowed Models": "Разрешенные модели",
+    "Current model list is unavailable.": "Текущий список моделей недоступен.",
+    "Model list failed to load. Retry before configuring restrictions.": "Не удалось загрузить список моделей. Повторите попытку перед настройкой ограничений.",
+    "Model list failed to load. Retry before saving.": "Не удалось загрузить список моделей. Повторите попытку перед сохранением.",
+    "Model Restrictions": "Ограничения моделей",
+    "Select allowed models, leave empty for all models": "Выберите разрешенные модели, оставьте пустым для всех моделей",
+    "When set, subscription-billed requests can only use selected models.": "Если задано, запросы с оплатой по подписке смогут использовать только выбранные модели."
   }
 }

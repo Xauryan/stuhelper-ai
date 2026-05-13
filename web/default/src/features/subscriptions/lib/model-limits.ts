@@ -16,16 +16,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@Xauryan.com
 */
-export { formatDuration, formatResetPeriod, formatTimestamp } from './format'
-export {
-  getPlanModelLimits,
-  getPlanModelLimitsCsv,
-  normalizeModelLimits,
-} from './model-limits'
-export {
-  getPlanFormSchema,
-  PLAN_FORM_DEFAULTS,
-  planToFormValues,
-  formValuesToPlanPayload,
-  type PlanFormValues,
-} from './plan-form'
+import type { SubscriptionPlan } from '../types'
+
+export function normalizeModelLimits(values: string[] = []): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    const model = String(value || '').trim()
+    if (!model || seen.has(model)) continue
+    seen.add(model)
+    result.push(model)
+  }
+  return result
+}
+
+export function getPlanModelLimits(plan?: Partial<SubscriptionPlan>): string[] {
+  if (!plan?.model_limits_enabled || !plan.model_limits) return []
+  return normalizeModelLimits(plan.model_limits.split(','))
+}
+
+export function getPlanModelLimitsCsv(values: string[] = []): string {
+  return normalizeModelLimits(values).join(',')
+}

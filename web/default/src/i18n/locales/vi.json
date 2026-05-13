@@ -4416,6 +4416,13 @@
     "stuhelper-ai": "stuhelper-ai",
     "Warning: Base URL should not end with /v1. StuHelper AI will handle it automatically. This may cause request failures.": "Cảnh báo: URL cơ sở không nên kết thúc bằng /v1. API mới sẽ xử lý tự động. Điều này có thể gây ra lỗi yêu cầu.",
     "Welcome to our StuHelper AI...": "Chào mừng bạn đến với API mới của chúng tôi...",
-    "Xauryan": "Xauryan"
+    "Xauryan": "Xauryan",
+    "Allowed Models": "Mô hình được phép",
+    "Current model list is unavailable.": "Danh sách mô hình hiện không khả dụng.",
+    "Model list failed to load. Retry before configuring restrictions.": "Tải danh sách mô hình thất bại. Hãy thử lại trước khi cấu hình giới hạn.",
+    "Model list failed to load. Retry before saving.": "Tải danh sách mô hình thất bại. Hãy thử lại trước khi lưu.",
+    "Model Restrictions": "Giới hạn mô hình",
+    "Select allowed models, leave empty for all models": "Chọn mô hình được phép, để trống cho tất cả mô hình",
+    "When set, subscription-billed requests can only use selected models.": "Khi thiết lập, các yêu cầu tính phí theo gói đăng ký chỉ có thể dùng những mô hình đã chọn."
   }
 }

@@ -30,7 +30,13 @@ import {
   Tooltip,
   Typography,
 } from '@douyinfe/semi-ui';
-import { API, showError, showSuccess, renderQuota } from '../../helpers';
+import {
+  API,
+  getSubscriptionModelLimits,
+  showError,
+  showSuccess,
+  renderQuota,
+} from '../../helpers';
 import { getCurrencyConfig } from '../../helpers/render';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import SubscriptionPurchaseModal from './modals/SubscriptionPurchaseModal';
@@ -510,6 +516,11 @@ const SubscriptionPlansCard = ({
                   formatSubscriptionResetPeriod(plan, t) === t('不重置')
                     ? null
                     : `${t('额度重置')}: ${formatSubscriptionResetPeriod(plan, t)}`;
+                const modelLimits = getSubscriptionModelLimits(plan);
+                const modelLimitsLabel =
+                  modelLimits.length > 0
+                    ? `${t('可用模型')}: ${modelLimits.length} ${t('个模型')}`
+                    : null;
                 const planBenefits = [
                   {
                     label: `${t('有效期')}: ${formatSubscriptionDuration(plan, t)}`,
@@ -523,6 +534,12 @@ const SubscriptionPlansCard = ({
                     : { label: totalLabel },
                   limitLabel ? { label: limitLabel } : null,
                   upgradeLabel ? { label: upgradeLabel } : null,
+                  modelLimitsLabel
+                    ? {
+                        label: modelLimitsLabel,
+                        tooltip: modelLimits.join(', '),
+                      }
+                    : null,
                 ].filter(Boolean);
 
                 return (
