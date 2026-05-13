@@ -20,7 +20,7 @@
   "edit_this": "edit_this",
   "FastGPT": "FastGPT",
   "footer.columns.related.links.midjourney": "Midjourney-Proxy",
-  "footer.columns.related.links.neko": "neko-api-key-tool",
+  "footer.columns.related.links.newApiKeyTool": "new-api-key-tool",
   "Gemini": "Gemini",
   "Gemini Image 4K": "Gemini Image 4K",
   "GitHub": "GitHub",
@@ -38,7 +38,6 @@
   "https://example.com/topup": "https://example.com/topup",
   "https://example.com/webhook": "https://example.com/webhook",
   "https://gateway.example.com": "https://gateway.example.com",
-  "https://github.com/Xauryan/stuhelper-ai": "https://github.com/Xauryan/stuhelper-ai",
   "https://gotify.example.com": "https://gotify.example.com",
   "https://pay.example.com": "https://pay.example.com",
   "https://provider.com/.well-known/openid-configuration": "https://provider.com/.well-known/openid-configuration",
@@ -58,7 +57,6 @@
   "Moonshot": "Moonshot",
   "my-status": "my-status",
   "name@example.com": "name@example.com",
-  "stuhelper-ai": "stuhelper-ai",
   "noreply@example.com": "noreply@example.com",
   "OhMyGPT": "OhMyGPT",
   "Ollama": "Ollama",
@@ -69,7 +67,6 @@
   "Passkey": "Passkey",
   "Perplexity": "Perplexity",
   "price_xxx": "price_xxx",
-  "Xauryan": "Xauryan",
   "Replicate": "Replicate",
   "SiliconFlow": "SiliconFlow",
   "smtp.example.com": "smtp.example.com",
@@ -90,5 +87,8 @@
   "Xinference": "Xinference",
   "Xunfei": "Xunfei",
   "Alipay": "Alipay",
-  "WeChat Pay": "WeChat Pay"
+  "WeChat Pay": "WeChat Pay",
+  "https://github.com/Xauryan/stuhelper-ai": "https://github.com/Xauryan/stuhelper-ai",
+  "stuhelper-ai": "stuhelper-ai",
+  "Xauryan": "Xauryan"
 }
