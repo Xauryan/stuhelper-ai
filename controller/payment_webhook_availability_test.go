@@ -164,3 +164,65 @@ func TestEpayWebhookEnabledRequiresTopUpAndWebhookConfig(t *testing.T) {
 	operation_setting.PayMethods = nil
 	require.False(t, isEpayWebhookEnabled())
 }
+
+func TestAlipayOfficialWebhookEnabledRequiresTopUpAndWebhookConfig(t *testing.T) {
+	originalEnabled := setting.AlipayOfficialEnabled
+	originalAppID := setting.AlipayOfficialAppID
+	originalPrivateKey := setting.AlipayOfficialPrivateKey
+	originalPublicKey := setting.AlipayOfficialAlipayPublicKey
+	t.Cleanup(func() {
+		setting.AlipayOfficialEnabled = originalEnabled
+		setting.AlipayOfficialAppID = originalAppID
+		setting.AlipayOfficialPrivateKey = originalPrivateKey
+		setting.AlipayOfficialAlipayPublicKey = originalPublicKey
+	})
+
+	setting.AlipayOfficialEnabled = true
+	setting.AlipayOfficialAppID = "app-id"
+	setting.AlipayOfficialPrivateKey = "private"
+	setting.AlipayOfficialAlipayPublicKey = ""
+	require.False(t, isAlipayOfficialWebhookEnabled())
+
+	setting.AlipayOfficialAlipayPublicKey = "public"
+	require.True(t, isAlipayOfficialWebhookEnabled())
+
+	setting.AlipayOfficialEnabled = false
+	require.False(t, isAlipayOfficialWebhookEnabled())
+}
+
+func TestWechatPayOfficialWebhookEnabledRequiresTopUpAndWebhookConfig(t *testing.T) {
+	originalEnabled := setting.WechatPayOfficialEnabled
+	originalAppID := setting.WechatPayOfficialAppID
+	originalMchID := setting.WechatPayOfficialMchID
+	originalSerial := setting.WechatPayOfficialCertificateSerial
+	originalAPIv3Key := setting.WechatPayOfficialAPIv3Key
+	originalPrivateKey := setting.WechatPayOfficialPrivateKey
+	originalPlatformPublicKey := setting.WechatPayOfficialPlatformPublicKey
+	t.Cleanup(func() {
+		setting.WechatPayOfficialEnabled = originalEnabled
+		setting.WechatPayOfficialAppID = originalAppID
+		setting.WechatPayOfficialMchID = originalMchID
+		setting.WechatPayOfficialCertificateSerial = originalSerial
+		setting.WechatPayOfficialAPIv3Key = originalAPIv3Key
+		setting.WechatPayOfficialPrivateKey = originalPrivateKey
+		setting.WechatPayOfficialPlatformPublicKey = originalPlatformPublicKey
+	})
+
+	setting.WechatPayOfficialEnabled = true
+	setting.WechatPayOfficialAppID = "wx-app"
+	setting.WechatPayOfficialMchID = "mch"
+	setting.WechatPayOfficialCertificateSerial = "serial"
+	setting.WechatPayOfficialAPIv3Key = "12345678901234567890123456789012"
+	setting.WechatPayOfficialPrivateKey = ""
+	setting.WechatPayOfficialPlatformPublicKey = "platform_public"
+	require.False(t, isWechatPayOfficialWebhookEnabled())
+
+	setting.WechatPayOfficialPrivateKey = "private"
+	require.True(t, isWechatPayOfficialWebhookEnabled())
+
+	setting.WechatPayOfficialPlatformPublicKey = ""
+	require.False(t, isWechatPayOfficialWebhookEnabled())
+
+	setting.WechatPayOfficialEnabled = false
+	require.False(t, isWechatPayOfficialWebhookEnabled())
+}

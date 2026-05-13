@@ -25,6 +25,7 @@ import SettingsPaymentGatewayStripe from '../../pages/Setting/Payment/SettingsPa
 import SettingsPaymentGatewayCreem from '../../pages/Setting/Payment/SettingsPaymentGatewayCreem';
 import SettingsPaymentGatewayWaffo from '../../pages/Setting/Payment/SettingsPaymentGatewayWaffo';
 import SettingsPaymentGatewayWaffoPancake from '../../pages/Setting/Payment/SettingsPaymentGatewayWaffoPancake';
+import SettingsPaymentGatewayOfficialChina from '../../pages/Setting/Payment/SettingsPaymentGatewayOfficialChina';
 import { API, showError, toBoolean } from '../../helpers';
 import { useTranslation } from 'react-i18next';
 
@@ -49,6 +50,31 @@ const PaymentSetting = () => {
     StripeUnitPrice: 8.0,
     StripeMinTopUp: 1,
     StripePromotionCodesEnabled: false,
+
+    AlipayOfficialEnabled: false,
+    AlipayOfficialSandbox: false,
+    AlipayOfficialAppID: '',
+    AlipayOfficialPrivateKey: '',
+    AlipayOfficialAlipayPublicKey: '',
+    AlipayOfficialAppCertSN: '',
+    AlipayOfficialRootCertSN: '',
+    AlipayOfficialAlipayCertSN: '',
+    AlipayOfficialNotifyURL: '',
+    AlipayOfficialReturnURL: '',
+    AlipayOfficialUnitPrice: 1.0,
+    AlipayOfficialMinTopUp: 1,
+
+    WechatPayOfficialEnabled: false,
+    WechatPayOfficialAppID: '',
+    WechatPayOfficialMchID: '',
+    WechatPayOfficialCertificateSerial: '',
+    WechatPayOfficialAPIv3Key: '',
+    WechatPayOfficialPrivateKey: '',
+    WechatPayOfficialPlatformPublicKey: '',
+    WechatPayOfficialNotifyURL: '',
+    WechatPayOfficialReturnURL: '',
+    WechatPayOfficialUnitPrice: 1.0,
+    WechatPayOfficialMinTopUp: 1,
 
     WaffoPancakeEnabled: false,
     WaffoPancakeSandbox: false,
@@ -108,6 +134,10 @@ const PaymentSetting = () => {
           case 'MinTopUp':
           case 'StripeUnitPrice':
           case 'StripeMinTopUp':
+          case 'AlipayOfficialUnitPrice':
+          case 'AlipayOfficialMinTopUp':
+          case 'WechatPayOfficialUnitPrice':
+          case 'WechatPayOfficialMinTopUp':
           case 'WaffoPancakeUnitPrice':
           case 'WaffoPancakeMinTopUp':
             newInputs[item.key] = parseFloat(item.value);
@@ -186,6 +216,13 @@ const PaymentSetting = () => {
             </Tabs.TabPane>
             <Tabs.TabPane tab={t('Creem 设置')} itemKey='creem'>
               <SettingsPaymentGatewayCreem
+                options={inputs}
+                refresh={onRefresh}
+                hideSectionTitle
+              />
+            </Tabs.TabPane>
+            <Tabs.TabPane tab={t('官方支付设置')} itemKey='official-cn'>
+              <SettingsPaymentGatewayOfficialChina
                 options={inputs}
                 refresh={onRefresh}
                 hideSectionTitle

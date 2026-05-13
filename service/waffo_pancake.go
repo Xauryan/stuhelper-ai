@@ -6,9 +6,7 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"math"
@@ -176,81 +174,10 @@ func ResolveWaffoPancakeTradeNo(event *waffoPancakeWebhookEvent) (string, error)
 	return "", fmt.Errorf("missing webhook orderId")
 }
 
-func normalizeRSAPrivateKey(raw string) (string, error) {
-	return normalizePEMKey(raw, "PRIVATE KEY", "RSA PRIVATE KEY")
-}
-
-func normalizeRSAPublicKey(raw string) (string, error) {
-	return normalizePEMKey(raw, "PUBLIC KEY", "RSA PUBLIC KEY")
-}
-
-func normalizePEMKey(raw string, pkcs8Type string, pkcs1Type string) (string, error) {
-	if strings.TrimSpace(raw) == "" {
-		return "", fmt.Errorf("%s is empty", strings.ToLower(pkcs8Type))
-	}
-
-	normalized := strings.TrimSpace(strings.ReplaceAll(raw, `\n`, "\n"))
-	if strings.Contains(normalized, "BEGIN ") {
-		block, _ := pem.Decode([]byte(normalized))
-		if block == nil {
-			return "", fmt.Errorf("invalid PEM encoded %s", strings.ToLower(pkcs8Type))
-		}
-		return string(pem.EncodeToMemory(block)), nil
-	}
-
-	der, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(normalized, "\n", ""))
-	if err != nil {
-		return "", fmt.Errorf("invalid base64 encoded %s: %w", strings.ToLower(pkcs8Type), err)
-	}
-
-	pemType := pkcs8Type
-	if pkcs8Type == "PRIVATE KEY" {
-		if _, err := x509.ParsePKCS8PrivateKey(der); err != nil {
-			if _, err := x509.ParsePKCS1PrivateKey(der); err == nil {
-				pemType = pkcs1Type
-			} else {
-				return "", fmt.Errorf("invalid RSA private key")
-			}
-		}
-	} else {
-		if _, err := x509.ParsePKIXPublicKey(der); err != nil {
-			if _, err := x509.ParsePKCS1PublicKey(der); err == nil {
-				pemType = pkcs1Type
-			} else {
-				return "", fmt.Errorf("invalid RSA public key")
-			}
-		}
-	}
-
-	return string(pem.EncodeToMemory(&pem.Block{Type: pemType, Bytes: der})), nil
-}
-
 func signWaffoPancakeRequest(method string, path string, timestamp string, body string, privateKeyPEM string) (string, error) {
-	block, _ := pem.Decode([]byte(privateKeyPEM))
-	if block == nil {
-		return "", fmt.Errorf("invalid RSA private key PEM")
-	}
-
-	var privateKey *rsa.PrivateKey
-	switch block.Type {
-	case "PRIVATE KEY":
-		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-		if err != nil {
-			return "", fmt.Errorf("parse PKCS#8 private key: %w", err)
-		}
-		parsed, ok := key.(*rsa.PrivateKey)
-		if !ok {
-			return "", fmt.Errorf("private key is not RSA")
-		}
-		privateKey = parsed
-	case "RSA PRIVATE KEY":
-		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-		if err != nil {
-			return "", fmt.Errorf("parse PKCS#1 private key: %w", err)
-		}
-		privateKey = key
-	default:
-		return "", fmt.Errorf("unsupported private key type: %s", block.Type)
+	privateKey, err := parseRSAPrivateKey(privateKeyPEM)
+	if err != nil {
+		return "", err
 	}
 
 	canonicalRequest := buildWaffoPancakeCanonicalRequest(method, path, timestamp, body)
@@ -357,32 +284,9 @@ func verifyWaffoPancakeWebhookWithKey(signatureInput string, signaturePart strin
 	if err != nil {
 		return err
 	}
-
-	block, _ := pem.Decode([]byte(publicKeyPEM))
-	if block == nil {
-		return fmt.Errorf("invalid RSA public key PEM")
-	}
-
-	var publicKey *rsa.PublicKey
-	switch block.Type {
-	case "PUBLIC KEY":
-		key, err := x509.ParsePKIXPublicKey(block.Bytes)
-		if err != nil {
-			return fmt.Errorf("parse PKIX public key: %w", err)
-		}
-		parsed, ok := key.(*rsa.PublicKey)
-		if !ok {
-			return fmt.Errorf("public key is not RSA")
-		}
-		publicKey = parsed
-	case "RSA PUBLIC KEY":
-		key, err := x509.ParsePKCS1PublicKey(block.Bytes)
-		if err != nil {
-			return fmt.Errorf("parse PKCS#1 public key: %w", err)
-		}
-		publicKey = key
-	default:
-		return fmt.Errorf("unsupported public key type: %s", block.Type)
+	publicKey, err := parseRSAPublicKey(publicKeyPEM)
+	if err != nil {
+		return err
 	}
 
 	signature, err := base64.StdEncoding.DecodeString(signaturePart)

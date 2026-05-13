@@ -38,6 +38,10 @@ StuHelper AI 本地任务决定修改它们：
 - GHCR 镜像工作流是面向发布版本的。它只在版本 tag 或针对既有版本 tag 的
   显式手动触发时构建，只发布版本 tag 镜像和 `latest`，不发布 `main` 或
   commit-SHA 镜像 tag。`latest` 应指向最新发布版本镜像。
+- classic 额度充值支持支付宝和微信支付官方企业接入。支付宝使用电脑网站支付
+  和手机网站支付；微信支付使用 Native 扫码和 H5 跳转。该功能是 StuHelper AI
+  本地基线，维护细节见 `docs/official-cn-payments.md`，同步上游或导入外部
+  PR 时不得替换为易支付或支付宝当面付实现。
 - 项目身份必须保持为 `StuHelper AI`；组织、作者、联系方式、包名、Docker、
   workflow 和元数据身份必须保持为 `Xauryan`。
 

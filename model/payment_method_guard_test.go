@@ -102,6 +102,59 @@ func TestRechargeWaffoPancake_RejectsMismatchedPaymentMethod(t *testing.T) {
 	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 101))
 }
 
+func TestRechargeOfficialPayment_RejectsMismatchedPaymentMethod(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 102, 0)
+	insertTopUpForPaymentGuardTest(t, "official-guard", 102, PaymentProviderAlipayOfficial)
+
+	err := RechargeOfficialPayment("official-guard", PaymentProviderWechatPayOfficial, PaymentMethodWechatPayOfficial, "127.0.0.1")
+	require.Error(t, err)
+
+	topUp := GetTopUpByTradeNo("official-guard")
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
+	assert.Equal(t, PaymentProviderAlipayOfficial, topUp.PaymentProvider)
+	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 102))
+}
+
+func TestRechargeOfficialPayment_RejectsMismatchedPaidMoney(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 104, 0)
+	insertTopUpForPaymentGuardTest(t, "official-money-guard", 104, PaymentProviderWechatPayOfficial)
+
+	err := RechargeOfficialPayment("official-money-guard", PaymentProviderWechatPayOfficial, PaymentMethodWechatPayOfficial, "127.0.0.1", 9.98)
+	require.Error(t, err)
+
+	topUp := GetTopUpByTradeNo("official-money-guard")
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
+	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 104))
+}
+
+func TestRechargeOfficialPayment_CreditsQuotaAndMarksSuccess(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 103, 10)
+	insertTopUpForPaymentGuardTest(t, "official-success", 103, PaymentProviderWechatPayOfficial)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 500000
+
+	err := RechargeOfficialPayment("official-success", PaymentProviderWechatPayOfficial, PaymentMethodWechatPayOfficial, "127.0.0.1", 9.99)
+	require.NoError(t, err)
+
+	topUp := GetTopUpByTradeNo("official-success")
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
+	assert.Equal(t, PaymentMethodWechatPayOfficial, topUp.PaymentMethod)
+	assert.Equal(t, 1000010, getUserQuotaForPaymentGuardTest(t, 103))
+}
+
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {
 	testCases := []struct {
 		name                    string
