@@ -49,6 +49,10 @@ StuHelper AI 本地任务决定修改它们：
   幂等，避免重复 webhook 或订阅订单重复回调造成重复入账。
 - 项目身份必须保持为 `StuHelper AI`；组织、作者、联系方式、包名、Docker、
   workflow 和元数据身份必须保持为 `Xauryan`。
+- 对外分享元数据必须保持 StuHelper AI 身份。classic 和 default 前端的页面
+  `<title>`、`description`、Open Graph 和 Twitter Card 标签不得重新出现旧项目
+  名称或旧产品描述，避免 Telegram、QQ 等聊天工具抓取旧分享卡片。
+  当前默认分享描述为：`StuHelper AI 是 StuHelper 团队部署的统一 AI 模型聚合与分发网关，提供高性价比的集中式模型管理与网关服务。`
 
 只有在标识上游来源、上游 release 或导入的上游 PR 时，才允许引用原上游仓库。
 这些引用不得重新作为本分叉仓库的产品品牌、包身份、镜像名称、可见 UI 文案
