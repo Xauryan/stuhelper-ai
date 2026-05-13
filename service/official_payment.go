@@ -1,0 +1,579 @@
+package service
+
+import (
+	"bytes"
+	"context"
+	"crypto"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/Xauryan/stuhelper-ai/common"
+)
+
+const (
+	AlipayOfficialPagePayMethod      = "alipay.trade.page.pay"
+	AlipayOfficialWapPayMethod       = "alipay.trade.wap.pay"
+	AlipayOfficialPagePayProductCode = "FAST_INSTANT_PAY_PAY"
+	AlipayOfficialWapPayProductCode  = "QUICK_WAP_PAY"
+	alipayOfficialProductionGateway  = "https://openapi.alipay.com/gateway.do"
+	alipayOfficialSandboxGateway     = "https://openapi-sandbox.dl.alipaydev.com/gateway.do"
+)
+
+type AlipayOfficialBuildParams struct {
+	AppID            string
+	PrivateKey       string
+	AppCertSN        string
+	AlipayRootCertSN string
+	AlipayCertSN     string
+	Sandbox          bool
+	Method           string
+	NotifyURL        string
+	ReturnURL        string
+	OutTradeNo       string
+	TotalAmount      string
+	Subject          string
+}
+
+type WechatPayOfficialClient struct {
+	AppID             string
+	MchID             string
+	CertificateSerial string
+	APIv3Key          string
+	PrivateKey        string
+	PlatformPublicKey string
+	HTTPClient        *http.Client
+}
+
+type WechatPayOfficialPrepayParams struct {
+	Description string
+	OutTradeNo  string
+	NotifyURL   string
+	AmountTotal int64
+	ClientIP    string
+	WapURL      string
+	WapName     string
+	TradeType   string
+}
+
+type WechatPayOfficialPrepayResult struct {
+	CodeURL string `json:"code_url,omitempty"`
+	H5URL   string `json:"h5_url,omitempty"`
+}
+
+type WechatPayOfficialNotifyEnvelope struct {
+	ID           string `json:"id"`
+	CreateTime   string `json:"create_time"`
+	EventType    string `json:"event_type"`
+	ResourceType string `json:"resource_type"`
+	Summary      string `json:"summary"`
+	Resource     struct {
+		OriginalType   string `json:"original_type"`
+		Algorithm      string `json:"algorithm"`
+		Ciphertext     string `json:"ciphertext"`
+		AssociatedData string `json:"associated_data"`
+		Nonce          string `json:"nonce"`
+	} `json:"resource"`
+}
+
+type WechatPayOfficialTransaction struct {
+	AppID         string `json:"appid"`
+	MchID         string `json:"mchid"`
+	OutTradeNo    string `json:"out_trade_no"`
+	TransactionID string `json:"transaction_id"`
+	TradeType     string `json:"trade_type"`
+	TradeState    string `json:"trade_state"`
+	Attach        string `json:"attach"`
+	Amount        struct {
+		Total         int64  `json:"total"`
+		PayerTotal    int64  `json:"payer_total"`
+		Currency      string `json:"currency"`
+		PayerCurrency string `json:"payer_currency"`
+	} `json:"amount"`
+}
+
+func BuildAlipayOfficialPageExecuteForm(params AlipayOfficialBuildParams) (string, error) {
+	values, err := buildAlipayOfficialSignedValues(params)
+	if err != nil {
+		return "", err
+	}
+
+	var builder strings.Builder
+	builder.WriteString(`<form id="alipaysubmit" name="alipaysubmit" action="`)
+	builder.WriteString(htmlEscape(resolveAlipayOfficialGateway(params.Sandbox)))
+	builder.WriteString(`?charset=utf-8" method="POST">`)
+	keys := sortedValueKeys(values)
+	for _, key := range keys {
+		builder.WriteString(`<input type="hidden" name="`)
+		builder.WriteString(htmlEscape(key))
+		builder.WriteString(`" value="`)
+		builder.WriteString(htmlEscape(values.Get(key)))
+		builder.WriteString(`"/>`)
+	}
+	builder.WriteString(`<input type="submit" value="ok" style="display:none;"></form>`)
+	builder.WriteString(`<script>document.forms['alipaysubmit'].submit();</script>`)
+	return builder.String(), nil
+}
+
+func VerifyAlipayOfficialNotify(params map[string]string, publicKey string) bool {
+	sign := strings.TrimSpace(params["sign"])
+	if sign == "" {
+		return false
+	}
+	signature, err := base64.StdEncoding.DecodeString(sign)
+	if err != nil {
+		return false
+	}
+	content := buildAlipaySignContent(params, true)
+	publicKeyPEM, err := normalizeRSAPublicKey(publicKey)
+	if err != nil {
+		return false
+	}
+	pub, err := parseRSAPublicKey(publicKeyPEM)
+	if err != nil {
+		return false
+	}
+	digest := sha256.Sum256([]byte(content))
+	return rsa.VerifyPKCS1v15(pub, crypto.SHA256, digest[:], signature) == nil
+}
+
+func buildAlipayOfficialSignedValues(params AlipayOfficialBuildParams) (url.Values, error) {
+	method := strings.TrimSpace(params.Method)
+	if method == "" {
+		return nil, fmt.Errorf("missing Alipay method")
+	}
+	productCode := AlipayOfficialPagePayProductCode
+	if method == AlipayOfficialWapPayMethod {
+		productCode = AlipayOfficialWapPayProductCode
+	}
+
+	bizContent := map[string]string{
+		"out_trade_no": params.OutTradeNo,
+		"total_amount": params.TotalAmount,
+		"subject":      params.Subject,
+		"product_code": productCode,
+	}
+	bizContentBytes, err := common.Marshal(bizContent)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Alipay biz_content: %w", err)
+	}
+
+	values := url.Values{}
+	values.Set("app_id", strings.TrimSpace(params.AppID))
+	values.Set("method", method)
+	values.Set("format", "JSON")
+	values.Set("charset", "utf-8")
+	values.Set("sign_type", "RSA2")
+	values.Set("timestamp", time.Now().Format("2006-01-02 15:04:05"))
+	values.Set("version", "1.0")
+	values.Set("notify_url", strings.TrimSpace(params.NotifyURL))
+	if strings.TrimSpace(params.ReturnURL) != "" {
+		values.Set("return_url", strings.TrimSpace(params.ReturnURL))
+	}
+	if strings.TrimSpace(params.AppCertSN) != "" {
+		values.Set("app_cert_sn", strings.TrimSpace(params.AppCertSN))
+	}
+	if strings.TrimSpace(params.AlipayRootCertSN) != "" {
+		values.Set("alipay_root_cert_sn", strings.TrimSpace(params.AlipayRootCertSN))
+	}
+	if strings.TrimSpace(params.AlipayCertSN) != "" {
+		values.Set("alipay_cert_sn", strings.TrimSpace(params.AlipayCertSN))
+	}
+	values.Set("biz_content", string(bizContentBytes))
+
+	signContent := buildAlipaySignContent(valuesToMap(values), false)
+	signature, err := signRSA2(signContent, params.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+	values.Set("sign", signature)
+	return values, nil
+}
+
+func signRSA2(content string, rawPrivateKey string) (string, error) {
+	privateKeyPEM, err := normalizeRSAPrivateKey(rawPrivateKey)
+	if err != nil {
+		return "", err
+	}
+	privateKey, err := parseRSAPrivateKey(privateKeyPEM)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256([]byte(content))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, digest[:])
+	if err != nil {
+		return "", fmt.Errorf("sign RSA2 payload: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(signature), nil
+}
+
+func buildAlipaySignContent(params map[string]string, excludeSignType bool) string {
+	keys := make([]string, 0, len(params))
+	for key, value := range params {
+		if key == "sign" || value == "" || (excludeSignType && key == "sign_type") {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key+"="+params[key])
+	}
+	return strings.Join(parts, "&")
+}
+
+func valuesToMap(values url.Values) map[string]string {
+	params := make(map[string]string, len(values))
+	for key := range values {
+		params[key] = values.Get(key)
+	}
+	return params
+}
+
+func sortedValueKeys(values url.Values) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func resolveAlipayOfficialGateway(sandbox bool) string {
+	if sandbox {
+		return alipayOfficialSandboxGateway
+	}
+	return alipayOfficialProductionGateway
+}
+
+func htmlEscape(value string) string {
+	replacer := strings.NewReplacer(
+		`&`, `&amp;`,
+		`"`, `&quot;`,
+		`'`, `&#39;`,
+		`<`, `&lt;`,
+		`>`, `&gt;`,
+	)
+	return replacer.Replace(value)
+}
+
+func (c *WechatPayOfficialClient) Prepay(ctx context.Context, params WechatPayOfficialPrepayParams) (*WechatPayOfficialPrepayResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("missing WeChat Pay client")
+	}
+
+	path := "/v3/pay/transactions/native"
+	if params.TradeType == "h5" {
+		path = "/v3/pay/transactions/h5"
+	}
+	body := map[string]any{
+		"appid":        c.AppID,
+		"mchid":        c.MchID,
+		"description":  params.Description,
+		"out_trade_no": params.OutTradeNo,
+		"notify_url":   params.NotifyURL,
+		"amount": map[string]any{
+			"total":    params.AmountTotal,
+			"currency": "CNY",
+		},
+	}
+	if params.TradeType == "h5" {
+		body["scene_info"] = map[string]any{
+			"payer_client_ip": params.ClientIP,
+			"h5_info": map[string]any{
+				"type":     "Wap",
+				"wap_url":  params.WapURL,
+				"wap_name": params.WapName,
+			},
+		}
+	}
+
+	bodyBytes, err := common.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal WeChat Pay prepay payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.mch.weixin.qq.com"+path, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("build WeChat Pay request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	auth, err := c.BuildAuthorization(http.MethodPost, path, bodyBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", auth)
+
+	client := c.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request WeChat Pay prepay: %w", err)
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read WeChat Pay prepay response: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("WeChat Pay prepay failed with status %d: %s", resp.StatusCode, string(responseBody))
+	}
+	if err := VerifyWechatPayOfficialResponseSignature(
+		resp.Header.Get("Wechatpay-Timestamp"),
+		resp.Header.Get("Wechatpay-Nonce"),
+		resp.Header.Get("Wechatpay-Signature"),
+		responseBody,
+		c.PlatformPublicKey,
+	); err != nil {
+		return nil, err
+	}
+
+	var result WechatPayOfficialPrepayResult
+	if err := common.Unmarshal(responseBody, &result); err != nil {
+		return nil, fmt.Errorf("decode WeChat Pay prepay response: %w", err)
+	}
+	if params.TradeType == "h5" {
+		if strings.TrimSpace(result.H5URL) == "" {
+			return nil, fmt.Errorf("WeChat Pay returned empty h5_url")
+		}
+	} else if strings.TrimSpace(result.CodeURL) == "" {
+		return nil, fmt.Errorf("WeChat Pay returned empty code_url")
+	}
+	return &result, nil
+}
+
+func (c *WechatPayOfficialClient) BuildAuthorization(method string, canonicalURL string, body []byte) (string, error) {
+	if c == nil {
+		return "", fmt.Errorf("missing WeChat Pay client")
+	}
+	nonce := common.GetRandomString(32)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	message := buildWechatPaySignatureMessage(method, canonicalURL, timestamp, nonce, body)
+	signature, err := signRSA2(message, c.PrivateKey)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(
+		`WECHATPAY2-SHA256-RSA2048 mchid="%s",nonce_str="%s",signature="%s",timestamp="%s",serial_no="%s"`,
+		c.MchID,
+		nonce,
+		signature,
+		timestamp,
+		c.CertificateSerial,
+	), nil
+}
+
+func buildWechatPaySignatureMessage(method string, canonicalURL string, timestamp string, nonce string, body []byte) string {
+	return strings.Join([]string{
+		strings.ToUpper(method),
+		canonicalURL,
+		timestamp,
+		nonce,
+		string(body),
+		"",
+	}, "\n")
+}
+
+func VerifyWechatPayOfficialNotifySignature(timestamp string, nonce string, signature string, body []byte, platformPublicKey string) bool {
+	return verifyWechatPayHeaderSignature(timestamp, nonce, signature, body, platformPublicKey) == nil
+}
+
+func VerifyWechatPayOfficialResponseSignature(timestamp string, nonce string, signature string, body []byte, platformPublicKey string) error {
+	if err := verifyWechatPayHeaderSignature(timestamp, nonce, signature, body, platformPublicKey); err != nil {
+		return fmt.Errorf("verify WeChat Pay response signature: %w", err)
+	}
+	return nil
+}
+
+func verifyWechatPayHeaderSignature(timestamp string, nonce string, signature string, body []byte, platformPublicKey string) error {
+	if strings.TrimSpace(timestamp) == "" || strings.TrimSpace(nonce) == "" || strings.TrimSpace(signature) == "" {
+		return fmt.Errorf("missing WeChat Pay signature header")
+	}
+	signatureBytes, err := base64.StdEncoding.DecodeString(strings.TrimSpace(signature))
+	if err != nil {
+		return fmt.Errorf("decode WeChat Pay signature: %w", err)
+	}
+	publicKeyPEM, err := normalizeRSAPublicKey(platformPublicKey)
+	if err != nil {
+		return err
+	}
+	pub, err := parseRSAPublicKey(publicKeyPEM)
+	if err != nil {
+		return err
+	}
+	message := timestamp + "\n" + nonce + "\n" + string(body) + "\n"
+	digest := sha256.Sum256([]byte(message))
+	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, digest[:], signatureBytes); err != nil {
+		return fmt.Errorf("invalid WeChat Pay signature: %w", err)
+	}
+	return nil
+}
+
+func DecodeWechatPayOfficialNotify(body []byte, apiV3Key string) (*WechatPayOfficialNotifyEnvelope, *WechatPayOfficialTransaction, error) {
+	var envelope WechatPayOfficialNotifyEnvelope
+	if err := common.Unmarshal(body, &envelope); err != nil {
+		return nil, nil, fmt.Errorf("decode WeChat Pay notify envelope: %w", err)
+	}
+	if envelope.Resource.Algorithm != "AEAD_AES_256_GCM" {
+		return nil, nil, fmt.Errorf("unsupported WeChat Pay notify algorithm: %s", envelope.Resource.Algorithm)
+	}
+	plain, err := decryptWechatPayResource(apiV3Key, envelope.Resource.AssociatedData, envelope.Resource.Nonce, envelope.Resource.Ciphertext)
+	if err != nil {
+		return nil, nil, err
+	}
+	var transaction WechatPayOfficialTransaction
+	if err := common.Unmarshal(plain, &transaction); err != nil {
+		return nil, nil, fmt.Errorf("decode WeChat Pay transaction: %w", err)
+	}
+	return &envelope, &transaction, nil
+}
+
+func decryptWechatPayResource(apiV3Key string, associatedData string, nonce string, ciphertext string) ([]byte, error) {
+	key := []byte(apiV3Key)
+	if len(key) != 32 {
+		return nil, fmt.Errorf("WeChat Pay APIv3 key must be 32 bytes")
+	}
+	cipherBytes, err := base64.StdEncoding.DecodeString(ciphertext)
+	if err != nil {
+		return nil, fmt.Errorf("decode WeChat Pay ciphertext: %w", err)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("create AES cipher: %w", err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("create AES-GCM: %w", err)
+	}
+	plain, err := aead.Open(nil, []byte(nonce), cipherBytes, []byte(associatedData))
+	if err != nil {
+		return nil, fmt.Errorf("decrypt WeChat Pay resource: %w", err)
+	}
+	return plain, nil
+}
+
+func normalizeRSAPrivateKey(raw string) (string, error) {
+	return normalizePEMKey(raw, "PRIVATE KEY", "RSA PRIVATE KEY")
+}
+
+func normalizeRSAPublicKey(raw string) (string, error) {
+	return normalizePEMKey(raw, "PUBLIC KEY", "RSA PUBLIC KEY")
+}
+
+func normalizePEMKey(raw string, pkcs8Type string, pkcs1Type string) (string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return "", fmt.Errorf("%s is empty", strings.ToLower(pkcs8Type))
+	}
+
+	normalized := strings.TrimSpace(strings.ReplaceAll(raw, `\n`, "\n"))
+	if strings.Contains(normalized, "BEGIN ") {
+		block, _ := pem.Decode([]byte(normalized))
+		if block == nil {
+			return "", fmt.Errorf("invalid PEM encoded %s", strings.ToLower(pkcs8Type))
+		}
+		return string(pem.EncodeToMemory(block)), nil
+	}
+
+	der, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(normalized, "\n", ""))
+	if err != nil {
+		return "", fmt.Errorf("invalid base64 encoded %s: %w", strings.ToLower(pkcs8Type), err)
+	}
+
+	pemType := pkcs8Type
+	if pkcs8Type == "PRIVATE KEY" {
+		if _, err := x509.ParsePKCS8PrivateKey(der); err != nil {
+			if _, err := x509.ParsePKCS1PrivateKey(der); err == nil {
+				pemType = pkcs1Type
+			} else {
+				return "", fmt.Errorf("invalid RSA private key")
+			}
+		}
+	} else {
+		if _, err := x509.ParsePKIXPublicKey(der); err != nil {
+			if _, err := x509.ParsePKCS1PublicKey(der); err == nil {
+				pemType = pkcs1Type
+			} else {
+				return "", fmt.Errorf("invalid RSA public key")
+			}
+		}
+	}
+
+	return string(pem.EncodeToMemory(&pem.Block{Type: pemType, Bytes: der})), nil
+}
+
+func parseRSAPrivateKey(privateKeyPEM string) (*rsa.PrivateKey, error) {
+	block, _ := pem.Decode([]byte(privateKeyPEM))
+	if block == nil {
+		return nil, fmt.Errorf("invalid RSA private key PEM")
+	}
+
+	switch block.Type {
+	case "PRIVATE KEY":
+		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse PKCS#8 private key: %w", err)
+		}
+		parsed, ok := key.(*rsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("private key is not RSA")
+		}
+		return parsed, nil
+	case "RSA PRIVATE KEY":
+		return x509.ParsePKCS1PrivateKey(block.Bytes)
+	default:
+		return nil, fmt.Errorf("unsupported private key type: %s", block.Type)
+	}
+}
+
+func parseRSAPublicKey(publicKeyPEM string) (*rsa.PublicKey, error) {
+	block, _ := pem.Decode([]byte(publicKeyPEM))
+	if block == nil {
+		return nil, fmt.Errorf("invalid RSA public key PEM")
+	}
+
+	switch block.Type {
+	case "PUBLIC KEY":
+		key, err := x509.ParsePKIXPublicKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse PKIX public key: %w", err)
+		}
+		parsed, ok := key.(*rsa.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("public key is not RSA")
+		}
+		return parsed, nil
+	case "RSA PUBLIC KEY":
+		return x509.ParsePKCS1PublicKey(block.Bytes)
+	case "CERTIFICATE":
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse certificate: %w", err)
+		}
+		parsed, ok := cert.PublicKey.(*rsa.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("certificate public key is not RSA")
+		}
+		return parsed, nil
+	default:
+		return nil, fmt.Errorf("unsupported public key type: %s", block.Type)
+	}
+}
