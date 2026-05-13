@@ -53,6 +53,10 @@ StuHelper AI 本地任务决定修改它们：
   `<title>`、`description`、Open Graph 和 Twitter Card 标签不得重新出现旧项目
   名称或旧产品描述，避免 Telegram、QQ 等聊天工具抓取旧分享卡片。
   当前默认分享描述为：`StuHelper AI 是 StuHelper 团队部署的统一 AI 模型聚合与分发网关，提供高性价比的集中式模型管理与网关服务。`
+- classic 前端在 Vite 8 下仍有自定义 `treat-js-files-as-jsx` 插件调用
+  `transformWithEsbuild`。Docker/GitHub Actions 干净环境必须安装显式
+  `esbuild` devDependency，否则 classic 构建会因为 Vite 无法解析 `esbuild`
+  而失败；后续升级到 Oxc 转换前不要移除该依赖。
 
 只有在标识上游来源、上游 release 或导入的上游 PR 时，才允许引用原上游仓库。
 这些引用不得重新作为本分叉仓库的产品品牌、包身份、镜像名称、可见 UI 文案
