@@ -46,8 +46,9 @@
 - 未照搬上游代码，主要原因是当前 StuHelper AI 已有本地支付网关、订阅、
   classic/default 双前端和 fork 维护规则，需要按本地结构重写。
 - 采纳 CodeRabbit 对 #3288 的有效反馈：
-  - 返佣不能作为支付成功后的 best-effort 写入；本地在各充值和订阅完成事务内
-    调用 `CreditReferralCommissionTx`，失败会回滚支付完成写库。
+  - 支付完成后的邀请人一次性奖励解锁和充值返佣不能作为 best-effort 写入；
+    本地在各充值和订阅完成事务内调用 `CreditInviteRewardsAfterPaymentTx`，
+    失败会回滚支付完成写库。
   - 返佣幂等键不能只依赖 `top_up_id`，否则订阅场景会出错；本地使用
     `source_type + source_id + invitee_id + payment_method`，其中订阅使用
     `subscription_orders.id` 作为 `source_id`。
@@ -64,14 +65,24 @@
   - `ReferralCommissionEnabled`
   - `ReferralCommissionPercent`
   - `ReferralCommissionMaxRecharges`
-- `ReferralCommissionEnabled=true` 时，注册流程只累计邀请人数，不再发放
-  `QuotaForInviter` / `QuotaForInvitee` 这两个一次性邀请奖励。
+- `QuotaForInvitee` 控制新用户使用邀请码奖励；只要大于 0，被邀请用户注册后
+  实时到账，不受返佣开关影响。
+- `QuotaForInviter` 控制邀请人一次性奖励；默认注册后实时进入邀请人的
+  `aff_quota`，开启 `InviterRewardAfterPaymentEnabled` 后改为被邀请用户首次
+  充值或购买订阅成功时解锁到账；解锁额度使用注册时写入的
+  `inviter_reward_quota` 快照，不受后续全局配置调整影响。
+- `ReferralCommissionEnabled=true` 时，充值返佣与一次性邀请奖励独立叠加；
+  返佣不会替代或关闭 `QuotaForInviter` / `QuotaForInvitee`。
+- `users` 表新增 `inviter_reward_quota` 和 `inviter_reward_unlocked`，用于延迟
+  邀请人奖励幂等；首次新增这两个字段时，已有邀请关系会标记为已处理，避免
+  老用户首充后被补发，后续启动不会清除新产生的待解锁奖励。
 - 返佣覆盖的支付完成路径包括 Stripe、Creem、Epay、Waffo、Waffo Pancake、
   支付宝官方、微信支付官方、管理员补单和订阅订单完成。
 - 返佣额度按 `recharge_amount * QuotaPerUnit * rate / 100` 计算，向下取整；
   邀请人单用户覆盖比例优先于全局比例。
-- classic 运维设置页新增全局开关、比例和最大次数设置；classic 用户编辑页
-  新增单用户返佣比例覆盖；classic 充值页邀请卡展示分页返佣记录。
+- classic 运维设置页新增返佣全局开关、比例、最大次数和邀请人一次性奖励
+  首充后到账开关；classic 用户编辑页新增单用户返佣比例覆盖；classic 充值页
+  邀请卡展示分页返佣记录。
 
 ### 验证
 

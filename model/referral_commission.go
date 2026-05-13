@@ -36,12 +36,57 @@ type ReferralCommissionWithUser struct {
 }
 
 type ReferralCommissionCreditResult struct {
-	Credited        bool
-	InviterId       int
-	InviteeId       int
-	CommissionQuota int
-	CommissionRate  float64
-	RechargeAmount  float64
+	Credited              bool
+	CommissionCredited    bool
+	InviterRewardCredited bool
+	InviterRewardQuota    int
+	InviterId             int
+	InviteeId             int
+	CommissionQuota       int
+	CommissionRate        float64
+	RechargeAmount        float64
+}
+
+func FinalizeUserInvitation(userId int, inviterId int) {
+	if inviterId <= 0 {
+		return
+	}
+
+	if common.QuotaForInvitee > 0 {
+		if err := IncreaseUserQuota(userId, common.QuotaForInvitee, true); err == nil {
+			RecordLog(userId, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
+		}
+	}
+
+	inviterQuota := 0
+	if common.InviterRewardAfterPaymentEnabled {
+		_ = DB.Transaction(func(tx *gorm.DB) error {
+			if err := recordUserInvitationTx(tx, inviterId, 0); err != nil {
+				return err
+			}
+			if err := setInviterRewardQuotaTx(tx, userId, common.QuotaForInviter); err != nil {
+				return err
+			}
+			if common.QuotaForInviter <= 0 {
+				return markInviterRewardUnlockedTx(tx, userId)
+			}
+			return nil
+		})
+		return
+	}
+
+	inviterQuota = common.QuotaForInviter
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := recordUserInvitationTx(tx, inviterId, inviterQuota); err != nil {
+			return err
+		}
+		if err := setInviterRewardQuotaTx(tx, userId, inviterQuota); err != nil {
+			return err
+		}
+		return markInviterRewardUnlockedTx(tx, userId)
+	}); err == nil && inviterQuota > 0 {
+		RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(inviterQuota)))
+	}
 }
 
 func normalizeReferralCommissionSource(sourceType string) string {
@@ -88,6 +133,37 @@ func CreditReferralCommission(userId int, rechargeAmount float64, paymentMethod 
 	}
 	RecordReferralCommissionLog(result)
 	return result != nil && result.Credited, nil
+}
+
+func CreditInviteRewardsAfterPaymentTx(tx *gorm.DB, userId int, rechargeAmount float64, paymentMethod string, sourceType string, sourceId int) (*ReferralCommissionCreditResult, error) {
+	result := &ReferralCommissionCreditResult{}
+	inviterRewardCredited, rewardInviterId, rewardInviteeId, rewardQuota, err := creditInviterRewardAfterPaymentTx(tx, userId)
+	if err != nil {
+		return nil, err
+	}
+	result.InviterRewardCredited = inviterRewardCredited
+	result.InviterRewardQuota = rewardQuota
+	result.InviterId = rewardInviterId
+	result.InviteeId = rewardInviteeId
+
+	commissionResult, err := CreditReferralCommissionTx(tx, userId, rechargeAmount, paymentMethod, sourceType, sourceId)
+	if err != nil {
+		return nil, err
+	}
+	if commissionResult != nil {
+		result.CommissionCredited = commissionResult.CommissionCredited
+		if commissionResult.InviterId > 0 {
+			result.InviterId = commissionResult.InviterId
+		}
+		if commissionResult.InviteeId > 0 {
+			result.InviteeId = commissionResult.InviteeId
+		}
+		result.CommissionQuota = commissionResult.CommissionQuota
+		result.CommissionRate = commissionResult.CommissionRate
+		result.RechargeAmount = commissionResult.RechargeAmount
+	}
+	result.Credited = result.InviterRewardCredited || result.CommissionCredited
+	return result, nil
 }
 
 func CreditReferralCommissionTx(tx *gorm.DB, userId int, rechargeAmount float64, paymentMethod string, sourceType string, sourceId int) (*ReferralCommissionCreditResult, error) {
@@ -170,17 +246,28 @@ func CreditReferralCommissionTx(tx *gorm.DB, userId int, rechargeAmount float64,
 	}
 
 	return &ReferralCommissionCreditResult{
-		Credited:        true,
-		InviterId:       invitee.InviterId,
-		InviteeId:       invitee.Id,
-		CommissionQuota: commissionQuota,
-		CommissionRate:  rate,
-		RechargeAmount:  rechargeAmount,
+		Credited:           true,
+		CommissionCredited: true,
+		InviterId:          invitee.InviterId,
+		InviteeId:          invitee.Id,
+		CommissionQuota:    commissionQuota,
+		CommissionRate:     rate,
+		RechargeAmount:     rechargeAmount,
 	}, nil
 }
 
 func RecordReferralCommissionLog(result *ReferralCommissionCreditResult) {
-	if result == nil || !result.Credited {
+	if result == nil {
+		return
+	}
+	if result.InviterRewardCredited {
+		RecordLog(
+			result.InviterId,
+			LogTypeSystem,
+			fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(result.InviterRewardQuota)),
+		)
+	}
+	if !result.CommissionCredited {
 		return
 	}
 	RecordLog(
@@ -188,6 +275,92 @@ func RecordReferralCommissionLog(result *ReferralCommissionCreditResult) {
 		LogTypeSystem,
 		fmt.Sprintf("邀请用户充值返佣 %s (%.2f%% of %.2f)", logger.LogQuota(result.CommissionQuota), result.CommissionRate, result.RechargeAmount),
 	)
+}
+
+func creditInviterRewardAfterPaymentTx(tx *gorm.DB, userId int) (bool, int, int, int, error) {
+	return creditInviterRewardTx(tx, userId)
+}
+
+func creditInviterRewardTx(tx *gorm.DB, userId int) (bool, int, int, int, error) {
+	if tx == nil {
+		return false, 0, 0, 0, errors.New("tx is nil")
+	}
+	if userId <= 0 {
+		return false, 0, 0, 0, nil
+	}
+
+	var invitee User
+	if err := tx.Set("gorm:query_option", "FOR UPDATE").
+		Select("id", "inviter_id", "inviter_reward_quota", "inviter_reward_unlocked").
+		Where("id = ?", userId).
+		First(&invitee).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, 0, 0, 0, nil
+		}
+		return false, 0, 0, 0, err
+	}
+	if invitee.InviterId <= 0 || invitee.InviterRewardUnlocked {
+		return false, invitee.InviterId, invitee.Id, invitee.InviterRewardQuota, nil
+	}
+	if invitee.InviterId == invitee.Id {
+		return false, invitee.InviterId, invitee.Id, invitee.InviterRewardQuota, nil
+	}
+	if invitee.InviterRewardQuota <= 0 {
+		if err := markInviterRewardUnlockedTx(tx, invitee.Id); err != nil {
+			return false, 0, 0, 0, err
+		}
+		return false, invitee.InviterId, invitee.Id, invitee.InviterRewardQuota, nil
+	}
+
+	result := tx.Model(&User{}).
+		Where("id = ? AND inviter_reward_unlocked = ?", invitee.Id, false).
+		Update("inviter_reward_unlocked", true)
+	if result.Error != nil {
+		return false, 0, 0, 0, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return false, invitee.InviterId, invitee.Id, invitee.InviterRewardQuota, nil
+	}
+
+	if err := tx.Model(&User{}).
+		Where("id = ?", invitee.InviterId).
+		Updates(map[string]interface{}{
+			"aff_quota":   gorm.Expr("aff_quota + ?", invitee.InviterRewardQuota),
+			"aff_history": gorm.Expr("aff_history + ?", invitee.InviterRewardQuota),
+		}).Error; err != nil {
+		return false, 0, 0, 0, err
+	}
+	return true, invitee.InviterId, invitee.Id, invitee.InviterRewardQuota, nil
+}
+
+func setInviterRewardQuotaTx(tx *gorm.DB, userId int, quota int) error {
+	if tx == nil {
+		return errors.New("tx is nil")
+	}
+	if userId <= 0 {
+		return nil
+	}
+	return tx.Model(&User{}).
+		Where("id = ?", userId).
+		Update("inviter_reward_quota", quota).Error
+}
+
+func markInviterRewardUnlocked(userId int) error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		return markInviterRewardUnlockedTx(tx, userId)
+	})
+}
+
+func markInviterRewardUnlockedTx(tx *gorm.DB, userId int) error {
+	if tx == nil {
+		return errors.New("tx is nil")
+	}
+	if userId <= 0 {
+		return nil
+	}
+	return tx.Model(&User{}).
+		Where("id = ?", userId).
+		Update("inviter_reward_unlocked", true).Error
 }
 
 func GetUserReferralCommissions(inviterId int, pageInfo *common.PageInfo) ([]*ReferralCommissionWithUser, int64, error) {

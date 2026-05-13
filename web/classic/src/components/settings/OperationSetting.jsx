@@ -36,6 +36,7 @@ const OperationSetting = () => {
     PreConsumedQuota: 0,
     QuotaForInviter: 0,
     QuotaForInvitee: 0,
+    InviterRewardAfterPaymentEnabled: false,
     ReferralCommissionEnabled: false,
     ReferralCommissionPercent: 10,
     ReferralCommissionMaxRecharges: 0,

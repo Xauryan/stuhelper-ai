@@ -15,16 +15,19 @@ func setReferralCommissionSettingsForTest(t *testing.T, enabled bool, percent fl
 	originalPercent := common.ReferralCommissionPercent
 	originalMaxRecharges := common.ReferralCommissionMaxRecharges
 	originalQuotaPerUnit := common.QuotaPerUnit
+	originalInviterRewardAfterPayment := common.InviterRewardAfterPaymentEnabled
 	t.Cleanup(func() {
 		common.ReferralCommissionEnabled = originalEnabled
 		common.ReferralCommissionPercent = originalPercent
 		common.ReferralCommissionMaxRecharges = originalMaxRecharges
 		common.QuotaPerUnit = originalQuotaPerUnit
+		common.InviterRewardAfterPaymentEnabled = originalInviterRewardAfterPayment
 	})
 	common.ReferralCommissionEnabled = enabled
 	common.ReferralCommissionPercent = percent
 	common.ReferralCommissionMaxRecharges = maxRecharges
 	common.QuotaPerUnit = 1000
+	common.InviterRewardAfterPaymentEnabled = false
 }
 
 func insertReferralUserForTest(t *testing.T, id int, username string, inviterId int, override *float64) {
@@ -122,7 +125,7 @@ func TestUpdateOptionRejectsInvalidReferralCommissionSettings(t *testing.T) {
 	assert.Equal(t, 3, common.ReferralCommissionMaxRecharges)
 }
 
-func TestInsertWithReferralCommissionEnabledSkipsLegacyInviteBonuses(t *testing.T) {
+func TestInsertWithReferralCommissionEnabledStillCreditsOneTimeInviteRewards(t *testing.T) {
 	truncateTables(t)
 	setReferralCommissionSettingsForTest(t, true, 10, 0)
 
@@ -151,11 +154,194 @@ func TestInsertWithReferralCommissionEnabledSkipsLegacyInviteBonuses(t *testing.
 
 	inviter := getReferralUserForTest(t, 51)
 	assert.Equal(t, 1, inviter.AffCount)
-	assert.Equal(t, 0, inviter.AffQuota)
-	assert.Equal(t, 0, inviter.AffHistoryQuota)
+	assert.Equal(t, common.QuotaForInviter, inviter.AffQuota)
+	assert.Equal(t, common.QuotaForInviter, inviter.AffHistoryQuota)
 
 	createdInvitee := getReferralUserForTest(t, invitee.Id)
-	assert.Equal(t, common.QuotaForNewUser, createdInvitee.Quota)
+	assert.Equal(t, common.QuotaForNewUser+common.QuotaForInvitee, createdInvitee.Quota)
+	assert.True(t, createdInvitee.InviterRewardUnlocked)
+}
+
+func TestInviterRewardAfterPaymentDelaysAndUnlocksOnce(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	originalQuotaForInviter := common.QuotaForInviter
+	originalQuotaForInvitee := common.QuotaForInvitee
+	originalQuotaForNewUser := common.QuotaForNewUser
+	t.Cleanup(func() {
+		common.QuotaForInviter = originalQuotaForInviter
+		common.QuotaForInvitee = originalQuotaForInvitee
+		common.QuotaForNewUser = originalQuotaForNewUser
+	})
+	common.QuotaForInviter = 300
+	common.QuotaForInvitee = 200
+	common.QuotaForNewUser = 100
+	common.InviterRewardAfterPaymentEnabled = true
+
+	insertReferralUserForTest(t, 61, "delayed-inviter", 0, nil)
+	invitee := &User{
+		Username:    "delayed-invitee",
+		Password:    "password123",
+		DisplayName: "delayed-invitee",
+		InviterId:   61,
+		Role:        common.RoleCommonUser,
+	}
+
+	require.NoError(t, invitee.Insert(61))
+
+	createdInvitee := getReferralUserForTest(t, invitee.Id)
+	assert.Equal(t, common.QuotaForNewUser+common.QuotaForInvitee, createdInvitee.Quota)
+	assert.False(t, createdInvitee.InviterRewardUnlocked)
+	inviter := getReferralUserForTest(t, 61)
+	assert.Equal(t, 1, inviter.AffCount)
+	assert.Equal(t, 0, inviter.AffQuota)
+
+	referralResult, err := CreditInviteRewardsAfterPaymentTx(DB, invitee.Id, 10, "stripe", ReferralCommissionSourceTopUp, 901)
+	require.NoError(t, err)
+	require.NotNil(t, referralResult)
+	assert.True(t, referralResult.InviterRewardCredited)
+	assert.Equal(t, common.QuotaForInviter, referralResult.InviterRewardQuota)
+	assert.True(t, referralResult.CommissionCredited)
+
+	createdInvitee = getReferralUserForTest(t, invitee.Id)
+	assert.Equal(t, common.QuotaForNewUser+common.QuotaForInvitee, createdInvitee.Quota)
+	assert.True(t, createdInvitee.InviterRewardUnlocked)
+	inviter = getReferralUserForTest(t, 61)
+	assert.Equal(t, 1, inviter.AffCount)
+	assert.Equal(t, common.QuotaForInviter+1000, inviter.AffQuota)
+	assert.Equal(t, common.QuotaForInviter+1000, inviter.AffHistoryQuota)
+
+	referralResult, err = CreditInviteRewardsAfterPaymentTx(DB, invitee.Id, 10, "stripe", ReferralCommissionSourceTopUp, 902)
+	require.NoError(t, err)
+	require.NotNil(t, referralResult)
+	assert.False(t, referralResult.InviterRewardCredited)
+	assert.True(t, referralResult.CommissionCredited)
+
+	createdInvitee = getReferralUserForTest(t, invitee.Id)
+	assert.Equal(t, common.QuotaForNewUser+common.QuotaForInvitee, createdInvitee.Quota)
+	inviter = getReferralUserForTest(t, 61)
+	assert.Equal(t, 1, inviter.AffCount)
+	assert.Equal(t, common.QuotaForInviter+2000, inviter.AffQuota)
+	assert.Equal(t, common.QuotaForInviter+2000, inviter.AffHistoryQuota)
+}
+
+func TestInviterRewardAfterPaymentUsesRegistrationQuotaSnapshot(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, false, 10, 0)
+
+	originalQuotaForInviter := common.QuotaForInviter
+	originalQuotaForInvitee := common.QuotaForInvitee
+	originalQuotaForNewUser := common.QuotaForNewUser
+	t.Cleanup(func() {
+		common.QuotaForInviter = originalQuotaForInviter
+		common.QuotaForInvitee = originalQuotaForInvitee
+		common.QuotaForNewUser = originalQuotaForNewUser
+	})
+	common.QuotaForInviter = 300
+	common.QuotaForInvitee = 0
+	common.QuotaForNewUser = 100
+	common.InviterRewardAfterPaymentEnabled = true
+
+	insertReferralUserForTest(t, 71, "snapshot-inviter", 0, nil)
+	invitee := &User{
+		Username:    "snapshot-invitee",
+		Password:    "password123",
+		DisplayName: "snapshot-invitee",
+		InviterId:   71,
+		Role:        common.RoleCommonUser,
+	}
+	require.NoError(t, invitee.Insert(71))
+
+	createdInvitee := getReferralUserForTest(t, invitee.Id)
+	assert.Equal(t, 300, createdInvitee.InviterRewardQuota)
+	assert.False(t, createdInvitee.InviterRewardUnlocked)
+
+	common.QuotaForInviter = 900
+	referralResult, err := CreditInviteRewardsAfterPaymentTx(DB, invitee.Id, 10, "stripe", ReferralCommissionSourceTopUp, 911)
+	require.NoError(t, err)
+	require.NotNil(t, referralResult)
+	assert.True(t, referralResult.InviterRewardCredited)
+	assert.Equal(t, 300, referralResult.InviterRewardQuota)
+
+	inviter := getReferralUserForTest(t, 71)
+	assert.Equal(t, 300, inviter.AffQuota)
+	assert.Equal(t, 300, inviter.AffHistoryQuota)
+}
+
+func TestPendingInviterRewardUnlocksEvenIfSwitchIsDisabledLater(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, false, 10, 0)
+
+	originalQuotaForInviter := common.QuotaForInviter
+	originalQuotaForInvitee := common.QuotaForInvitee
+	originalQuotaForNewUser := common.QuotaForNewUser
+	t.Cleanup(func() {
+		common.QuotaForInviter = originalQuotaForInviter
+		common.QuotaForInvitee = originalQuotaForInvitee
+		common.QuotaForNewUser = originalQuotaForNewUser
+	})
+	common.QuotaForInviter = 300
+	common.QuotaForInvitee = 0
+	common.QuotaForNewUser = 100
+	common.InviterRewardAfterPaymentEnabled = true
+
+	insertReferralUserForTest(t, 81, "toggle-inviter", 0, nil)
+	invitee := &User{
+		Username:    "toggle-invitee",
+		Password:    "password123",
+		DisplayName: "toggle-invitee",
+		InviterId:   81,
+		Role:        common.RoleCommonUser,
+	}
+	require.NoError(t, invitee.Insert(81))
+
+	common.InviterRewardAfterPaymentEnabled = false
+	referralResult, err := CreditInviteRewardsAfterPaymentTx(DB, invitee.Id, 10, "stripe", ReferralCommissionSourceTopUp, 921)
+	require.NoError(t, err)
+	require.NotNil(t, referralResult)
+	assert.True(t, referralResult.InviterRewardCredited)
+	assert.Equal(t, 300, referralResult.InviterRewardQuota)
+
+	inviter := getReferralUserForTest(t, 81)
+	assert.Equal(t, 300, inviter.AffQuota)
+	assert.Equal(t, 300, inviter.AffHistoryQuota)
+}
+
+func TestBackfillInviterRewardMigrationStateSkipsExistingSchemaPendingRewards(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, false, 10, 0)
+
+	insertReferralUserForTest(t, 91, "migration-inviter", 0, nil)
+	insertReferralUserForTest(t, 92, "migration-invitee", 91, nil)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", 92).Updates(map[string]interface{}{
+		"inviter_reward_quota":    300,
+		"inviter_reward_unlocked": false,
+	}).Error)
+
+	require.NoError(t, backfillInviterRewardMigrationState(true))
+
+	invitee := getReferralUserForTest(t, 92)
+	assert.Equal(t, 300, invitee.InviterRewardQuota)
+	assert.False(t, invitee.InviterRewardUnlocked)
+}
+
+func TestBackfillInviterRewardMigrationStateMarksPreExistingInviteRelations(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, false, 10, 0)
+
+	insertReferralUserForTest(t, 93, "legacy-migration-inviter", 0, nil)
+	insertReferralUserForTest(t, 94, "legacy-migration-invitee", 93, nil)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", 94).Updates(map[string]interface{}{
+		"inviter_reward_quota":    300,
+		"inviter_reward_unlocked": false,
+	}).Error)
+
+	require.NoError(t, backfillInviterRewardMigrationState(false))
+
+	invitee := getReferralUserForTest(t, 94)
+	assert.Equal(t, 0, invitee.InviterRewardQuota)
+	assert.True(t, invitee.InviterRewardUnlocked)
 }
 
 func TestCompleteSubscriptionOrderCreditsEachOrderOnce(t *testing.T) {

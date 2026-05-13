@@ -254,6 +254,7 @@ func migrateDB() error {
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
+	hadInviterRewardMigrationState := hasInviterRewardMigrationStateColumns()
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -286,6 +287,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := backfillInviterRewardMigrationState(hadInviterRewardMigrationState); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -301,6 +305,7 @@ func migrateDB() error {
 func migrateDBFast() error {
 
 	var wg sync.WaitGroup
+	hadInviterRewardMigrationState := hasInviterRewardMigrationStateColumns()
 
 	migrations := []struct {
 		model interface{}
@@ -356,6 +361,9 @@ func migrateDBFast() error {
 			return err
 		}
 	}
+	if err := backfillInviterRewardMigrationState(hadInviterRewardMigrationState); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -375,6 +383,32 @@ func migrateLOGDB() error {
 		return err
 	}
 	return nil
+}
+
+func hasInviterRewardMigrationStateColumns() bool {
+	migrator := DB.Migrator()
+	return migrator.HasColumn(&User{}, "inviter_reward_quota") ||
+		migrator.HasColumn(&User{}, "inviter_reward_unlocked")
+}
+
+func backfillInviterRewardMigrationState(hadMigrationStateColumns bool) error {
+	if hadMigrationStateColumns {
+		return nil
+	}
+	if !DB.Migrator().HasColumn(&User{}, "inviter_reward_unlocked") {
+		return nil
+	}
+	if err := DB.Model(&User{}).
+		Where("inviter_id > ? AND inviter_reward_unlocked = ?", 0, false).
+		Update("inviter_reward_unlocked", true).Error; err != nil {
+		return err
+	}
+	if !DB.Migrator().HasColumn(&User{}, "inviter_reward_quota") {
+		return nil
+	}
+	return DB.Model(&User{}).
+		Where("inviter_id > ? AND inviter_reward_quota <> ?", 0, 0).
+		Update("inviter_reward_quota", 0).Error
 }
 
 type sqliteColumnDef struct {

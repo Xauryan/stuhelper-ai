@@ -160,6 +160,7 @@ func InitOptionMap() {
 	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
 	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
 	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
+	common.OptionMap["InviterRewardAfterPaymentEnabled"] = strconv.FormatBool(common.InviterRewardAfterPaymentEnabled)
 	common.OptionMap["ReferralCommissionEnabled"] = strconv.FormatBool(common.ReferralCommissionEnabled)
 	common.OptionMap["ReferralCommissionPercent"] = strconv.FormatFloat(common.ReferralCommissionPercent, 'f', -1, 64)
 	common.OptionMap["ReferralCommissionMaxRecharges"] = strconv.Itoa(common.ReferralCommissionMaxRecharges)
@@ -369,6 +370,8 @@ func updateOptionMap(key string, value string) (err error) {
 			ratio_setting.SetExposeRatioEnabled(boolValue)
 		case "ReferralCommissionEnabled":
 			common.ReferralCommissionEnabled = boolValue
+		case "InviterRewardAfterPaymentEnabled":
+			common.InviterRewardAfterPaymentEnabled = boolValue
 		}
 	}
 	switch key {

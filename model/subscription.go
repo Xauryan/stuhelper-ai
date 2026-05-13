@@ -633,7 +633,7 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 		logMoney = order.Money
 		logPaymentMethod = order.PaymentMethod
 		logOrderId = order.Id
-		referralResult, err = CreditReferralCommissionTx(tx, order.UserId, order.Money, order.PaymentMethod, ReferralCommissionSourceSubscription, order.Id)
+		referralResult, err = CreditInviteRewardsAfterPaymentTx(tx, order.UserId, order.Money, order.PaymentMethod, ReferralCommissionSourceSubscription, order.Id)
 		if err != nil {
 			return err
 		}

@@ -155,7 +155,7 @@ func CompleteEpayTopUp(tradeNo string, actualPaymentMethod string) (*TopUp, int,
 			return err
 		}
 		var err error
-		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, topUp.PaymentMethod, ReferralCommissionSourceTopUp, topUp.Id)
+		referralResult, err = CreditInviteRewardsAfterPaymentTx(tx, topUp.UserId, topUp.Money, topUp.PaymentMethod, ReferralCommissionSourceTopUp, topUp.Id)
 		if err != nil {
 			return err
 		}
@@ -212,7 +212,7 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 			return err
 		}
 
-		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, PaymentMethodStripe, ReferralCommissionSourceTopUp, topUp.Id)
+		referralResult, err = CreditInviteRewardsAfterPaymentTx(tx, topUp.UserId, topUp.Money, PaymentMethodStripe, ReferralCommissionSourceTopUp, topUp.Id)
 		if err != nil {
 			return err
 		}
@@ -457,7 +457,7 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		completed = true
 
 		var referralErr error
-		referralResult, referralErr = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, "manual", ReferralCommissionSourceTopUp, topUp.Id)
+		referralResult, referralErr = CreditInviteRewardsAfterPaymentTx(tx, topUp.UserId, topUp.Money, "manual", ReferralCommissionSourceTopUp, topUp.Id)
 		if referralErr != nil {
 			return referralErr
 		}
@@ -539,7 +539,7 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 			return err
 		}
 
-		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, PaymentMethodCreem, ReferralCommissionSourceTopUp, topUp.Id)
+		referralResult, err = CreditInviteRewardsAfterPaymentTx(tx, topUp.UserId, topUp.Money, PaymentMethodCreem, ReferralCommissionSourceTopUp, topUp.Id)
 		if err != nil {
 			return err
 		}
@@ -607,7 +607,7 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 			return err
 		}
 
-		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, PaymentMethodWaffo, ReferralCommissionSourceTopUp, topUp.Id)
+		referralResult, err = CreditInviteRewardsAfterPaymentTx(tx, topUp.UserId, topUp.Money, PaymentMethodWaffo, ReferralCommissionSourceTopUp, topUp.Id)
 		if err != nil {
 			return err
 		}
@@ -675,7 +675,7 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 			return err
 		}
 
-		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, PaymentMethodWaffoPancake, ReferralCommissionSourceTopUp, topUp.Id)
+		referralResult, err = CreditInviteRewardsAfterPaymentTx(tx, topUp.UserId, topUp.Money, PaymentMethodWaffoPancake, ReferralCommissionSourceTopUp, topUp.Id)
 		if err != nil {
 			return err
 		}
@@ -758,7 +758,7 @@ func RechargeOfficialPayment(tradeNo string, expectedPaymentProvider string, act
 		if commissionPaymentMethod == "" {
 			commissionPaymentMethod = topUp.PaymentMethod
 		}
-		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, commissionPaymentMethod, ReferralCommissionSourceTopUp, topUp.Id)
+		referralResult, err = CreditInviteRewardsAfterPaymentTx(tx, topUp.UserId, topUp.Money, commissionPaymentMethod, ReferralCommissionSourceTopUp, topUp.Id)
 		if err != nil {
 			return err
 		}

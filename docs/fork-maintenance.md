@@ -42,11 +42,19 @@ StuHelper AI 本地任务决定修改它们：
   和手机网站支付；微信支付使用 Native 扫码和 H5 跳转。该功能是 StuHelper AI
   本地基线，维护细节见 `docs/official-cn-payments.md`，同步上游或导入外部
   PR 时不得替换为易支付或支付宝当面付实现。
-- 邀请奖励支持按被邀请用户充值和订阅支付金额返佣。全局开关、全局比例和最大
-  返佣次数在 classic 运维设置中配置；管理员可在 classic 用户编辑页为单个
-  邀请人设置 `referral_commission_percent` 覆盖比例。返佣必须随支付完成事务
-  一起写入，并通过 `source_type + source_id + invitee_id + payment_method`
-  幂等，避免重复 webhook 或订阅订单重复回调造成重复入账。
+- 邀请奖励支持一次性奖励和充值返佣独立叠加。`QuotaForInvitee` 大于 0 时，
+  被邀请用户注册后实时获得邀请码奖励；`QuotaForInviter` 大于 0 时，邀请人获得
+  一次性邀请奖励，可通过 classic 运维设置中的
+  `InviterRewardAfterPaymentEnabled` 延迟到被邀请用户首次充值或购买订阅成功后
+  解锁到账，解锁额度使用注册时写入的 `inviter_reward_quota` 快照。已有邀请
+  关系仅在首次新增延迟奖励状态字段的迁移中标记为已处理，不对历史用户补发。
+  `ReferralCommissionEnabled`
+  仅控制按被邀请用户充值和订阅支付金额额外返佣，不替代一次性邀请奖励。全局
+  返佣比例和最大返佣次数在 classic 运维设置中配置；管理员可在 classic 用户
+  编辑页为单个邀请人设置 `referral_commission_percent` 覆盖比例。支付完成后的
+  邀请人奖励解锁和返佣必须随支付完成事务一起写入，返佣通过
+  `source_type + source_id + invitee_id + payment_method` 幂等，避免重复 webhook
+  或订阅订单重复回调造成重复入账。
 - 项目身份必须保持为 `StuHelper AI`；组织、作者、联系方式、包名、Docker、
   workflow 和元数据身份必须保持为 `Xauryan`。
 - 对外分享元数据必须保持 StuHelper AI 身份。classic 和 default 前端的页面
