@@ -67,6 +67,36 @@ func TestBuildAlipayOfficialPageExecuteFormUsesOfficialProductCodes(t *testing.T
 	require.Contains(t, wapForm, `QUICK_WAP_PAY`)
 }
 
+func TestBuildAlipayOfficialSignedValuesUsesRecognizedProductCodes(t *testing.T) {
+	privateKey, _ := generateOfficialPaymentTestKey(t)
+
+	pageValues, err := buildAlipayOfficialSignedValues(AlipayOfficialBuildParams{
+		AppID:       "app_123",
+		PrivateKey:  privateKey,
+		Method:      AlipayOfficialPagePayMethod,
+		NotifyURL:   "https://example.com/api/alipay/notify",
+		ReturnURL:   "https://example.com/console/topup",
+		OutTradeNo:  "ORDER_123",
+		TotalAmount: "1.23",
+		Subject:     "StuHelper AI recharge",
+	})
+	require.NoError(t, err)
+	require.Contains(t, pageValues.Get("biz_content"), `"product_code":"FAST_INSTANT_PAY_PAY"`)
+
+	wapValues, err := buildAlipayOfficialSignedValues(AlipayOfficialBuildParams{
+		AppID:       "app_123",
+		PrivateKey:  privateKey,
+		Method:      AlipayOfficialWapPayMethod,
+		NotifyURL:   "https://example.com/api/alipay/notify",
+		ReturnURL:   "https://example.com/console/topup",
+		OutTradeNo:  "ORDER_124",
+		TotalAmount: "1.23",
+		Subject:     "StuHelper AI recharge",
+	})
+	require.NoError(t, err)
+	require.Contains(t, wapValues.Get("biz_content"), `"product_code":"QUICK_WAP_PAY"`)
+}
+
 func TestVerifyAlipayOfficialNotifyExcludesSignAndSignType(t *testing.T) {
 	privateKey, publicKey := generateOfficialPaymentTestKey(t)
 	params := map[string]string{
