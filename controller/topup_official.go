@@ -371,7 +371,7 @@ func normalizeOfficialPaymentScene(scene string) string {
 }
 
 func buildOfficialTradeNo(prefix string, userID int) string {
-	return fmt.Sprintf("%s-%d-%d-%s", prefix, userID, time.Now().UnixMilli(), randstr.String(6))
+	return fmt.Sprintf("%s_%d_%d_%s", prefix, userID, time.Now().UnixMilli(), randstr.String(6))
 }
 
 func normalizeOfficialTopUpAmount(amount int64) int64 {

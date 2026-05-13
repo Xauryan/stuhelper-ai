@@ -28,6 +28,10 @@ import {
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, TriangleAlert } from 'lucide-react';
+import {
+  buildOfficialChinaPaymentOptions,
+  hasSubmittedOrStoredOfficialChinaPaymentValue,
+} from './officialChinaPaymentSettings';
 
 const defaultInputs = {
   AlipayOfficialEnabled: false,
@@ -55,12 +59,6 @@ const defaultInputs = {
   WechatPayOfficialUnitPrice: 1.0,
   WechatPayOfficialMinTopUp: 1,
 };
-
-const sensitiveFields = new Set([
-  'AlipayOfficialPrivateKey',
-  'WechatPayOfficialAPIv3Key',
-  'WechatPayOfficialPrivateKey',
-]);
 
 export default function SettingsPaymentGatewayOfficialChina(props) {
   const { t } = useTranslation();
@@ -140,7 +138,13 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         showError(t('请输入支付宝 AppID'));
         return;
       }
-      if (!String(values.AlipayOfficialAlipayPublicKey || '').trim()) {
+      if (
+        !hasSubmittedOrStoredOfficialChinaPaymentValue(
+          values,
+          props.options,
+          'AlipayOfficialAlipayPublicKey',
+        )
+      ) {
         showError(t('请输入支付宝公钥'));
         return;
       }
@@ -169,7 +173,13 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         showError(t('请输入微信支付商户证书序列号'));
         return;
       }
-      if (!String(values.WechatPayOfficialPlatformPublicKey || '').trim()) {
+      if (
+        !hasSubmittedOrStoredOfficialChinaPaymentValue(
+          values,
+          props.options,
+          'WechatPayOfficialPlatformPublicKey',
+        )
+      ) {
         showError(t('请输入微信支付平台公钥'));
         return;
       }
@@ -183,41 +193,7 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
       }
     }
 
-    const optionKeys = [
-      'AlipayOfficialEnabled',
-      'AlipayOfficialSandbox',
-      'AlipayOfficialAppID',
-      'AlipayOfficialPrivateKey',
-      'AlipayOfficialAlipayPublicKey',
-      'AlipayOfficialAppCertSN',
-      'AlipayOfficialRootCertSN',
-      'AlipayOfficialAlipayCertSN',
-      'AlipayOfficialNotifyURL',
-      'AlipayOfficialReturnURL',
-      'AlipayOfficialUnitPrice',
-      'AlipayOfficialMinTopUp',
-      'WechatPayOfficialEnabled',
-      'WechatPayOfficialAppID',
-      'WechatPayOfficialMchID',
-      'WechatPayOfficialCertificateSerial',
-      'WechatPayOfficialAPIv3Key',
-      'WechatPayOfficialPrivateKey',
-      'WechatPayOfficialPlatformPublicKey',
-      'WechatPayOfficialNotifyURL',
-      'WechatPayOfficialReturnURL',
-      'WechatPayOfficialUnitPrice',
-      'WechatPayOfficialMinTopUp',
-    ];
-
-    const options = optionKeys
-      .map((key) => {
-        let value = values[key];
-        if (typeof value === 'boolean') value = value ? 'true' : 'false';
-        if (key.endsWith('URL')) value = removeTrailingSlash(value || '');
-        if (value === undefined || value === null) value = '';
-        return { key, value: String(value) };
-      })
-      .filter((item) => !sensitiveFields.has(item.key) || item.value !== '');
+    const options = buildOfficialChinaPaymentOptions(values, props.options);
 
     setLoading(true);
     try {
@@ -331,7 +307,9 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                   <Form.TextArea
                     field='AlipayOfficialAlipayPublicKey'
                     label={t('支付宝公钥')}
-                    placeholder={t('填写支付宝公钥，Base64 或 PEM 内容均可')}
+                    placeholder={t(
+                      '填写后覆盖当前支付宝公钥，留空表示保持当前不变',
+                    )}
                     autosize={{ minRows: 4, maxRows: 8 }}
                   />
                 </Col>
@@ -392,8 +370,10 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                   <Form.InputNumber
                     field='AlipayOfficialUnitPrice'
                     precision={2}
+                    step={0.01}
                     label={t('充值价格（x元/美金）')}
                     min={0}
+                    extraText={t('支持两位小数，例如：7.23')}
                   />
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
@@ -473,7 +453,7 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                     field='WechatPayOfficialPlatformPublicKey'
                     label={t('微信支付平台公钥')}
                     placeholder={t(
-                      '填写微信支付平台公钥，Base64 或 PEM 内容均可',
+                      '填写后覆盖当前微信支付平台公钥，留空表示保持当前不变',
                     )}
                     extraText={t('用于校验微信支付回调签名')}
                     autosize={{ minRows: 4, maxRows: 8 }}
@@ -501,8 +481,10 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                   <Form.InputNumber
                     field='WechatPayOfficialUnitPrice'
                     precision={2}
+                    step={0.01}
                     label={t('充值价格（x元/美金）')}
                     min={0}
+                    extraText={t('支持两位小数，例如：7.23')}
                   />
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
