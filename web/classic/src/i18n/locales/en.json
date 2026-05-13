@@ -3867,6 +3867,24 @@
     "支付宝沙盒模式": "Alipay sandbox mode",
     "支付宝异步通知地址": "Alipay async notification URL",
     "支付宝应用私钥": "Alipay app private key",
-    "支付宝支付返回地址": "Alipay return URL"
+    "支付宝支付返回地址": "Alipay return URL",
+    "启用充值返佣": "Enable recharge commissions",
+    "开启后，邀请奖励改为按被邀请用户的充值和订阅支付金额返佣": "When enabled, invite rewards are paid as commissions based on referred users' top-up and subscription payments",
+    "返佣比例": "Commission rate",
+    "返佣比例必须在 0 到 100 之间": "Commission rate must be between 0 and 100",
+    "返佣比例覆盖": "Commission rate override",
+    "返佣记录": "Commission history",
+    "最大返佣次数": "Maximum commission count",
+    "被邀请用户": "Referred user",
+    "被邀请用户充值或购买订阅时，邀请人获得的奖励比例": "Reward rate earned by the inviter when a referred user tops up or buys a subscription",
+    "被邀请用户前 N 次充值或订阅给予返佣，0 表示不限次数": "Pay commissions for the referred user's first N top-ups or subscriptions. 0 means unlimited",
+    "获得额度": "Quota earned",
+    "加载返佣记录失败": "Failed to load commission history",
+    "暂无返佣记录": "No commission history",
+    "留空则使用全局返佣比例": "Leave empty to use the global commission rate",
+    "仅影响该用户作为邀请人时获得的充值返佣比例": "Only affects the recharge commission rate this user earns as an inviter",
+    "充值金额": "Top-up amount",
+    "邀请好友注册，好友充值或购买订阅后您可获得相应奖励": "Invite friends to register and earn rewards after they top up or buy subscriptions",
+    "例如：10": "Example: 10"
   }
 }

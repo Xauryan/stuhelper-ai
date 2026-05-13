@@ -192,6 +192,23 @@ func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T)
 	}
 }
 
+func TestCompleteEpayTopUp_ReturnsOrderOnMismatchedPaymentProvider(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 160, 0)
+	insertTopUpForPaymentGuardTest(t, "epay-provider-guard", 160, PaymentProviderStripe)
+
+	topUp, quotaToAdd, referralResult, completed, err := CompleteEpayTopUp("epay-provider-guard", "alipay")
+	require.ErrorIs(t, err, ErrPaymentMethodMismatch)
+	require.NotNil(t, topUp)
+	assert.Equal(t, PaymentProviderStripe, topUp.PaymentProvider)
+	assert.Equal(t, 0, quotaToAdd)
+	assert.Nil(t, referralResult)
+	assert.False(t, completed)
+	assert.Equal(t, common.TopUpStatusPending, getTopUpStatusForPaymentGuardTest(t, "epay-provider-guard"))
+	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 160))
+}
+
 func TestCompleteSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) {
 	truncateTables(t)
 

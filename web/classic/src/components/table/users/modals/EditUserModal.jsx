@@ -94,6 +94,7 @@ const EditUserModal = (props) => {
     quota_amount: 0,
     group: 'default',
     remark: '',
+    referral_commission_percent: null,
   });
 
   const fetchGroups = async () => {
@@ -152,6 +153,27 @@ const EditUserModal = (props) => {
     delete payload.quota_amount;
     if (userId) {
       payload.id = parseInt(userId);
+      if (
+        payload.referral_commission_percent === '' ||
+        payload.referral_commission_percent == null
+      ) {
+        payload.referral_commission_percent = null;
+      } else {
+        payload.referral_commission_percent = Number(
+          payload.referral_commission_percent,
+        );
+        if (
+          !Number.isFinite(payload.referral_commission_percent) ||
+          payload.referral_commission_percent < 0 ||
+          payload.referral_commission_percent > 100
+        ) {
+          showError(t('返佣比例必须在 0 到 100 之间'));
+          setLoading(false);
+          return;
+        }
+      }
+    } else {
+      delete payload.referral_commission_percent;
     }
     const url = userId ? `/api/user/` : `/api/user/self`;
     const res = await API.put(url, payload);
@@ -365,6 +387,22 @@ const EditUserModal = (props) => {
                           allowAdditions
                           search
                           rules={[{ required: true, message: t('请选择分组') }]}
+                        />
+                      </Col>
+
+                      <Col span={24}>
+                        <Form.InputNumber
+                          field='referral_commission_percent'
+                          label={t('返佣比例覆盖')}
+                          placeholder={t('留空则使用全局返佣比例')}
+                          min={0}
+                          max={100}
+                          precision={2}
+                          step={0.1}
+                          suffix='%'
+                          showClear
+                          extraText={t('仅影响该用户作为邀请人时获得的充值返佣比例')}
+                          style={{ width: '100%' }}
                         />
                       </Col>
 

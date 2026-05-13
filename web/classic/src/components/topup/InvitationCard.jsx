@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@xauryan.com
 */
 
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Avatar,
   Typography,
@@ -26,8 +26,16 @@ import {
   Input,
   Badge,
   Space,
+  Table,
+  Empty,
+  Toast,
 } from '@douyinfe/semi-ui';
+import {
+  IllustrationNoResult,
+  IllustrationNoResultDark,
+} from '@douyinfe/semi-illustrations';
 import { Copy, Users, BarChart2, TrendingUp, Gift, Zap } from 'lucide-react';
+import { API, timestamp2string } from '../../helpers';
 
 const { Text } = Typography;
 
@@ -39,6 +47,90 @@ const InvitationCard = ({
   affLink,
   handleAffLinkClick,
 }) => {
+  const [commissionLoading, setCommissionLoading] = useState(false);
+  const [commissions, setCommissions] = useState([]);
+  const [commissionTotal, setCommissionTotal] = useState(0);
+  const [commissionPage, setCommissionPage] = useState(1);
+  const [commissionPageSize, setCommissionPageSize] = useState(5);
+  const [commissionError, setCommissionError] = useState('');
+
+  const loadCommissions = useCallback(
+    async (page, pageSize) => {
+      if (!userState?.user?.aff_commission_enabled) {
+        setCommissions([]);
+        setCommissionTotal(0);
+        return;
+      }
+      setCommissionLoading(true);
+      setCommissionError('');
+      try {
+        const res = await API.get(
+          `/api/user/aff/commissions?p=${page}&page_size=${pageSize}`,
+        );
+        const { success, message, data } = res.data;
+        if (success) {
+          setCommissions(data?.items || []);
+          setCommissionTotal(data?.total || 0);
+        } else {
+          const errorMessage = message || t('加载返佣记录失败');
+          setCommissionError(errorMessage);
+          setCommissions([]);
+          setCommissionTotal(0);
+          Toast.error({ content: errorMessage });
+        }
+      } catch (error) {
+        const errorMessage = t('加载返佣记录失败');
+        setCommissionError(errorMessage);
+        setCommissions([]);
+        setCommissionTotal(0);
+        Toast.error({ content: errorMessage });
+      } finally {
+        setCommissionLoading(false);
+      }
+    },
+    [t, userState?.user?.aff_commission_enabled],
+  );
+
+  useEffect(() => {
+    loadCommissions(commissionPage, commissionPageSize);
+  }, [commissionPage, commissionPageSize, loadCommissions]);
+
+  const commissionColumns = useMemo(
+    () => [
+      {
+        title: t('被邀请用户'),
+        dataIndex: 'invitee_username',
+        key: 'invitee_username',
+        render: (username) => <Text>{username || '-'}</Text>,
+      },
+      {
+        title: t('充值金额'),
+        dataIndex: 'recharge_amount',
+        key: 'recharge_amount',
+        render: (amount) => <Text>{Number(amount || 0).toFixed(2)}</Text>,
+      },
+      {
+        title: t('返佣比例'),
+        dataIndex: 'commission_rate',
+        key: 'commission_rate',
+        render: (rate) => <Text>{Number(rate || 0).toFixed(2)}%</Text>,
+      },
+      {
+        title: t('获得额度'),
+        dataIndex: 'commission_quota',
+        key: 'commission_quota',
+        render: (quota) => <Text>{renderQuota(quota || 0)}</Text>,
+      },
+      {
+        title: t('时间'),
+        dataIndex: 'created_at',
+        key: 'created_at',
+        render: (time) => timestamp2string(time),
+      },
+    ],
+    [renderQuota, t],
+  );
+
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>
       {/* 卡片头部 */}
@@ -202,7 +294,9 @@ const InvitationCard = ({
             <div className='flex items-start gap-2'>
               <Badge dot type='success' />
               <Text type='tertiary' className='text-sm'>
-                {t('邀请好友注册，好友充值后您可获得相应奖励')}
+                {userState?.user?.aff_commission_enabled
+                  ? t('邀请好友注册，好友充值或购买订阅后您可获得相应奖励')
+                  : t('邀请好友注册，好友充值后您可获得相应奖励')}
               </Text>
             </div>
 
@@ -221,6 +315,48 @@ const InvitationCard = ({
             </div>
           </div>
         </Card>
+
+        {userState?.user?.aff_commission_enabled && (
+          <Card
+            className='!rounded-xl w-full'
+            title={<Text type='tertiary'>{t('返佣记录')}</Text>}
+          >
+            <Table
+              columns={commissionColumns}
+              dataSource={commissions}
+              loading={commissionLoading}
+              rowKey='id'
+              size='small'
+              pagination={{
+                currentPage: commissionPage,
+                pageSize: commissionPageSize,
+                total: commissionTotal,
+                pageSizeOpts: [5, 10, 20],
+                onPageChange: setCommissionPage,
+                onPageSizeChange: (pageSize) => {
+                  setCommissionPageSize(pageSize);
+                  setCommissionPage(1);
+                },
+              }}
+              empty={
+                <Empty
+                  image={
+                    <IllustrationNoResult
+                      style={{ width: 120, height: 120 }}
+                    />
+                  }
+                  darkModeImage={
+                    <IllustrationNoResultDark
+                      style={{ width: 120, height: 120 }}
+                    />
+                  }
+                  description={commissionError || t('暂无返佣记录')}
+                  style={{ padding: 20 }}
+                />
+              }
+            />
+          </Card>
+        )}
       </Space>
     </Card>
   );

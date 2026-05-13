@@ -2,6 +2,94 @@
 
 本文档记录不是通过常规上游 release 同步引入的 PR 或补丁。
 
+## QuantumNous/new-api#3288 - 邀请充值返佣
+
+- 来源 PR：https://github.com/QuantumNous/new-api/pull/3288
+- 关联 issue：
+  - https://github.com/QuantumNous/new-api/issues/128
+  - https://github.com/QuantumNous/new-api/issues/187
+  - https://github.com/QuantumNous/new-api/issues/1852
+- 审查时的上游状态：open，尚未合并。
+- 本地导入日期：2026-05-13
+- 导入方式：阅读 PR 描述、关联 issue 和 CodeRabbit 评审后手工重写核心行为；
+  没有直接套用上游 diff，且前端配置只落在 classic 前端。
+- 本地涉及文件：
+  - `common/constants.go`
+  - `model/referral_commission.go`
+  - `model/referral_commission_test.go`
+  - `model/user.go`
+  - `model/topup.go`
+  - `model/subscription.go`
+  - `model/main.go`
+  - `model/option.go`
+  - `model/payment_method_guard_test.go`
+  - `model/task_cas_test.go`
+  - `controller/topup.go`
+  - `controller/user.go`
+  - `router/api-router.go`
+  - `web/classic/src/components/settings/OperationSetting.jsx`
+  - `web/classic/src/pages/Setting/Operation/SettingsCreditLimit.jsx`
+  - `web/classic/src/components/table/users/modals/EditUserModal.jsx`
+  - `web/classic/src/components/topup/InvitationCard.jsx`
+  - `web/classic/src/i18n/locales/*.json`
+
+### 原因
+
+现有邀请奖励主要是注册时一次性发放额度，容易被批量小号注册利用，也缺少
+对持续邀请高质量用户的激励。关联 issue 希望把奖励延后到被邀请用户实际充值
+或购买订阅后，按支付金额比例返佣，并可限制前 N 次充值。
+
+### 审查记录
+
+- PR #3288 的总体思路可取：新增全局返佣配置、邀请人单用户比例覆盖、支付完成
+  时写返佣记录、邀请人获得可划转的 `aff_quota`。
+- 未照搬上游代码，主要原因是当前 StuHelper AI 已有本地支付网关、订阅、
+  classic/default 双前端和 fork 维护规则，需要按本地结构重写。
+- 采纳 CodeRabbit 对 #3288 的有效反馈：
+  - 返佣不能作为支付成功后的 best-effort 写入；本地在各充值和订阅完成事务内
+    调用 `CreditReferralCommissionTx`，失败会回滚支付完成写库。
+  - 返佣幂等键不能只依赖 `top_up_id`，否则订阅场景会出错；本地使用
+    `source_type + source_id + invitee_id + payment_method`，其中订阅使用
+    `subscription_orders.id` 作为 `source_id`。
+  - 返佣历史必须分页查询；本地 `GET /api/user/aff/commissions` 使用通用分页。
+  - `ReferralCommissionPercent` 和 `ReferralCommissionMaxRecharges` 必须先校验
+    再保存，避免数据库保存值和运行时生效值不一致。
+  - 只有真实新增返佣记录时才写邀请人返佣日志。
+
+### 本地行为
+
+- 新增 `referral_commissions` 表，记录邀请人、被邀请人、来源类型、来源 ID、
+  支付方式、支付金额、返佣额度、返佣比例和创建时间。
+- 新增全局选项：
+  - `ReferralCommissionEnabled`
+  - `ReferralCommissionPercent`
+  - `ReferralCommissionMaxRecharges`
+- `ReferralCommissionEnabled=true` 时，注册流程只累计邀请人数，不再发放
+  `QuotaForInviter` / `QuotaForInvitee` 这两个一次性邀请奖励。
+- 返佣覆盖的支付完成路径包括 Stripe、Creem、Epay、Waffo、Waffo Pancake、
+  支付宝官方、微信支付官方、管理员补单和订阅订单完成。
+- 返佣额度按 `recharge_amount * QuotaPerUnit * rate / 100` 计算，向下取整；
+  邀请人单用户覆盖比例优先于全局比例。
+- classic 运维设置页新增全局开关、比例和最大次数设置；classic 用户编辑页
+  新增单用户返佣比例覆盖；classic 充值页邀请卡展示分页返佣记录。
+
+### 验证
+
+```powershell
+go test ./model -run "ReferralCommission|CompleteEpayTopUp|PaymentGuard|SubscriptionOrder" -count=1
+go test ./controller -run "TopUp|Epay|Stripe|Creem|Official|Option|User" -count=1
+Set-Location web/classic; bun run build
+```
+
+### 未来上游同步检查点
+
+每次同步上游 release 时：
+
+- 检查上游是否已经合并 PR #3288 或等价邀请返佣实现。
+- 如果上游合并等价实现，比较字段名、幂等键、事务边界和 classic 前端配置位置，
+  不要把本地官方支付、订阅和 classic 默认前端行为冲掉。
+- 保留本地回归测试，除非上游已有等价覆盖并且本地支付路径全部确认兼容。
+
 ## QuantumNous/new-api#4564 - 订阅套餐模型限制
 
 - 来源 PR：https://github.com/QuantumNous/new-api/pull/4564

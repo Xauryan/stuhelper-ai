@@ -4236,6 +4236,24 @@
     "支付宝沙盒模式": "Chế độ sandbox Alipay",
     "支付宝异步通知地址": "URL thông báo bất đồng bộ Alipay",
     "支付宝应用私钥": "Khóa riêng ứng dụng Alipay",
-    "支付宝支付返回地址": "URL quay lại Alipay"
+    "支付宝支付返回地址": "URL quay lại Alipay",
+    "启用充值返佣": "Bật hoa hồng nạp tiền",
+    "开启后，邀请奖励改为按被邀请用户的充值和订阅支付金额返佣": "Khi bật, phần thưởng mời sẽ được trả theo hoa hồng dựa trên số tiền nạp và thanh toán gói đăng ký của người được mời",
+    "返佣比例": "Tỷ lệ hoa hồng",
+    "返佣比例必须在 0 到 100 之间": "Tỷ lệ hoa hồng phải nằm trong khoảng 0 đến 100",
+    "返佣比例覆盖": "Ghi đè tỷ lệ hoa hồng",
+    "返佣记录": "Lịch sử hoa hồng",
+    "最大返佣次数": "Số lần hoa hồng tối đa",
+    "被邀请用户": "Người dùng được mời",
+    "被邀请用户充值或购买订阅时，邀请人获得的奖励比例": "Tỷ lệ thưởng mà người mời nhận được khi người được mời nạp tiền hoặc mua gói đăng ký",
+    "被邀请用户前 N 次充值或订阅给予返佣，0 表示不限次数": "Trả hoa hồng cho N lần nạp hoặc đăng ký đầu tiên của người được mời. 0 nghĩa là không giới hạn",
+    "获得额度": "Hạn mức nhận được",
+    "加载返佣记录失败": "Không tải được lịch sử hoa hồng",
+    "暂无返佣记录": "Chưa có lịch sử hoa hồng",
+    "留空则使用全局返佣比例": "Để trống để dùng tỷ lệ hoa hồng toàn cục",
+    "仅影响该用户作为邀请人时获得的充值返佣比例": "Chỉ ảnh hưởng đến tỷ lệ hoa hồng nạp tiền mà người dùng này nhận được với vai trò người mời",
+    "充值金额": "Số tiền nạp",
+    "邀请好友注册，好友充值或购买订阅后您可获得相应奖励": "Mời bạn bè đăng ký và nhận thưởng sau khi họ nạp tiền hoặc mua gói đăng ký",
+    "例如：10": "Ví dụ: 10"
   }
 }

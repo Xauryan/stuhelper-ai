@@ -3703,6 +3703,24 @@
     "支付宝沙盒模式": "Mode sandbox Alipay",
     "支付宝异步通知地址": "URL de notification asynchrone Alipay",
     "支付宝应用私钥": "Clé privée d'application Alipay",
-    "支付宝支付返回地址": "URL de retour Alipay"
+    "支付宝支付返回地址": "URL de retour Alipay",
+    "启用充值返佣": "Activer les commissions de recharge",
+    "开启后，邀请奖励改为按被邀请用户的充值和订阅支付金额返佣": "Une fois activé, les récompenses d'invitation sont payées en commission selon les recharges et abonnements des utilisateurs invités",
+    "返佣比例": "Taux de commission",
+    "返佣比例必须在 0 到 100 之间": "Le taux de commission doit être compris entre 0 et 100",
+    "返佣比例覆盖": "Remplacement du taux de commission",
+    "返佣记录": "Historique des commissions",
+    "最大返佣次数": "Nombre maximal de commissions",
+    "被邀请用户": "Utilisateur invité",
+    "被邀请用户充值或购买订阅时，邀请人获得的奖励比例": "Taux de récompense obtenu par l'invitant lorsqu'un utilisateur invité recharge ou achète un abonnement",
+    "被邀请用户前 N 次充值或订阅给予返佣，0 表示不限次数": "Verser une commission pour les N premières recharges ou abonnements de l'utilisateur invité. 0 signifie illimité",
+    "获得额度": "Quota obtenu",
+    "加载返佣记录失败": "Échec du chargement de l'historique des commissions",
+    "暂无返佣记录": "Aucun historique de commission",
+    "留空则使用全局返佣比例": "Laisser vide pour utiliser le taux de commission global",
+    "仅影响该用户作为邀请人时获得的充值返佣比例": "Affecte uniquement le taux de commission que cet utilisateur reçoit comme invitant",
+    "充值金额": "Montant de recharge",
+    "邀请好友注册，好友充值或购买订阅后您可获得相应奖励": "Invitez des amis à s'inscrire et recevez des récompenses après leurs recharges ou achats d'abonnement",
+    "例如：10": "Exemple : 10"
   }
 }
