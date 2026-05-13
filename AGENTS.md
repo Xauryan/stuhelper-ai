@@ -136,3 +136,17 @@ For request structs that are parsed from client JSON and then re-marshaled to up
 ### Rule 7: Billing Expression System — Read `pkg/billingexpr/expr.md`
 
 When working on tiered/dynamic billing (expression-based pricing), you MUST read `pkg/billingexpr/expr.md` first. It documents the design philosophy, expression language (variables, functions, examples), full system architecture (editor → storage → pre-consume → settlement → log display), token normalization rules (`p`/`c` auto-exclusion), quota conversion, and expression versioning. All code changes to the billing expression system must follow the patterns described in that document.
+
+### Rule 8: Documentation Updates Are Required After Every Change
+
+Every repository change MUST include a documentation update when the change affects behavior, configuration, deployment, dependencies, APIs, UI workflows, fork maintenance policy, upstream synchronization state, or externally ported PRs.
+
+Update the most relevant local documentation in the same work batch or commit, for example:
+
+- `docs/upstream-sync-log.md` for upstream release/main synchronization results, skipped upstream changes, conflicts, and verification.
+- `docs/fork-maintenance.md` for fork maintenance rules, local overlays, branding policy, release strategy, and long-term preservation requirements.
+- `docs/external-prs.md` for manually ported third-party PRs, review notes, file coverage, and future sync checkpoints.
+- README, API docs, admin/operator docs, or feature-specific docs when user-facing behavior, deployment steps, settings, or workflows change.
+- `AGENTS.md` itself when project conventions, engineering rules, or required workflows change.
+
+If a code/config change genuinely has no documentation impact, the final response or commit message MUST state that no documentation update was needed and why.
