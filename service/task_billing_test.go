@@ -9,8 +9,11 @@ import (
 	"time"
 
 	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/dto"
 	"github.com/Xauryan/stuhelper-ai/model"
 	relaycommon "github.com/Xauryan/stuhelper-ai/relay/common"
+	"github.com/Xauryan/stuhelper-ai/types"
+	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,6 +35,7 @@ func TestMain(m *testing.M) {
 	model.LOG_DB = db
 
 	common.UsingSQLite = true
+	initServiceTaskBillingColumnNames()
 	common.RedisEnabled = false
 	common.BatchUpdateEnabled = false
 	common.LogConsumeEnabled = true
@@ -43,12 +47,56 @@ func TestMain(m *testing.M) {
 		&model.Log{},
 		&model.Channel{},
 		&model.TopUp{},
+		&model.SubscriptionPlan{},
 		&model.UserSubscription{},
+		&model.SubscriptionPreConsumeRecord{},
 	); err != nil {
 		panic("failed to migrate: " + err.Error())
 	}
 
 	os.Exit(m.Run())
+}
+
+func initServiceTaskBillingColumnNames() {
+	originalIsMasterNode := common.IsMasterNode
+	originalSQLitePath := common.SQLitePath
+	originalUsingSQLite := common.UsingSQLite
+	originalUsingMySQL := common.UsingMySQL
+	originalUsingPostgreSQL := common.UsingPostgreSQL
+	originalDB := model.DB
+	originalLogDB := model.LOG_DB
+	originalSQLDSN, hadSQLDSN := os.LookupEnv("SQL_DSN")
+	defer func() {
+		common.IsMasterNode = originalIsMasterNode
+		common.SQLitePath = originalSQLitePath
+		common.UsingSQLite = originalUsingSQLite
+		common.UsingMySQL = originalUsingMySQL
+		common.UsingPostgreSQL = originalUsingPostgreSQL
+		model.DB = originalDB
+		model.LOG_DB = originalLogDB
+		if hadSQLDSN {
+			_ = os.Setenv("SQL_DSN", originalSQLDSN)
+		} else {
+			_ = os.Unsetenv("SQL_DSN")
+		}
+	}()
+
+	common.IsMasterNode = false
+	common.SQLitePath = "file:service_task_billing_init?mode=memory&cache=shared"
+	common.UsingSQLite = false
+	common.UsingMySQL = false
+	common.UsingPostgreSQL = false
+	_ = os.Setenv("SQL_DSN", "local")
+
+	if err := model.InitDB(); err != nil {
+		panic("failed to initialize column names: " + err.Error())
+	}
+	if model.DB != nil {
+		sqlDB, err := model.DB.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +112,9 @@ func truncate(t *testing.T) {
 		model.DB.Exec("DELETE FROM logs")
 		model.DB.Exec("DELETE FROM channels")
 		model.DB.Exec("DELETE FROM top_ups")
+		model.DB.Exec("DELETE FROM subscription_plans")
 		model.DB.Exec("DELETE FROM user_subscriptions")
+		model.DB.Exec("DELETE FROM subscription_pre_consume_records")
 	})
 }
 
@@ -90,11 +140,51 @@ func seedToken(t *testing.T, id int, userId int, key string, remainQuota int) {
 
 func seedSubscription(t *testing.T, id int, userId int, amountTotal int64, amountUsed int64) {
 	t.Helper()
+	plan := &model.SubscriptionPlan{
+		Id:            id,
+		Title:         "test subscription plan",
+		PriceAmount:   1,
+		Currency:      "USD",
+		DurationUnit:  model.SubscriptionDurationMonth,
+		DurationValue: 1,
+		Enabled:       true,
+		TotalAmount:   amountTotal,
+	}
+	require.NoError(t, model.DB.Create(plan).Error)
 	sub := &model.UserSubscription{
 		Id:          id,
 		UserId:      userId,
+		PlanId:      id,
 		AmountTotal: amountTotal,
 		AmountUsed:  amountUsed,
+		Status:      "active",
+		StartTime:   time.Now().Unix(),
+		EndTime:     time.Now().Add(30 * 24 * time.Hour).Unix(),
+	}
+	require.NoError(t, model.DB.Create(sub).Error)
+}
+
+func seedModelLimitedSubscription(t *testing.T, id int, userId int, allowedModels string) {
+	t.Helper()
+	plan := &model.SubscriptionPlan{
+		Id:                 id,
+		Title:              "model limited plan",
+		PriceAmount:        1,
+		Currency:           "USD",
+		DurationUnit:       model.SubscriptionDurationMonth,
+		DurationValue:      1,
+		Enabled:            true,
+		TotalAmount:        100,
+		ModelLimitsEnabled: true,
+		ModelLimits:        allowedModels,
+	}
+	require.NoError(t, model.DB.Create(plan).Error)
+	sub := &model.UserSubscription{
+		Id:          id,
+		UserId:      userId,
+		PlanId:      id,
+		AmountTotal: 100,
+		AmountUsed:  0,
 		Status:      "active",
 		StartTime:   time.Now().Unix(),
 		EndTime:     time.Now().Add(30 * 24 * time.Hour).Unix(),
@@ -182,6 +272,70 @@ func countLogs(t *testing.T) int64 {
 	var count int64
 	model.LOG_DB.Model(&model.Log{}).Count(&count)
 	return count
+}
+
+// ===========================================================================
+// BillingSession tests
+// ===========================================================================
+
+func TestNewBillingSessionModelLimitedSubscriptionFallsBackToWallet(t *testing.T) {
+	truncate(t)
+	gin.SetMode(gin.TestMode)
+
+	const userID, tokenID, subID = 901, 902, 903
+	seedUser(t, userID, 1000)
+	seedToken(t, tokenID, userID, "sk-model-limit-fallback", 1000)
+	seedModelLimitedSubscription(t, subID, userID, "gpt-4o")
+
+	ctx, _ := gin.CreateTestContext(nil)
+	relayInfo := &relaycommon.RelayInfo{
+		RequestId:       "model-limit-fallback",
+		UserId:          userID,
+		TokenId:         tokenID,
+		TokenKey:        "sk-model-limit-fallback",
+		OriginModelName: "gemini-1.5-pro",
+		UserSetting: dto.UserSetting{
+			BillingPreference: "subscription_first",
+		},
+	}
+
+	session, err := NewBillingSession(ctx, relayInfo, 10)
+
+	require.Nil(t, err)
+	require.NotNil(t, session)
+	assert.Equal(t, BillingSourceWallet, relayInfo.BillingSource)
+	assert.Equal(t, 990, getUserQuota(t, userID))
+	assert.EqualValues(t, 0, getSubscriptionUsed(t, subID))
+}
+
+func TestNewBillingSessionModelLimitedSubscriptionOnlyReturnsQuotaError(t *testing.T) {
+	truncate(t)
+	gin.SetMode(gin.TestMode)
+
+	const userID, tokenID, subID = 904, 905, 906
+	seedUser(t, userID, 1000)
+	seedToken(t, tokenID, userID, "sk-model-limit-only", 1000)
+	seedModelLimitedSubscription(t, subID, userID, "gpt-4o")
+
+	ctx, _ := gin.CreateTestContext(nil)
+	relayInfo := &relaycommon.RelayInfo{
+		RequestId:       "model-limit-only",
+		UserId:          userID,
+		TokenId:         tokenID,
+		TokenKey:        "sk-model-limit-only",
+		OriginModelName: "gemini-1.5-pro",
+		UserSetting: dto.UserSetting{
+			BillingPreference: "subscription_only",
+		},
+	}
+
+	session, err := NewBillingSession(ctx, relayInfo, 10)
+
+	assert.Nil(t, session)
+	require.NotNil(t, err)
+	assert.Equal(t, types.ErrorCodeInsufficientUserQuota, err.GetErrorCode())
+	assert.Contains(t, err.Error(), "no subscription allows model gemini-1.5-pro")
+	assert.Equal(t, 1000, getTokenRemainQuota(t, tokenID))
 }
 
 // ===========================================================================

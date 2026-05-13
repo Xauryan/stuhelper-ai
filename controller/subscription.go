@@ -156,6 +156,7 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 		common.ApiErrorMsg(c, "自定义重置周期需大于0秒")
 		return
 	}
+	req.Plan.ModelLimitsEnabled, req.Plan.ModelLimits = model.NormalizeModelLimitsForSave(req.Plan.ModelLimitsEnabled, req.Plan.ModelLimits)
 	err := model.DB.Create(&req.Plan).Error
 	if err != nil {
 		common.ApiError(c, err)
@@ -219,6 +220,7 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 		common.ApiErrorMsg(c, "自定义重置周期需大于0秒")
 		return
 	}
+	req.Plan.ModelLimitsEnabled, req.Plan.ModelLimits = model.NormalizeModelLimitsForSave(req.Plan.ModelLimitsEnabled, req.Plan.ModelLimits)
 
 	err := model.DB.Transaction(func(tx *gorm.DB) error {
 		// update plan (allow zero values updates with map)
@@ -239,6 +241,8 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 			"upgrade_group":              req.Plan.UpgradeGroup,
 			"quota_reset_period":         req.Plan.QuotaResetPeriod,
 			"quota_reset_custom_seconds": req.Plan.QuotaResetCustomSeconds,
+			"model_limits_enabled":       req.Plan.ModelLimitsEnabled,
+			"model_limits":               req.Plan.ModelLimits,
 			"updated_at":                 common.GetTimestamp(),
 		}
 		if err := tx.Model(&model.SubscriptionPlan{}).Where("id = ?", id).Updates(updateMap).Error; err != nil {

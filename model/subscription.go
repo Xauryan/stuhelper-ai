@@ -175,19 +175,84 @@ type SubscriptionPlan struct {
 	QuotaResetPeriod        string `json:"quota_reset_period" gorm:"type:varchar(16);default:'never'"`
 	QuotaResetCustomSeconds int64  `json:"quota_reset_custom_seconds" gorm:"type:bigint;default:0"`
 
+	// Model limits restrict which request models can be billed by this plan.
+	ModelLimitsEnabled bool   `json:"model_limits_enabled" gorm:"default:false"`
+	ModelLimits        string `json:"model_limits" gorm:"type:text;default:''"`
+
 	CreatedAt int64 `json:"created_at" gorm:"bigint"`
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
+}
+
+func normalizeSubscriptionModelLimits(enabled bool, csv string) []string {
+	if !enabled || strings.TrimSpace(csv) == "" {
+		return []string{}
+	}
+	parts := strings.Split(csv, ",")
+	limits := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		modelName := strings.TrimSpace(part)
+		if modelName == "" {
+			continue
+		}
+		if _, ok := seen[modelName]; ok {
+			continue
+		}
+		seen[modelName] = struct{}{}
+		limits = append(limits, modelName)
+	}
+	return limits
+}
+
+// NormalizeModelLimitsForSave returns a stable enabled flag and CSV for storage.
+func NormalizeModelLimitsForSave(enabled bool, csv string) (bool, string) {
+	limits := normalizeSubscriptionModelLimits(enabled, csv)
+	if len(limits) == 0 {
+		return false, ""
+	}
+	return true, strings.Join(limits, ",")
+}
+
+// GetModelLimits returns the normalized unique model list for enabled limits.
+func (p *SubscriptionPlan) GetModelLimits() []string {
+	if p == nil {
+		return []string{}
+	}
+	return normalizeSubscriptionModelLimits(p.ModelLimitsEnabled, p.ModelLimits)
+}
+
+// IsModelAllowed reports whether this plan can bill the requested model.
+func (p *SubscriptionPlan) IsModelAllowed(modelName string) bool {
+	if p == nil {
+		return false
+	}
+	modelName = strings.TrimSpace(modelName)
+	if !p.ModelLimitsEnabled || modelName == "" {
+		return true
+	}
+	limits := p.GetModelLimits()
+	if len(limits) == 0 {
+		return true
+	}
+	for _, allowed := range limits {
+		if allowed == modelName {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *SubscriptionPlan) BeforeCreate(tx *gorm.DB) error {
 	now := common.GetTimestamp()
 	p.CreatedAt = now
 	p.UpdatedAt = now
+	p.ModelLimitsEnabled, p.ModelLimits = NormalizeModelLimitsForSave(p.ModelLimitsEnabled, p.ModelLimits)
 	return nil
 }
 
 func (p *SubscriptionPlan) BeforeUpdate(tx *gorm.DB) error {
 	p.UpdatedAt = common.GetTimestamp()
+	p.ModelLimitsEnabled, p.ModelLimits = NormalizeModelLimitsForSave(p.ModelLimitsEnabled, p.ModelLimits)
 	return nil
 }
 
@@ -977,6 +1042,7 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 	if amount <= 0 {
 		return nil, errors.New("amount must be > 0")
 	}
+	modelName = strings.TrimSpace(modelName)
 	now := GetDBTimestamp()
 
 	returnValue := &SubscriptionPreConsumeResult{}
@@ -1013,11 +1079,18 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 		if len(subs) == 0 {
 			return errors.New("no active subscription")
 		}
+		anyPlanAllowsModel := false
 		for _, candidate := range subs {
 			sub := candidate
 			plan, err := getSubscriptionPlanByIdTx(tx, sub.PlanId)
 			if err != nil {
 				return err
+			}
+			if modelName != "" && !plan.IsModelAllowed(modelName) {
+				continue
+			}
+			if modelName != "" {
+				anyPlanAllowsModel = true
 			}
 			if err := maybeResetUserSubscriptionWithPlanTx(tx, &sub, plan, now); err != nil {
 				return err
@@ -1061,6 +1134,9 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 			returnValue.AmountUsedBefore = usedBefore
 			returnValue.AmountUsedAfter = sub.AmountUsed
 			return nil
+		}
+		if modelName != "" && !anyPlanAllowsModel {
+			return fmt.Errorf("no subscription allows model %s", modelName)
 		}
 		return fmt.Errorf("subscription quota insufficient, need=%d", amount)
 	})
