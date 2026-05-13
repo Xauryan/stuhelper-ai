@@ -10,21 +10,18 @@ import (
 const userRankingLimit = 20
 
 type UserRankingsResponse struct {
-	Period           string       `json:"period"`
-	Consumption      []RankedUser `json:"consumption"`
-	Recharge         []RankedUser `json:"recharge"`
-	ConsumptionTotal int64        `json:"consumption_total"`
-	RechargeTotal    int64        `json:"recharge_total"`
-	UpdatedAt        int64        `json:"updated_at"`
+	Period      string       `json:"period"`
+	Consumption []RankedUser `json:"consumption"`
+	Recharge    []RankedUser `json:"recharge"`
+	UpdatedAt   int64        `json:"updated_at"`
 }
 
 type RankedUser struct {
-	Rank       int     `json:"rank"`
-	UserId     int     `json:"user_id"`
-	Username   string  `json:"username"`
-	Display    string  `json:"display"`
-	TotalQuota int64   `json:"total_quota"`
-	Share      float64 `json:"share"`
+	Rank       int    `json:"rank"`
+	UserId     int    `json:"user_id"`
+	Username   string `json:"username"`
+	Display    string `json:"display"`
+	TotalQuota int64  `json:"total_quota"`
 }
 
 type userRankingPeriodConfig struct {
@@ -40,22 +37,20 @@ func GetUserRankingsSnapshot(period string) (*UserRankingsResponse, error) {
 	now := time.Now()
 	startTime, endTime := userRankingTimeRange(config, now)
 
-	consumptionRows, consumptionTotal, err := model.GetUserConsumptionRankingTotals(startTime, endTime, userRankingLimit)
+	consumptionRows, _, err := model.GetUserConsumptionRankingTotals(startTime, endTime, userRankingLimit)
 	if err != nil {
 		return nil, err
 	}
-	rechargeRows, rechargeTotal, err := model.GetUserRechargeRankingTotals(startTime, endTime, userRankingLimit)
+	rechargeRows, _, err := model.GetUserRechargeRankingTotals(startTime, endTime, userRankingLimit)
 	if err != nil {
 		return nil, err
 	}
 
 	return &UserRankingsResponse{
-		Period:           config.id,
-		Consumption:      buildRankedUsers(consumptionRows, consumptionTotal),
-		Recharge:         buildRankedUsers(rechargeRows, rechargeTotal),
-		ConsumptionTotal: consumptionTotal,
-		RechargeTotal:    rechargeTotal,
-		UpdatedAt:        now.Unix(),
+		Period:      config.id,
+		Consumption: buildRankedUsers(consumptionRows),
+		Recharge:    buildRankedUsers(rechargeRows),
+		UpdatedAt:   now.Unix(),
 	}, nil
 }
 
@@ -82,7 +77,7 @@ func userRankingTimeRange(config userRankingPeriodConfig, now time.Time) (int64,
 	return now.Add(-config.duration).Unix(), endTime
 }
 
-func buildRankedUsers(rows []model.UserRankingTotal, total int64) []RankedUser {
+func buildRankedUsers(rows []model.UserRankingTotal) []RankedUser {
 	result := make([]RankedUser, 0, len(rows))
 	for idx, row := range rows {
 		result = append(result, RankedUser{
@@ -91,7 +86,6 @@ func buildRankedUsers(rows []model.UserRankingTotal, total int64) []RankedUser {
 			Username:   row.Username,
 			Display:    maskRankingUsername(row.Username, row.UserId),
 			TotalQuota: row.TotalQuota,
-			Share:      rankingShare(row.TotalQuota, total),
 		})
 	}
 	return result

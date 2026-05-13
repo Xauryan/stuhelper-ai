@@ -106,6 +106,7 @@ func TestGetUserRechargeRankingTotalsIncludesAllRechargeSources(t *testing.T) {
 
 	require.NoError(t, LOG_DB.Create(&[]Log{
 		{UserId: 2, Username: "bob", CreatedAt: 1600, Type: LogTypeManage, Quota: 400000, Content: "管理员增加用户额度"},
+		{UserId: 3, Username: "carol", CreatedAt: 1700, Type: LogTypeManage, Content: "管理员增加用户额度 ＄1.600000 额度"},
 		{UserId: 1, Username: "alice", CreatedAt: 1600, Type: LogTypeManage, Quota: 250000, Content: "管理员减少用户额度"},
 		{UserId: 3, Username: "carol", CreatedAt: 900, Type: LogTypeManage, Quota: 800000, Content: "管理员增加用户额度"},
 	}).Error)
@@ -113,17 +114,20 @@ func TestGetUserRechargeRankingTotalsIncludesAllRechargeSources(t *testing.T) {
 	rows, total, err := GetUserRechargeRankingTotals(1000, 2000, 20)
 	require.NoError(t, err)
 
-	require.Len(t, rows, 2)
-	assert.Equal(t, int64(2400000), total)
+	require.Len(t, rows, 3)
+	assert.Equal(t, int64(3200000), total)
 	assert.Equal(t, 1, rows[0].UserId)
 	assert.Equal(t, "alice", rows[0].Username)
 	assert.Equal(t, int64(1300000), rows[0].TotalQuota)
 	assert.Equal(t, 2, rows[1].UserId)
 	assert.Equal(t, "bob", rows[1].Username)
 	assert.Equal(t, int64(1100000), rows[1].TotalQuota)
+	assert.Equal(t, 3, rows[2].UserId)
+	assert.Equal(t, "carol", rows[2].Username)
+	assert.Equal(t, int64(800000), rows[2].TotalQuota)
 
 	limitedRows, limitedTotal, err := GetUserRechargeRankingTotals(1000, 2000, 1)
 	require.NoError(t, err)
 	require.Len(t, limitedRows, 1)
-	assert.Equal(t, int64(2400000), limitedTotal)
+	assert.Equal(t, int64(3200000), limitedTotal)
 }

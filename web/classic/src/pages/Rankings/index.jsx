@@ -53,25 +53,14 @@ const LIST_TYPES = [
   {
     key: 'consumption',
     title: '用户消耗排行',
-    totalKey: 'consumption_total',
     icon: <IconHistogram />,
-    tone: 'blue',
   },
   {
     key: 'recharge',
     title: '充值排行',
-    totalKey: 'recharge_total',
     icon: <IconCreditCard />,
-    tone: 'green',
   },
 ];
-
-function formatShare(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return '0%';
-  if (numeric < 0.001) return '<0.1%';
-  return `${(numeric * 100).toFixed(numeric < 0.01 ? 2 : 1)}%`;
-}
 
 function RankingBadge({ rank }) {
   const rankColor =
@@ -91,24 +80,6 @@ function RankingBadge({ rank }) {
     >
       #{rank}
     </Tag>
-  );
-}
-
-function StatCard({ item, total }) {
-  const { t } = useTranslation();
-  return (
-    <Card className='rankings-stat-card' bodyStyle={{ padding: 18 }}>
-      <div className='rankings-stat-header'>
-        <span className={`rankings-stat-icon rankings-stat-icon-${item.tone}`}>
-          {item.icon}
-        </span>
-        <Text strong>{t(item.title)}</Text>
-      </div>
-      <div className='rankings-stat-value'>{renderQuota(total || 0, 2)}</div>
-      <Text type='secondary' size='small'>
-        {t('当前周期累计额度')}
-      </Text>
-    </Card>
   );
 }
 
@@ -144,14 +115,6 @@ function RankingTable({ rows, loading }) {
         render: (quota) => (
           <span className='rankings-quota'>{renderQuota(quota || 0, 2)}</span>
         ),
-      },
-      {
-        title: t('占比'),
-        dataIndex: 'share',
-        key: 'share',
-        align: 'right',
-        width: 120,
-        render: (share) => <Text type='secondary'>{formatShare(share)}</Text>,
       },
     ],
     [t],
@@ -246,16 +209,6 @@ const Rankings = () => {
             </div>
           </div>
         </Card>
-
-        <div className='rankings-stats-grid'>
-          {LIST_TYPES.map((item) => (
-            <StatCard
-              key={item.key}
-              item={item}
-              total={snapshot?.[item.totalKey] || 0}
-            />
-          ))}
-        </div>
 
         <Card className='rankings-content' bodyStyle={{ padding: 0 }}>
           <Tabs
