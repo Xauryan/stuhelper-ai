@@ -352,15 +352,16 @@ func getOfficialPayMoney(amount int64, group string, unitPrice float64) float64 
 		Mul(decimal.NewFromFloat(unitPrice)).
 		Mul(decimal.NewFromFloat(topupGroupRatio)).
 		Mul(decimal.NewFromFloat(discount)).
+		RoundCeil(2).
 		InexactFloat64()
 }
 
 func formatOfficialPayMoney(payMoney float64) string {
-	return decimal.NewFromFloat(payMoney).StringFixed(2)
+	return formatPayMoneyToCents(payMoney)
 }
 
 func yuanToFen(payMoney float64) int64 {
-	return decimal.NewFromFloat(payMoney).Mul(decimal.NewFromInt(100)).Round(0).IntPart()
+	return payMoneyYuanToFen(payMoney)
 }
 
 func normalizeOfficialPaymentScene(scene string) string {

@@ -47,7 +47,7 @@ func RequestWaffoPancakeAmount(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": fmt.Sprintf("%.2f", payMoney)})
+	c.JSON(http.StatusOK, gin.H{"message": "success", "data": formatWaffoPancakeAmount(payMoney)})
 }
 
 func getWaffoPancakePayMoney(amount int64, group string) float64 {
@@ -71,7 +71,7 @@ func getWaffoPancakePayMoney(amount int64, group string) float64 {
 		Mul(decimal.NewFromFloat(topupGroupRatio)).
 		Mul(decimal.NewFromFloat(discount))
 
-	return payMoney.InexactFloat64()
+	return ceilPayMoneyToCents(payMoney)
 }
 
 func normalizeWaffoPancakeTopUpAmount(amount int64) int64 {
@@ -89,7 +89,7 @@ func normalizeWaffoPancakeTopUpAmount(amount int64) int64 {
 }
 
 func formatWaffoPancakeAmount(payMoney float64) string {
-	return decimal.NewFromFloat(payMoney).StringFixed(2)
+	return formatPayMoneyToCents(payMoney)
 }
 
 func getWaffoPancakeBuyerEmail(user *model.User) string {

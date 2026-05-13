@@ -5,8 +5,26 @@ import {
   normalizeOfficialChinaUnitPrice,
 } from './officialChinaPaymentSettings.js';
 
-assert.equal(normalizeOfficialChinaUnitPrice(7.23), '7.23');
-assert.equal(normalizeOfficialChinaUnitPrice('7.2'), '7.20');
+assert.equal(normalizeOfficialChinaUnitPrice(7.231), '7.231');
+assert.equal(normalizeOfficialChinaUnitPrice('7.2'), '7.200');
+
+assert.equal(
+  hasSubmittedOrStoredOfficialChinaPaymentValue(
+    { AlipayOfficialPrivateKey: '' },
+    { AlipayOfficialPrivateKeyConfigured: 'true' },
+    'AlipayOfficialPrivateKey',
+  ),
+  true,
+);
+
+assert.equal(
+  hasSubmittedOrStoredOfficialChinaPaymentValue(
+    { AlipayOfficialPrivateKey: '' },
+    { AlipayOfficialPrivateKeyConfigured: 'false' },
+    'AlipayOfficialPrivateKey',
+  ),
+  false,
+);
 
 assert.equal(
   hasSubmittedOrStoredOfficialChinaPaymentValue(
@@ -17,15 +35,6 @@ assert.equal(
   true,
 );
 
-assert.equal(
-  hasSubmittedOrStoredOfficialChinaPaymentValue(
-    { AlipayOfficialAlipayPublicKey: '' },
-    { AlipayOfficialAlipayPublicKey: '' },
-    'AlipayOfficialAlipayPublicKey',
-  ),
-  false,
-);
-
 const retainedOptions = buildOfficialChinaPaymentOptions(
   {
     AlipayOfficialEnabled: true,
@@ -33,14 +42,14 @@ const retainedOptions = buildOfficialChinaPaymentOptions(
     AlipayOfficialAppID: 'app-id',
     AlipayOfficialPrivateKey: '',
     AlipayOfficialAlipayPublicKey: '',
-    AlipayOfficialUnitPrice: 7.23,
+    AlipayOfficialUnitPrice: 7.231,
     AlipayOfficialMinTopUp: 1,
     WechatPayOfficialEnabled: false,
     WechatPayOfficialUnitPrice: '8',
     WechatPayOfficialMinTopUp: 1,
   },
   {
-    AlipayOfficialPrivateKey: 'stored-private-key',
+    AlipayOfficialPrivateKeyConfigured: 'true',
     AlipayOfficialAlipayPublicKey: 'stored-public-key',
   },
 );
@@ -58,12 +67,44 @@ assert.equal(
 assert.equal(
   retainedOptions.find((option) => option.key === 'AlipayOfficialUnitPrice')
     ?.value,
-  '7.23',
+  '7.231',
 );
 assert.equal(
   retainedOptions.find((option) => option.key === 'WechatPayOfficialUnitPrice')
     ?.value,
-  '8.00',
+  '8.000',
+);
+
+const sensitiveRetainedOptions = buildOfficialChinaPaymentOptions(
+  {
+    AlipayOfficialEnabled: true,
+    AlipayOfficialPrivateKey: '',
+    AlipayOfficialAlipayPublicKey: 'public-key',
+    AlipayOfficialUnitPrice: 7.231,
+    WechatPayOfficialAPIv3Key: '',
+    WechatPayOfficialPrivateKey: '',
+    WechatPayOfficialPlatformPublicKey: 'wechat-platform-public-key',
+    WechatPayOfficialUnitPrice: 8.123,
+  },
+  {},
+);
+assert.equal(
+  sensitiveRetainedOptions.some(
+    (option) => option.key === 'AlipayOfficialPrivateKey',
+  ),
+  false,
+);
+assert.equal(
+  sensitiveRetainedOptions.some(
+    (option) => option.key === 'WechatPayOfficialAPIv3Key',
+  ),
+  false,
+);
+assert.equal(
+  sensitiveRetainedOptions.some(
+    (option) => option.key === 'WechatPayOfficialPrivateKey',
+  ),
+  false,
 );
 
 const clearingOptions = buildOfficialChinaPaymentOptions(

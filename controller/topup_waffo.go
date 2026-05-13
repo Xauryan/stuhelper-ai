@@ -15,6 +15,7 @@ import (
 	"github.com/Xauryan/stuhelper-ai/setting"
 	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"github.com/thanhpk/randstr"
 	waffo "github.com/waffo-com/waffo-go"
 	"github.com/waffo-com/waffo-go/config"
@@ -68,7 +69,7 @@ func formatWaffoAmount(amount float64, currency string) string {
 	if zeroDecimalCurrencies[currency] {
 		return fmt.Sprintf("%.0f", amount)
 	}
-	return fmt.Sprintf("%.2f", amount)
+	return formatPayMoneyToCents(amount)
 }
 
 // getWaffoPayMoney converts the user-facing amount to USD for Waffo payment.
@@ -89,7 +90,11 @@ func getWaffoPayMoney(amount float64, group string) float64 {
 			discount = ds
 		}
 	}
-	return amount * setting.WaffoUnitPrice * topupGroupRatio * discount
+	payMoney := decimal.NewFromFloat(amount).
+		Mul(decimal.NewFromFloat(setting.WaffoUnitPrice)).
+		Mul(decimal.NewFromFloat(topupGroupRatio)).
+		Mul(decimal.NewFromFloat(discount))
+	return ceilPayMoneyToCents(payMoney)
 }
 
 type WaffoPayRequest struct {
@@ -125,7 +130,7 @@ func RequestWaffoAmount(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "success", "data": strconv.FormatFloat(payMoney, 'f', 2, 64)})
+	c.JSON(http.StatusOK, gin.H{"message": "success", "data": formatPayMoneyToCents(payMoney)})
 }
 
 // RequestWaffoPay 创建 Waffo 支付订单

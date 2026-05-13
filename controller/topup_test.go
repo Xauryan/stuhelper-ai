@@ -69,6 +69,56 @@ func TestBuildOfficialTradeNoUsesAlipaySafeCharacters(t *testing.T) {
 	require.NotContains(t, tradeNo, "-")
 }
 
+func TestConfiguredTopUpPayMoneyCeilsToCents(t *testing.T) {
+	originalPrice := operation_setting.Price
+	originalQuotaDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	originalDiscounts := make(map[int]float64, len(operation_setting.GetPaymentSetting().AmountDiscount))
+	for k, v := range operation_setting.GetPaymentSetting().AmountDiscount {
+		originalDiscounts[k] = v
+	}
+	originalTopupGroupRatio := common.TopupGroupRatio2JSONString()
+	originalStripeUnitPrice := setting.StripeUnitPrice
+	originalWaffoUnitPrice := setting.WaffoUnitPrice
+	originalWaffoPancakeUnitPrice := setting.WaffoPancakeUnitPrice
+	t.Cleanup(func() {
+		operation_setting.Price = originalPrice
+		operation_setting.GetGeneralSetting().QuotaDisplayType = originalQuotaDisplayType
+		operation_setting.GetPaymentSetting().AmountDiscount = originalDiscounts
+		require.NoError(t, common.UpdateTopupGroupRatioByJSONString(originalTopupGroupRatio))
+		setting.StripeUnitPrice = originalStripeUnitPrice
+		setting.WaffoUnitPrice = originalWaffoUnitPrice
+		setting.WaffoPancakeUnitPrice = originalWaffoPancakeUnitPrice
+	})
+
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+	operation_setting.GetPaymentSetting().AmountDiscount = map[int]float64{}
+	require.NoError(t, common.UpdateTopupGroupRatioByJSONString(`{"default":1}`))
+	operation_setting.Price = 7.231
+	setting.StripeUnitPrice = 7.231
+	setting.WaffoUnitPrice = 7.231
+	setting.WaffoPancakeUnitPrice = 7.231
+
+	testCases := []struct {
+		name   string
+		actual float64
+	}{
+		{name: "epay", actual: getPayMoney(1, "default")},
+		{name: "official", actual: getOfficialPayMoney(1, "default", 7.231)},
+		{name: "stripe", actual: getStripePayMoney(1, "default")},
+		{name: "waffo", actual: getWaffoPayMoney(1, "default")},
+		{name: "waffo pancake", actual: getWaffoPancakePayMoney(1, "default")},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.InDelta(t, 7.24, tc.actual, 0.000001)
+		})
+	}
+
+	require.Equal(t, "7.24", formatOfficialPayMoney(7.231))
+	require.Equal(t, int64(724), yuanToFen(7.231))
+}
+
 func TestGetTopUpInfoStillExposesOfficialMethodsWhenEpayDisabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

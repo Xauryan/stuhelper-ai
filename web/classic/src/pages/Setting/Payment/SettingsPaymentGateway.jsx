@@ -162,9 +162,11 @@ export default function SettingsPaymentGateway(props) {
             <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.InputNumber
                 field='Price'
-                precision={2}
+                precision={3}
+                step={0.001}
                 label={t('充值价格（x元/美金）')}
                 placeholder={t('例如：7，就是7元/美金')}
+                extraText={t('支持三位小数，例如：7.231')}
               />
             </Col>
             <Col xs={24} sm={24} md={12} lg={12} xl={12}>

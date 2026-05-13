@@ -107,6 +107,14 @@ const RechargeCard = ({
   const shouldShowSubscription =
     !subscriptionLoading && subscriptionPlans.length > 0;
   const regularPayMethods = payMethods || [];
+  const hasRegularTopUp =
+    enableOnlineTopUp ||
+    enableStripeTopUp ||
+    enableWaffoTopUp ||
+    enableWaffoPancakeTopUp ||
+    enableAlipayOfficialTopUp ||
+    enableWechatPayOfficialTopUp ||
+    regularPayMethods.length > 0;
 
   useEffect(() => {
     if (initialTabSetRef.current) return;
@@ -229,24 +237,13 @@ const RechargeCard = ({
           <div className='py-8 flex justify-center'>
             <Spin size='large' />
           </div>
-        ) : enableOnlineTopUp ||
-          enableStripeTopUp ||
-          enableCreemTopUp ||
-          enableWaffoTopUp ||
-          enableWaffoPancakeTopUp ||
-          enableAlipayOfficialTopUp ||
-          enableWechatPayOfficialTopUp ? (
+        ) : hasRegularTopUp || enableCreemTopUp ? (
           <Form
             getFormApi={(api) => (onlineFormApiRef.current = api)}
             initValues={{ topUpCount: topUpCount }}
           >
             <div className='space-y-6'>
-              {(enableOnlineTopUp ||
-                enableStripeTopUp ||
-                enableWaffoTopUp ||
-                enableWaffoPancakeTopUp ||
-                enableAlipayOfficialTopUp ||
-                enableWechatPayOfficialTopUp) && (
+              {hasRegularTopUp && (
                 <Row gutter={12}>
                   <Col xs={24} sm={24} md={24} lg={10} xl={10}>
                     <Form.InputNumber
@@ -419,12 +416,7 @@ const RechargeCard = ({
                 </Row>
               )}
 
-              {(enableOnlineTopUp ||
-                enableStripeTopUp ||
-                enableWaffoTopUp ||
-                enableWaffoPancakeTopUp ||
-                enableAlipayOfficialTopUp ||
-                enableWechatPayOfficialTopUp) && (
+              {hasRegularTopUp && (
                 <Form.Slot
                   label={
                     <div className='flex items-center gap-2'>
