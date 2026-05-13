@@ -1,14 +1,20 @@
 package model
 
 import (
+	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
 const userRankingDefaultLimit = 20
+
+var adminAddQuotaContentPattern = regexp.MustCompile(`管理员增加用户额度\s*[^0-9]*([0-9]+(?:\.[0-9]+)?)`)
 
 type UserRankingTotal struct {
 	UserId     int    `json:"user_id"`
@@ -44,7 +50,7 @@ func GetUserRechargeRankingTotals(startTime int64, endTime int64, limit int) ([]
 	if err := mergeUserRankingRows(aggregates, getRedeemedCodeRankingRows(startTime, endTime)); err != nil {
 		return nil, 0, err
 	}
-	if err := mergeUserRankingRows(aggregates, getAdminAddedQuotaRankingRows(startTime, endTime)); err != nil {
+	if err := mergeAdminAddedQuotaRankingRows(aggregates, startTime, endTime); err != nil {
 		return nil, 0, err
 	}
 
@@ -116,14 +122,6 @@ func getRedeemedCodeRankingRows(startTime int64, endTime int64) *gorm.DB {
 	return applyUnixTimeRange(query, "redemptions.redeemed_time", startTime, endTime)
 }
 
-func getAdminAddedQuotaRankingRows(startTime int64, endTime int64) *gorm.DB {
-	query := LOG_DB.Table("logs").
-		Select("logs.user_id, sum(logs.quota) as total_quota").
-		Where("logs.type = ? AND logs.quota > 0 AND logs.content LIKE ?", LogTypeManage, "管理员增加用户额度%").
-		Group("logs.user_id")
-	return applyUnixTimeRange(query, "logs.created_at", startTime, endTime)
-}
-
 func mergeUserRankingRows(aggregates map[int]*UserRankingTotal, query *gorm.DB) error {
 	var rows []UserRankingTotal
 	if err := query.Scan(&rows).Error; err != nil {
@@ -143,6 +141,39 @@ func mergeUserRankingRows(aggregates map[int]*UserRankingTotal, query *gorm.DB) 
 		if item.Username == "" && row.Username != "" {
 			item.Username = row.Username
 		}
+	}
+	return nil
+}
+
+func mergeAdminAddedQuotaRankingRows(aggregates map[int]*UserRankingTotal, startTime int64, endTime int64) error {
+	var logs []Log
+	query := LOG_DB.
+		Where("type = ? AND content LIKE ?", LogTypeManage, "管理员增加用户额度%")
+	query = applyUnixTimeRange(query, "created_at", startTime, endTime)
+	if err := query.Find(&logs).Error; err != nil {
+		return err
+	}
+	for _, log := range logs {
+		if log.UserId <= 0 {
+			continue
+		}
+		quota := int64(log.Quota)
+		if quota <= 0 {
+			quota = parseAdminAddedQuotaFromContent(log.Content)
+		}
+		if quota <= 0 {
+			continue
+		}
+		item := aggregates[log.UserId]
+		if item == nil {
+			aggregates[log.UserId] = &UserRankingTotal{
+				UserId:     log.UserId,
+				Username:   usernameForRanking(log.UserId),
+				TotalQuota: quota,
+			}
+			continue
+		}
+		item.TotalQuota += quota
 	}
 	return nil
 }
@@ -205,6 +236,40 @@ func topUpCreditedQuota(topUp TopUp) int64 {
 	default:
 		return decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).IntPart()
 	}
+}
+
+func parseAdminAddedQuotaFromContent(content string) int64 {
+	if !strings.HasPrefix(content, "管理员增加用户额度") {
+		return 0
+	}
+	matches := adminAddQuotaContentPattern.FindStringSubmatch(content)
+	if len(matches) < 2 {
+		return 0
+	}
+	value, err := strconv.ParseFloat(matches[1], 64)
+	if err != nil || value <= 0 {
+		return 0
+	}
+	if strings.Contains(content, "点额度") {
+		return decimal.NewFromFloat(value).IntPart()
+	}
+
+	multiplier := common.QuotaPerUnit
+	customSymbol := operation_setting.GetGeneralSetting().CustomCurrencySymbol
+	switch {
+	case strings.Contains(content, "¥"):
+		if operation_setting.USDExchangeRate <= 0 {
+			return 0
+		}
+		multiplier = common.QuotaPerUnit / operation_setting.USDExchangeRate
+	case strings.Contains(content, "¤"), customSymbol != "" && strings.Contains(content, customSymbol):
+		rate := operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate
+		if rate <= 0 {
+			return 0
+		}
+		multiplier = common.QuotaPerUnit / rate
+	}
+	return decimal.NewFromFloat(value).Mul(decimal.NewFromFloat(multiplier)).IntPart()
 }
 
 func usernameForRanking(userId int) string {
