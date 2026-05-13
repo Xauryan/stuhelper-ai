@@ -42,6 +42,11 @@ StuHelper AI 本地任务决定修改它们：
   和手机网站支付；微信支付使用 Native 扫码和 H5 跳转。该功能是 StuHelper AI
   本地基线，维护细节见 `docs/official-cn-payments.md`，同步上游或导入外部
   PR 时不得替换为易支付或支付宝当面付实现。
+- 邀请奖励支持按被邀请用户充值和订阅支付金额返佣。全局开关、全局比例和最大
+  返佣次数在 classic 运维设置中配置；管理员可在 classic 用户编辑页为单个
+  邀请人设置 `referral_commission_percent` 覆盖比例。返佣必须随支付完成事务
+  一起写入，并通过 `source_type + source_id + invitee_id + payment_method`
+  幂等，避免重复 webhook 或订阅订单重复回调造成重复入账。
 - 项目身份必须保持为 `StuHelper AI`；组织、作者、联系方式、包名、Docker、
   workflow 和元数据身份必须保持为 `Xauryan`。
 

@@ -36,6 +36,9 @@ export default function SettingsCreditLimit(props) {
     PreConsumedQuota: '',
     QuotaForInviter: '',
     QuotaForInvitee: '',
+    ReferralCommissionEnabled: false,
+    ReferralCommissionPercent: '10',
+    ReferralCommissionMaxRecharges: '0',
     'quota_setting.enable_free_model_pre_consume': true,
   });
   const refForm = useRef();
@@ -59,11 +62,9 @@ export default function SettingsCreditLimit(props) {
     setLoading(true);
     Promise.all(requestQueue)
       .then((res) => {
-        if (requestQueue.length === 1) {
-          if (res.includes(undefined)) return;
-        } else if (requestQueue.length > 1) {
-          if (res.includes(undefined))
-            return showError(t('部分保存失败，请重试'));
+        const failedResponse = res.find((item) => !item?.data?.success);
+        if (failedResponse) {
+          return showError(failedResponse.data?.message || t('保存失败，请重试'));
         }
         showSuccess(t('保存成功'));
         props.refresh();
@@ -148,8 +149,8 @@ export default function SettingsCreditLimit(props) {
                 />
               </Col>
             </Row>
-            <Row>
-              <Col xs={24} sm={12} md={8} lg={8} xl={6}>
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.InputNumber
                   label={t('新用户使用邀请码奖励额度')}
                   field={'QuotaForInvitee'}
@@ -166,9 +167,60 @@ export default function SettingsCreditLimit(props) {
                   }
                 />
               </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  label={t('返佣比例')}
+                  field={'ReferralCommissionPercent'}
+                  step={0.1}
+                  precision={2}
+                  min={0}
+                  max={100}
+                  suffix={'%'}
+                  extraText={t('被邀请用户充值或购买订阅时，邀请人获得的奖励比例')}
+                  placeholder={t('例如：10')}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      ReferralCommissionPercent: String(value ?? 0),
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  label={t('最大返佣次数')}
+                  field={'ReferralCommissionMaxRecharges'}
+                  step={1}
+                  min={0}
+                  precision={0}
+                  extraText={t('被邀请用户前 N 次充值或订阅给予返佣，0 表示不限次数')}
+                  placeholder={t('0 表示不限')}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      ReferralCommissionMaxRecharges: String(value ?? 0),
+                    })
+                  }
+                />
+              </Col>
             </Row>
-            <Row>
-              <Col>
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={12} lg={12} xl={12}>
+                <Form.Switch
+                  label={t('启用充值返佣')}
+                  field={'ReferralCommissionEnabled'}
+                  extraText={t(
+                    '开启后，邀请奖励改为按被邀请用户的充值和订阅支付金额返佣',
+                  )}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      ReferralCommissionEnabled: value,
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={12} lg={12} xl={12}>
                 <Form.Switch
                   label={t('对免费模型启用预消耗')}
                   field={'quota_setting.enable_free_model_pre_consume'}

@@ -108,6 +108,69 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 	})
 }
 
+func CompleteEpayTopUp(tradeNo string, actualPaymentMethod string) (*TopUp, int, *ReferralCommissionCreditResult, bool, error) {
+	if tradeNo == "" {
+		return nil, 0, nil, false, errors.New("未提供支付单号")
+	}
+
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	var completed bool
+	var quotaToAdd int
+	var topUp TopUp
+	var referralResult *ReferralCommissionCreditResult
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(&topUp).Error; err != nil {
+			return ErrTopUpNotFound
+		}
+		if topUp.PaymentProvider != PaymentProviderEpay {
+			return ErrPaymentMethodMismatch
+		}
+		if topUp.Status == common.TopUpStatusSuccess {
+			return nil
+		}
+		if topUp.Status != common.TopUpStatusPending {
+			return ErrTopUpStatusInvalid
+		}
+		if actualPaymentMethod != "" && topUp.PaymentMethod != actualPaymentMethod {
+			topUp.PaymentMethod = actualPaymentMethod
+		}
+
+		dAmount := decimal.NewFromInt(topUp.Amount)
+		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+		quotaToAdd = int(dAmount.Mul(dQuotaPerUnit).IntPart())
+		if quotaToAdd <= 0 {
+			return errors.New("无效的充值额度")
+		}
+
+		topUp.Status = common.TopUpStatusSuccess
+		topUp.CompleteTime = common.GetTimestamp()
+		if err := tx.Save(&topUp).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+			return err
+		}
+		var err error
+		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, topUp.PaymentMethod, ReferralCommissionSourceTopUp, topUp.Id)
+		if err != nil {
+			return err
+		}
+		completed = true
+		return nil
+	})
+	if err != nil {
+		if topUp.Id != 0 {
+			return &topUp, quotaToAdd, referralResult, completed, err
+		}
+		return nil, 0, nil, false, err
+	}
+	return &topUp, quotaToAdd, referralResult, completed, nil
+}
+
 func Recharge(referenceId string, customerId string, callerIp string) (err error) {
 	if referenceId == "" {
 		return errors.New("未提供支付单号")
@@ -115,6 +178,7 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 
 	var quota float64
 	topUp := &TopUp{}
+	var referralResult *ReferralCommissionCreditResult
 
 	refCol := "`trade_no`"
 	if common.UsingPostgreSQL {
@@ -148,6 +212,11 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 			return err
 		}
 
+		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, PaymentMethodStripe, ReferralCommissionSourceTopUp, topUp.Id)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 
@@ -157,6 +226,7 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 	}
 
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(int(quota)), topUp.Amount), callerIp, topUp.PaymentMethod, PaymentMethodStripe)
+	RecordReferralCommissionLog(referralResult)
 
 	return nil
 }
@@ -333,6 +403,9 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	var quotaToAdd int
 	var payMoney float64
 	var paymentMethod string
+	var topUpId int
+	var completed bool
+	var referralResult *ReferralCommissionCreditResult
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &TopUp{}
@@ -380,6 +453,14 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		userId = topUp.UserId
 		payMoney = topUp.Money
 		paymentMethod = topUp.PaymentMethod
+		topUpId = topUp.Id
+		completed = true
+
+		var referralErr error
+		referralResult, referralErr = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, "manual", ReferralCommissionSourceTopUp, topUp.Id)
+		if referralErr != nil {
+			return referralErr
+		}
 		return nil
 	})
 
@@ -387,8 +468,12 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		return err
 	}
 
-	// 事务外记录日志，避免阻塞
-	RecordTopupLog(userId, fmt.Sprintf("管理员补单成功，充值金额: %v，支付金额：%f", logger.FormatQuota(quotaToAdd), payMoney), callerIp, paymentMethod, "admin")
+	if completed {
+		// 事务外记录日志，避免阻塞
+		RecordTopupLog(userId, fmt.Sprintf("管理员补单成功，充值金额: %v，支付金额：%f", logger.FormatQuota(quotaToAdd), payMoney), callerIp, paymentMethod, "admin")
+		common.SysLog(fmt.Sprintf("管理员补单成功 topup_id=%d", topUpId))
+		RecordReferralCommissionLog(referralResult)
+	}
 	return nil
 }
 func RechargeCreem(referenceId string, customerEmail string, customerName string, callerIp string) (err error) {
@@ -398,6 +483,7 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 
 	var quota int64
 	topUp := &TopUp{}
+	var referralResult *ReferralCommissionCreditResult
 
 	refCol := "`trade_no`"
 	if common.UsingPostgreSQL {
@@ -453,6 +539,11 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 			return err
 		}
 
+		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, PaymentMethodCreem, ReferralCommissionSourceTopUp, topUp.Id)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 
@@ -462,6 +553,7 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 	}
 
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用Creem充值成功，充值额度: %v，支付金额：%.2f", quota, topUp.Money), callerIp, topUp.PaymentMethod, PaymentMethodCreem)
+	RecordReferralCommissionLog(referralResult)
 
 	return nil
 }
@@ -473,6 +565,7 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 
 	var quotaToAdd int
 	topUp := &TopUp{}
+	var referralResult *ReferralCommissionCreditResult
 
 	refCol := "`trade_no`"
 	if common.UsingPostgreSQL {
@@ -514,6 +607,11 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 			return err
 		}
 
+		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, PaymentMethodWaffo, ReferralCommissionSourceTopUp, topUp.Id)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 
@@ -524,6 +622,7 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 
 	if quotaToAdd > 0 {
 		RecordTopupLog(topUp.UserId, fmt.Sprintf("Waffo充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money), callerIp, topUp.PaymentMethod, PaymentMethodWaffo)
+		RecordReferralCommissionLog(referralResult)
 	}
 
 	return nil
@@ -536,6 +635,7 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 
 	var quotaToAdd int
 	topUp := &TopUp{}
+	var referralResult *ReferralCommissionCreditResult
 
 	refCol := "`trade_no`"
 	if common.UsingPostgreSQL {
@@ -575,6 +675,11 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 			return err
 		}
 
+		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, PaymentMethodWaffoPancake, ReferralCommissionSourceTopUp, topUp.Id)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 
@@ -585,6 +690,7 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 
 	if quotaToAdd > 0 {
 		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("Waffo Pancake充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money))
+		RecordReferralCommissionLog(referralResult)
 	}
 
 	return nil
@@ -597,6 +703,7 @@ func RechargeOfficialPayment(tradeNo string, expectedPaymentProvider string, act
 
 	var quotaToAdd int
 	topUp := &TopUp{}
+	var referralResult *ReferralCommissionCreditResult
 
 	refCol := "`trade_no`"
 	if common.UsingPostgreSQL {
@@ -647,6 +754,15 @@ func RechargeOfficialPayment(tradeNo string, expectedPaymentProvider string, act
 			return err
 		}
 
+		commissionPaymentMethod := actualPaymentMethod
+		if commissionPaymentMethod == "" {
+			commissionPaymentMethod = topUp.PaymentMethod
+		}
+		referralResult, err = CreditReferralCommissionTx(tx, topUp.UserId, topUp.Money, commissionPaymentMethod, ReferralCommissionSourceTopUp, topUp.Id)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 
@@ -657,6 +773,7 @@ func RechargeOfficialPayment(tradeNo string, expectedPaymentProvider string, act
 
 	if quotaToAdd > 0 {
 		RecordTopupLog(topUp.UserId, fmt.Sprintf("官方支付充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money), callerIp, topUp.PaymentMethod, expectedPaymentProvider)
+		RecordReferralCommissionLog(referralResult)
 	}
 
 	return nil
