@@ -46,6 +46,8 @@ type User struct {
 	AffQuota                  int            `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
 	AffHistoryQuota           int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
 	InviterId                 int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	InviterRewardQuota        int            `json:"inviter_reward_quota" gorm:"type:int;default:0;column:inviter_reward_quota"`
+	InviterRewardUnlocked     bool           `json:"inviter_reward_unlocked" gorm:"default:false;column:inviter_reward_unlocked"`
 	ReferralCommissionPercent *float64       `json:"referral_commission_percent" gorm:"type:decimal(5,2);column:referral_commission_percent"`
 	DeletedAt                 gorm.DeletedAt `gorm:"index"`
 	LinuxDOId                 string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
@@ -337,8 +339,17 @@ func inviteUser(inviterId int) (err error) {
 }
 
 func recordUserInvitation(inviterId int, quotaForInviter int) (err error) {
-	user, err := GetUserById(inviterId, true)
-	if err != nil {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		return recordUserInvitationTx(tx, inviterId, quotaForInviter)
+	})
+}
+
+func recordUserInvitationTx(tx *gorm.DB, inviterId int, quotaForInviter int) error {
+	if tx == nil {
+		return errors.New("tx is nil")
+	}
+	var user User
+	if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", inviterId).First(&user).Error; err != nil {
 		return err
 	}
 	user.AffCount++
@@ -346,7 +357,7 @@ func recordUserInvitation(inviterId int, quotaForInviter int) (err error) {
 		user.AffQuota += quotaForInviter
 		user.AffHistoryQuota += quotaForInviter
 	}
-	return DB.Save(user).Error
+	return tx.Save(&user).Error
 }
 
 func (user *User) TransferAffQuotaToQuota(quota int) error {
@@ -429,18 +440,7 @@ func (user *User) Insert(inviterId int) error {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
 	}
 	if inviterId != 0 {
-		if common.ReferralCommissionEnabled {
-			_ = recordUserInvitation(inviterId, 0)
-		} else {
-			if common.QuotaForInvitee > 0 {
-				_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
-				RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
-			}
-			if common.QuotaForInviter > 0 {
-				RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			}
-			_ = recordUserInvitation(inviterId, common.QuotaForInviter)
-		}
+		FinalizeUserInvitation(user.Id, inviterId)
 	}
 	return nil
 }
@@ -493,18 +493,7 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
 	}
 	if inviterId != 0 {
-		if common.ReferralCommissionEnabled {
-			_ = recordUserInvitation(inviterId, 0)
-		} else {
-			if common.QuotaForInvitee > 0 {
-				_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
-				RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
-			}
-			if common.QuotaForInviter > 0 {
-				RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			}
-			_ = recordUserInvitation(inviterId, common.QuotaForInviter)
-		}
+		FinalizeUserInvitation(user.Id, inviterId)
 	}
 }
 

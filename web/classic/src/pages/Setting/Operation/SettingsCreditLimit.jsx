@@ -36,6 +36,7 @@ export default function SettingsCreditLimit(props) {
     PreConsumedQuota: '',
     QuotaForInviter: '',
     QuotaForInvitee: '',
+    InviterRewardAfterPaymentEnabled: false,
     ReferralCommissionEnabled: false,
     ReferralCommissionPercent: '10',
     ReferralCommissionMaxRecharges: '0',
@@ -148,6 +149,21 @@ export default function SettingsCreditLimit(props) {
                   }
                 />
               </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  label={t('邀请新用户奖励首充后到账')}
+                  field={'InviterRewardAfterPaymentEnabled'}
+                  extraText={t(
+                    '开启后，邀请人一次性奖励会在被邀请用户首次充值或购买订阅成功后解锁',
+                  )}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      InviterRewardAfterPaymentEnabled: value,
+                    })
+                  }
+                />
+              </Col>
             </Row>
             <Row gutter={16}>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
@@ -210,7 +226,7 @@ export default function SettingsCreditLimit(props) {
                   label={t('启用充值返佣')}
                   field={'ReferralCommissionEnabled'}
                   extraText={t(
-                    '开启后，邀请奖励改为按被邀请用户的充值和订阅支付金额返佣',
+                    '开启后，邀请人会额外按被邀请用户的充值和订阅支付金额获得返佣',
                   )}
                   onChange={(value) =>
                     setInputs({
