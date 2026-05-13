@@ -53,6 +53,7 @@ import {
   getOAuthProviderIcon,
 } from '../../../../helpers';
 import TwoFASetting from '../components/TwoFASetting';
+import { isAccountBindingVisible } from './AccountManagement.visibility';
 
 const AccountManagement = ({
   t,
@@ -112,7 +113,9 @@ const AccountManagement = ({
         showError(res.data.message || t('获取绑定信息失败'));
       }
     } catch (error) {
-      showError(error.response?.data?.message || error.message || t('获取绑定信息失败'));
+      showError(
+        error.response?.data?.message || error.message || t('获取绑定信息失败'),
+      );
     }
   };
 
@@ -126,7 +129,9 @@ const AccountManagement = ({
       onOk: async () => {
         setCustomOAuthLoading((prev) => ({ ...prev, [providerId]: true }));
         try {
-          const res = await API.delete(`/api/user/oauth/bindings/${providerId}`);
+          const res = await API.delete(
+            `/api/user/oauth/bindings/${providerId}`,
+          );
           if (res.data.success) {
             showSuccess(t('解绑成功'));
             await loadCustomOAuthBindings();
@@ -134,7 +139,9 @@ const AccountManagement = ({
             showError(res.data.message);
           }
         } catch (error) {
-          showError(error.response?.data?.message || error.message || t('操作失败'));
+          showError(
+            error.response?.data?.message || error.message || t('操作失败'),
+          );
         } finally {
           setCustomOAuthLoading((prev) => ({ ...prev, [providerId]: false }));
         }
@@ -150,13 +157,17 @@ const AccountManagement = ({
   // Check if custom OAuth provider is bound
   const isCustomOAuthBound = (providerId) => {
     const normalizedId = Number(providerId);
-    return customOAuthBindings.some((b) => Number(b.provider_id) === normalizedId);
+    return customOAuthBindings.some(
+      (b) => Number(b.provider_id) === normalizedId,
+    );
   };
 
   // Get binding info for a provider
   const getCustomOAuthBinding = (providerId) => {
     const normalizedId = Number(providerId);
-    return customOAuthBindings.find((b) => Number(b.provider_id) === normalizedId);
+    return customOAuthBindings.find(
+      (b) => Number(b.provider_id) === normalizedId,
+    );
   };
 
   React.useEffect(() => {
@@ -236,196 +247,191 @@ const AccountManagement = ({
               </Card>
 
               {/* 微信绑定 */}
-              <Card className='!rounded-xl'>
-                <div className='flex items-center justify-between gap-3'>
-                  <div className='flex items-center flex-1 min-w-0'>
-                    <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
-                      <SiWechat
-                        size={20}
-                        className='text-slate-600 dark:text-slate-300'
-                      />
-                    </div>
-                    <div className='flex-1 min-w-0'>
-                      <div className='font-medium text-gray-900'>
-                        {t('微信')}
+              {isAccountBindingVisible(status, 'wechat') && (
+                <Card className='!rounded-xl'>
+                  <div className='flex items-center justify-between gap-3'>
+                    <div className='flex items-center flex-1 min-w-0'>
+                      <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
+                        <SiWechat
+                          size={20}
+                          className='text-slate-600 dark:text-slate-300'
+                        />
                       </div>
-                      <div className='text-sm text-gray-500 truncate'>
-                        {!status.wechat_login
-                          ? t('未启用')
-                          : isBound(userState.user?.wechat_id)
+                      <div className='flex-1 min-w-0'>
+                        <div className='font-medium text-gray-900'>
+                          {t('微信')}
+                        </div>
+                        <div className='text-sm text-gray-500 truncate'>
+                          {isBound(userState.user?.wechat_id)
                             ? t('已绑定')
                             : t('未绑定')}
+                        </div>
                       </div>
                     </div>
+                    <div className='flex-shrink-0'>
+                      <Button
+                        type='primary'
+                        theme='outline'
+                        size='small'
+                        onClick={() => setShowWeChatBindModal(true)}
+                      >
+                        {isBound(userState.user?.wechat_id)
+                          ? t('修改绑定')
+                          : t('绑定')}
+                      </Button>
+                    </div>
                   </div>
-                  <div className='flex-shrink-0'>
-                    <Button
-                      type='primary'
-                      theme='outline'
-                      size='small'
-                      disabled={!status.wechat_login}
-                      onClick={() => setShowWeChatBindModal(true)}
-                    >
-                      {isBound(userState.user?.wechat_id)
-                        ? t('修改绑定')
-                        : status.wechat_login
-                          ? t('绑定')
-                          : t('未启用')}
-                    </Button>
-                  </div>
-                </div>
-              </Card>
+                </Card>
+              )}
 
               {/* GitHub绑定 */}
-              <Card className='!rounded-xl'>
-                <div className='flex items-center justify-between gap-3'>
-                  <div className='flex items-center flex-1 min-w-0'>
-                    <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
-                      <IconGithubLogo
-                        size='default'
-                        className='text-slate-600 dark:text-slate-300'
-                      />
+              {isAccountBindingVisible(status, 'github') && (
+                <Card className='!rounded-xl'>
+                  <div className='flex items-center justify-between gap-3'>
+                    <div className='flex items-center flex-1 min-w-0'>
+                      <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
+                        <IconGithubLogo
+                          size='default'
+                          className='text-slate-600 dark:text-slate-300'
+                        />
+                      </div>
+                      <div className='flex-1 min-w-0'>
+                        <div className='font-medium text-gray-900'>
+                          {t('GitHub')}
+                        </div>
+                        <div className='text-sm text-gray-500 truncate'>
+                          {renderAccountInfo(
+                            userState.user?.github_id,
+                            t('GitHub ID'),
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className='flex-1 min-w-0'>
-                      <div className='font-medium text-gray-900'>
-                        {t('GitHub')}
-                      </div>
-                      <div className='text-sm text-gray-500 truncate'>
-                        {renderAccountInfo(
-                          userState.user?.github_id,
-                          t('GitHub ID'),
-                        )}
-                      </div>
+                    <div className='flex-shrink-0'>
+                      <Button
+                        type='primary'
+                        theme='outline'
+                        size='small'
+                        onClick={() =>
+                          onGitHubOAuthClicked(status.github_client_id)
+                        }
+                        disabled={isBound(userState.user?.github_id)}
+                      >
+                        {t('绑定')}
+                      </Button>
                     </div>
                   </div>
-                  <div className='flex-shrink-0'>
-                    <Button
-                      type='primary'
-                      theme='outline'
-                      size='small'
-                      onClick={() =>
-                        onGitHubOAuthClicked(status.github_client_id)
-                      }
-                      disabled={
-                        isBound(userState.user?.github_id) ||
-                        !status.github_oauth
-                      }
-                    >
-                      {status.github_oauth ? t('绑定') : t('未启用')}
-                    </Button>
-                  </div>
-                </div>
-              </Card>
+                </Card>
+              )}
 
               {/* Discord绑定 */}
-              <Card className='!rounded-xl'>
-                <div className='flex items-center justify-between gap-3'>
-                  <div className='flex items-center flex-1 min-w-0'>
-                    <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
-                      <SiDiscord
-                        size={20}
-                        className='text-slate-600 dark:text-slate-300'
-                      />
+              {isAccountBindingVisible(status, 'discord') && (
+                <Card className='!rounded-xl'>
+                  <div className='flex items-center justify-between gap-3'>
+                    <div className='flex items-center flex-1 min-w-0'>
+                      <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
+                        <SiDiscord
+                          size={20}
+                          className='text-slate-600 dark:text-slate-300'
+                        />
+                      </div>
+                      <div className='flex-1 min-w-0'>
+                        <div className='font-medium text-gray-900'>
+                          {t('Discord')}
+                        </div>
+                        <div className='text-sm text-gray-500 truncate'>
+                          {renderAccountInfo(
+                            userState.user?.discord_id,
+                            t('Discord ID'),
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className='flex-1 min-w-0'>
-                      <div className='font-medium text-gray-900'>
-                        {t('Discord')}
-                      </div>
-                      <div className='text-sm text-gray-500 truncate'>
-                        {renderAccountInfo(
-                          userState.user?.discord_id,
-                          t('Discord ID'),
-                        )}
-                      </div>
+                    <div className='flex-shrink-0'>
+                      <Button
+                        type='primary'
+                        theme='outline'
+                        size='small'
+                        onClick={() =>
+                          onDiscordOAuthClicked(status.discord_client_id)
+                        }
+                        disabled={isBound(userState.user?.discord_id)}
+                      >
+                        {t('绑定')}
+                      </Button>
                     </div>
                   </div>
-                  <div className='flex-shrink-0'>
-                    <Button
-                      type='primary'
-                      theme='outline'
-                      size='small'
-                      onClick={() =>
-                        onDiscordOAuthClicked(status.discord_client_id)
-                      }
-                      disabled={
-                        isBound(userState.user?.discord_id) ||
-                        !status.discord_oauth
-                      }
-                    >
-                      {status.discord_oauth ? t('绑定') : t('未启用')}
-                    </Button>
-                  </div>
-                </div>
-              </Card>
+                </Card>
+              )}
 
               {/* OIDC绑定 */}
-              <Card className='!rounded-xl'>
-                <div className='flex items-center justify-between gap-3'>
-                  <div className='flex items-center flex-1 min-w-0'>
-                    <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
-                      <IconShield
-                        size='default'
-                        className='text-slate-600 dark:text-slate-300'
-                      />
+              {isAccountBindingVisible(status, 'oidc') && (
+                <Card className='!rounded-xl'>
+                  <div className='flex items-center justify-between gap-3'>
+                    <div className='flex items-center flex-1 min-w-0'>
+                      <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
+                        <IconShield
+                          size='default'
+                          className='text-slate-600 dark:text-slate-300'
+                        />
+                      </div>
+                      <div className='flex-1 min-w-0'>
+                        <div className='font-medium text-gray-900'>
+                          {t('OIDC')}
+                        </div>
+                        <div className='text-sm text-gray-500 truncate'>
+                          {renderAccountInfo(
+                            userState.user?.oidc_id,
+                            t('OIDC ID'),
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className='flex-1 min-w-0'>
-                      <div className='font-medium text-gray-900'>
-                        {t('OIDC')}
-                      </div>
-                      <div className='text-sm text-gray-500 truncate'>
-                        {renderAccountInfo(
-                          userState.user?.oidc_id,
-                          t('OIDC ID'),
-                        )}
-                      </div>
+                    <div className='flex-shrink-0'>
+                      <Button
+                        type='primary'
+                        theme='outline'
+                        size='small'
+                        onClick={() =>
+                          onOIDCClicked(
+                            status.oidc_authorization_endpoint,
+                            status.oidc_client_id,
+                          )
+                        }
+                        disabled={isBound(userState.user?.oidc_id)}
+                      >
+                        {t('绑定')}
+                      </Button>
                     </div>
                   </div>
-                  <div className='flex-shrink-0'>
-                    <Button
-                      type='primary'
-                      theme='outline'
-                      size='small'
-                      onClick={() =>
-                        onOIDCClicked(
-                          status.oidc_authorization_endpoint,
-                          status.oidc_client_id,
-                        )
-                      }
-                      disabled={
-                        isBound(userState.user?.oidc_id) || !status.oidc_enabled
-                      }
-                    >
-                      {status.oidc_enabled ? t('绑定') : t('未启用')}
-                    </Button>
-                  </div>
-                </div>
-              </Card>
+                </Card>
+              )}
 
               {/* Telegram绑定 */}
-              <Card className='!rounded-xl'>
-                <div className='flex items-center justify-between gap-3'>
-                  <div className='flex items-center flex-1 min-w-0'>
-                    <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
-                      <SiTelegram
-                        size={20}
-                        className='text-slate-600 dark:text-slate-300'
-                      />
-                    </div>
-                    <div className='flex-1 min-w-0'>
-                      <div className='font-medium text-gray-900'>
-                        {t('Telegram')}
+              {isAccountBindingVisible(status, 'telegram') && (
+                <Card className='!rounded-xl'>
+                  <div className='flex items-center justify-between gap-3'>
+                    <div className='flex items-center flex-1 min-w-0'>
+                      <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
+                        <SiTelegram
+                          size={20}
+                          className='text-slate-600 dark:text-slate-300'
+                        />
                       </div>
-                      <div className='text-sm text-gray-500 truncate'>
-                        {renderAccountInfo(
-                          userState.user?.telegram_id,
-                          t('Telegram ID'),
-                        )}
+                      <div className='flex-1 min-w-0'>
+                        <div className='font-medium text-gray-900'>
+                          {t('Telegram')}
+                        </div>
+                        <div className='text-sm text-gray-500 truncate'>
+                          {renderAccountInfo(
+                            userState.user?.telegram_id,
+                            t('Telegram ID'),
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className='flex-shrink-0'>
-                    {status.telegram_oauth ? (
-                      isBound(userState.user?.telegram_id) ? (
+                    <div className='flex-shrink-0'>
+                      {isBound(userState.user?.telegram_id) ? (
                         <Button
                           disabled
                           size='small'
@@ -443,20 +449,11 @@ const AccountManagement = ({
                         >
                           {t('绑定')}
                         </Button>
-                      )
-                    ) : (
-                      <Button
-                        disabled
-                        size='small'
-                        type='primary'
-                        theme='outline'
-                      >
-                        {t('未启用')}
-                      </Button>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              </Card>
+                </Card>
+              )}
               <Modal
                 title={t('绑定 Telegram')}
                 visible={showTelegramBindModal}
@@ -477,45 +474,44 @@ const AccountManagement = ({
               </Modal>
 
               {/* LinuxDO绑定 */}
-              <Card className='!rounded-xl'>
-                <div className='flex items-center justify-between gap-3'>
-                  <div className='flex items-center flex-1 min-w-0'>
-                    <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
-                      <SiLinux
-                        size={20}
-                        className='text-slate-600 dark:text-slate-300'
-                      />
+              {isAccountBindingVisible(status, 'linuxdo') && (
+                <Card className='!rounded-xl'>
+                  <div className='flex items-center justify-between gap-3'>
+                    <div className='flex items-center flex-1 min-w-0'>
+                      <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
+                        <SiLinux
+                          size={20}
+                          className='text-slate-600 dark:text-slate-300'
+                        />
+                      </div>
+                      <div className='flex-1 min-w-0'>
+                        <div className='font-medium text-gray-900'>
+                          {t('LinuxDO')}
+                        </div>
+                        <div className='text-sm text-gray-500 truncate'>
+                          {renderAccountInfo(
+                            userState.user?.linux_do_id,
+                            t('LinuxDO ID'),
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className='flex-1 min-w-0'>
-                      <div className='font-medium text-gray-900'>
-                        {t('LinuxDO')}
-                      </div>
-                      <div className='text-sm text-gray-500 truncate'>
-                        {renderAccountInfo(
-                          userState.user?.linux_do_id,
-                          t('LinuxDO ID'),
-                        )}
-                      </div>
+                    <div className='flex-shrink-0'>
+                      <Button
+                        type='primary'
+                        theme='outline'
+                        size='small'
+                        onClick={() =>
+                          onLinuxDOOAuthClicked(status.linuxdo_client_id)
+                        }
+                        disabled={isBound(userState.user?.linux_do_id)}
+                      >
+                        {t('绑定')}
+                      </Button>
                     </div>
                   </div>
-                  <div className='flex-shrink-0'>
-                    <Button
-                      type='primary'
-                      theme='outline'
-                      size='small'
-                      onClick={() =>
-                        onLinuxDOOAuthClicked(status.linuxdo_client_id)
-                      }
-                      disabled={
-                        isBound(userState.user?.linux_do_id) ||
-                        !status.linuxdo_oauth
-                      }
-                    >
-                      {status.linuxdo_oauth ? t('绑定') : t('未启用')}
-                    </Button>
-                  </div>
-                </div>
-              </Card>
+                </Card>
+              )}
 
               {/* 自定义 OAuth 提供商绑定 */}
               {status.custom_oauth_providers &&
@@ -554,7 +550,10 @@ const AccountManagement = ({
                               size='small'
                               loading={customOAuthLoading[provider.id]}
                               onClick={() =>
-                                handleUnbindCustomOAuth(provider.id, provider.name)
+                                handleUnbindCustomOAuth(
+                                  provider.id,
+                                  provider.name,
+                                )
                               }
                             >
                               {t('解绑')}
