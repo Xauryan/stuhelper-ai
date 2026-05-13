@@ -57,6 +57,10 @@ StuHelper AI 本地任务决定修改它们：
   `transformWithEsbuild`。Docker/GitHub Actions 干净环境必须安装显式
   `esbuild` devDependency，否则 classic 构建会因为 Vite 无法解析 `esbuild`
   而失败；后续升级到 Oxc 转换前不要移除该依赖。
+- 前端构建目录必须使用 `go:embed all:` 嵌入。Vite/Rolldown 会生成
+  `_arrayReduce-*`、`_baseSlice-*` 等以下划线开头的 chunk；普通目录
+  `go:embed` 会排除这些文件，导致生产环境 `index.html` 引用的 `/assets/_*.js`
+  返回 404。
 
 只有在标识上游来源、上游 release 或导入的上游 PR 时，才允许引用原上游仓库。
 这些引用不得重新作为本分叉仓库的产品品牌、包身份、镜像名称、可见 UI 文案
