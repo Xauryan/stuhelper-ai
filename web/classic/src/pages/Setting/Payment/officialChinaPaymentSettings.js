@@ -37,6 +37,9 @@ export const officialChinaPaymentOptionKeys = [
 ];
 
 export function hasStoredOfficialChinaPaymentValue(options, key) {
+  if (sensitiveOfficialChinaPaymentFields.has(key)) {
+    return String(options?.[`${key}Configured`] || '').trim() === 'true';
+  }
   return String(options?.[key] || '').trim() !== '';
 }
 
@@ -54,7 +57,7 @@ export function hasSubmittedOrStoredOfficialChinaPaymentValue(
 export function normalizeOfficialChinaUnitPrice(value) {
   const price = Number(value);
   if (!Number.isFinite(price)) return '';
-  return price.toFixed(2);
+  return price.toFixed(3);
 }
 
 export function buildOfficialChinaPaymentOptions(values, options = {}) {
@@ -75,6 +78,9 @@ export function buildOfficialChinaPaymentOptions(values, options = {}) {
     .filter((item) => {
       if (!optionalRetainedOfficialChinaPaymentFields.has(item.key)) {
         return true;
+      }
+      if (sensitiveOfficialChinaPaymentFields.has(item.key)) {
+        return item.value.trim() !== '';
       }
       return (
         item.value.trim() !== '' ||

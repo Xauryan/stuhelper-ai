@@ -142,6 +142,16 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         !hasSubmittedOrStoredOfficialChinaPaymentValue(
           values,
           props.options,
+          'AlipayOfficialPrivateKey',
+        )
+      ) {
+        showError(t('请输入支付宝应用私钥'));
+        return;
+      }
+      if (
+        !hasSubmittedOrStoredOfficialChinaPaymentValue(
+          values,
+          props.options,
           'AlipayOfficialAlipayPublicKey',
         )
       ) {
@@ -171,6 +181,26 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         !String(values.WechatPayOfficialCertificateSerial || '').trim()
       ) {
         showError(t('请输入微信支付商户证书序列号'));
+        return;
+      }
+      if (
+        !hasSubmittedOrStoredOfficialChinaPaymentValue(
+          values,
+          props.options,
+          'WechatPayOfficialAPIv3Key',
+        )
+      ) {
+        showError(t('请输入微信支付 APIv3 密钥'));
+        return;
+      }
+      if (
+        !hasSubmittedOrStoredOfficialChinaPaymentValue(
+          values,
+          props.options,
+          'WechatPayOfficialPrivateKey',
+        )
+      ) {
+        showError(t('请输入微信支付商户私钥'));
         return;
       }
       if (
@@ -369,11 +399,11 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.InputNumber
                     field='AlipayOfficialUnitPrice'
-                    precision={2}
-                    step={0.01}
+                    precision={3}
+                    step={0.001}
                     label={t('充值价格（x元/美金）')}
                     min={0}
-                    extraText={t('支持两位小数，例如：7.23')}
+                    extraText={t('支持三位小数，例如：7.231')}
                   />
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
@@ -480,11 +510,11 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.InputNumber
                     field='WechatPayOfficialUnitPrice'
-                    precision={2}
-                    step={0.01}
+                    precision={3}
+                    step={0.001}
                     label={t('充值价格（x元/美金）')}
                     min={0}
-                    extraText={t('支持两位小数，例如：7.23')}
+                    extraText={t('支持三位小数，例如：7.231')}
                   />
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>

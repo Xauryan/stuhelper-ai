@@ -72,6 +72,7 @@ func buildCompletionRatioMetaValue(optionValues map[string]string) string {
 func GetOptions(c *gin.Context) {
 	var options []*model.Option
 	optionValues := make(map[string]string)
+	secretConfiguredOptions := make([]*model.Option, 0, 3)
 	common.OptionMapRWMutex.Lock()
 	for k, v := range common.OptionMap {
 		value := common.Interface2String(v)
@@ -81,6 +82,13 @@ func GetOptions(c *gin.Context) {
 			strings.HasSuffix(k, "secret") ||
 			strings.HasSuffix(k, "api_key")
 		if isSensitiveKey && !isVisiblePublicKeyOption(k) {
+			switch k {
+			case "AlipayOfficialPrivateKey", "WechatPayOfficialAPIv3Key", "WechatPayOfficialPrivateKey":
+				secretConfiguredOptions = append(secretConfiguredOptions, &model.Option{
+					Key:   k + "Configured",
+					Value: boolToString(strings.TrimSpace(value) != ""),
+				})
+			}
 			continue
 		}
 		options = append(options, &model.Option{
@@ -95,6 +103,7 @@ func GetOptions(c *gin.Context) {
 		}
 	}
 	common.OptionMapRWMutex.Unlock()
+	options = append(options, secretConfiguredOptions...)
 	options = append(options, &model.Option{
 		Key:   "CompletionRatioMeta",
 		Value: buildCompletionRatioMetaValue(optionValues),

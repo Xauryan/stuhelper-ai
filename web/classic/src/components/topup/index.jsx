@@ -159,6 +159,21 @@ const TopUp = () => {
     return getAmount(value);
   };
 
+  const getSelectedAmountPayment = () => {
+    if (payWay) {
+      return payWay;
+    }
+    return confirmPayMethods[0]?.type || '';
+  };
+
+  const requestCurrentAmount = async (value) => {
+    const payment = getSelectedAmountPayment();
+    if (payment) {
+      return requestAmountByPayment(payment, value);
+    }
+    return getAmount(value);
+  };
+
   const topUp = async () => {
     if (redemptionCode === '') {
       showInfo(t('请输入兑换码！'));
@@ -827,8 +842,17 @@ const TopUp = () => {
             setPresetAmounts(generatePresetAmounts(minTopUpValue));
           }
 
-          // 初始化显示实付金额
-          getAmount(minTopUpValue);
+          // 初始化显示实付金额，按当前可用的第一个支付方式计算。
+          if (payMethods.length > 0) {
+            setPayWay((current) => current || payMethods[0].type);
+            requestAmountByPayment(payMethods[0].type, minTopUpValue);
+          } else if (enableWaffoTopUp) {
+            getWaffoAmount(minTopUpValue);
+          } else if (enableWaffoPancakeTopUp) {
+            getWaffoPancakeAmount(minTopUpValue);
+          } else if (enableOnlineTopUp) {
+            getAmount(minTopUpValue);
+          }
         } catch (e) {
           setPayMethods([]);
         }
@@ -1007,11 +1031,7 @@ const TopUp = () => {
   const selectPresetAmount = (preset) => {
     setTopUpCount(preset.value);
     setSelectedPreset(preset.value);
-
-    // 计算实际支付金额，考虑折扣
-    const discount = preset.discount || topupInfo.discount[preset.value] || 1.0;
-    const discountedAmount = preset.value * priceRatio * discount;
-    setAmount(discountedAmount);
+    requestCurrentAmount(preset.value);
   };
 
   // 格式化大数字显示
@@ -1138,7 +1158,7 @@ const TopUp = () => {
           topUpCount={topUpCount}
           minTopUp={minTopUp}
           renderQuotaWithAmount={renderQuotaWithAmount}
-          getAmount={getAmount}
+          getAmount={requestCurrentAmount}
           setTopUpCount={setTopUpCount}
           setSelectedPreset={setSelectedPreset}
           renderAmount={renderAmount}
