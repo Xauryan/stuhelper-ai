@@ -24,11 +24,49 @@ import path from 'path';
 import { codeInspectorPlugin } from 'code-inspector-plugin';
 const { vitePluginSemi } = pkg;
 
+const manualChunkGroups = {
+  'react-core': ['react', 'react-dom', 'react-router-dom'],
+  'semi-ui': ['@douyinfe/semi-icons', '@douyinfe/semi-ui'],
+  tools: ['axios', 'history', 'marked'],
+  'react-components': [
+    'react-dropzone',
+    'react-fireworks',
+    'react-telegram-login',
+    'react-toastify',
+    'react-turnstile',
+  ],
+  i18n: ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+};
+
+function manualChunks(id) {
+  if (!id.includes('node_modules')) {
+    return undefined;
+  }
+
+  for (const [chunkName, packages] of Object.entries(manualChunkGroups)) {
+    if (
+      packages.some(
+        (packageName) =>
+          id.includes(`/node_modules/${packageName}/`) ||
+          id.includes(`\\node_modules\\${packageName}\\`),
+      )
+    ) {
+      return chunkName;
+    }
+  }
+
+  return undefined;
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      roughjs: path.resolve(
+        __dirname,
+        './node_modules/@visactor/vrender-kits/node_modules/roughjs/bundled/rough.esm.js',
+      ),
     },
   },
   plugins: [
@@ -67,23 +105,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'react-core': ['react', 'react-dom', 'react-router-dom'],
-          'semi-ui': ['@douyinfe/semi-icons', '@douyinfe/semi-ui'],
-          tools: ['axios', 'history', 'marked'],
-          'react-components': [
-            'react-dropzone',
-            'react-fireworks',
-            'react-telegram-login',
-            'react-toastify',
-            'react-turnstile',
-          ],
-          i18n: [
-            'i18next',
-            'react-i18next',
-            'i18next-browser-languagedetector',
-          ],
-        },
+        manualChunks,
       },
     },
   },

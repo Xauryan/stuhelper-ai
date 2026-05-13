@@ -115,3 +115,22 @@ git log --oneline v1.0.0-rc.5..upstream/main
 - 备注：由于本地品牌、module path、classic 默认前端、classic 排行榜和 GHCR
   发布策略与上游不同，`git log --cherry-pick --right-only HEAD...upstream/main`
   仍可能列出上游提交；判断同步状态应以本节的语义覆盖记录为准。
+
+### 推送前合入 origin 依赖更新
+
+- 背景：推送到 `origin/main` 前，本地 `main` 比 `origin/main` 落后 2 个提交。
+- 合入方式：普通 merge `origin/main`，不 rebase，不强推，保留本地同步提交历史。
+- 合入提交：
+  - `d8bf61f4` chore(deps): bump the npm_and_yarn group across 2 directories with 4 updates
+  - `1b18758a` Merge pull request #1 from Xauryan/dependabot/npm_and_yarn/web/classic/npm_and_yarn-7f8752592c
+- 影响范围：
+  - `web/classic/package.json`：保留 `axios` `1.15.2`，合入 classic 前端 `vite` 依赖更新。
+  - `web/classic/bun.lock`：补齐 dependabot 提交未更新的 Bun lockfile，使其与
+    `package.json` 保持一致。
+  - `web/classic/vite.config.js`：将 `manualChunks` 改为函数形式，保持原有分包
+    归类，同时兼容 Vite 8/Rolldown 的输出配置校验；并将 `roughjs` 解析到
+    ESM 入口，避免 Vite 8 选择 browser UMD 入口后缺少默认导出导致 classic
+    构建失败。
+  - `electron/package-lock.json`：合入 dependabot 间接依赖更新。
+- 本地覆盖层：未改动 StuHelper AI/Xauryan 身份、classic 默认前端、classic 排行榜、
+  GHCR release-only 发布策略和上游同步移植记录。
