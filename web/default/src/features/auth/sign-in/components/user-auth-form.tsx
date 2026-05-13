@@ -59,7 +59,31 @@ import { loginFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
 import { beginPasskeyLogin, finishPasskeyLogin } from '@/features/auth/passkey'
-import type { AuthFormProps } from '@/features/auth/types'
+import type { AuthFormProps, SystemStatus } from '@/features/auth/types'
+
+function getStatusBool(
+  status: SystemStatus | null,
+  keys: string[],
+  fallback: boolean
+) {
+  for (const key of keys) {
+    const value = status?.[key] ?? status?.data?.[key]
+    if (typeof value === 'boolean') return value
+  }
+  return fallback
+}
+
+function hasOAuthLoginOptions(status: SystemStatus | null) {
+  return Boolean(
+    status?.wechat_login ||
+    status?.github_oauth ||
+    status?.discord_oauth ||
+    status?.oidc_enabled ||
+    status?.linuxdo_oauth ||
+    status?.telegram_oauth ||
+    (status?.custom_oauth_providers?.length ?? 0) > 0
+  )
+}
 
 export function UserAuthForm({
   className,
@@ -78,8 +102,11 @@ export function UserAuthForm({
   const loginFailedMessage = t('Login failed')
 
   const { status } = useStatus()
-  const passkeyLoginEnabled = Boolean(
-    status?.passkey_login ?? status?.data?.passkey_login
+  const passkeyLoginEnabled = getStatusBool(status, ['passkey_login'], false)
+  const passwordLoginEnabled = getStatusBool(
+    status,
+    ['password_login', 'password_login_enabled'],
+    true
   )
   const {
     isTurnstileEnabled,
@@ -93,6 +120,9 @@ export function UserAuthForm({
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
   const requiresLegalConsent = hasUserAgreement || hasPrivacyPolicy
+  const hasOAuthOptions = hasOAuthLoginOptions(status)
+  const hasVisibleLoginMethod =
+    passwordLoginEnabled || passkeyLoginEnabled || hasOAuthOptions
   const passkeyButtonDisabled =
     isPasskeyLoading ||
     !passkeySupported ||
@@ -136,6 +166,11 @@ export function UserAuthForm({
   }, [status])
 
   async function onSubmit(data: z.infer<typeof loginFormSchema>) {
+    if (!passwordLoginEnabled) {
+      toast.error(t('Password sign-in is disabled'))
+      return
+    }
+
     if (requiresLegalConsent && !agreedToLegal) {
       toast.error(legalConsentErrorMessage)
       return
@@ -282,57 +317,64 @@ export function UserAuthForm({
         className={cn('grid gap-4', className)}
         {...props}
       >
-        {/* Username Field */}
-        <FormField
-          control={form.control}
-          name='username'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t('Username or Email')}</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder={t('Enter your username or email')}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {passwordLoginEnabled && (
+          <>
+            {/* Username Field */}
+            <FormField
+              control={form.control}
+              name='username'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Username or Email')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={t('Enter your username or email')}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-        {/* Password Field */}
-        <FormField
-          control={form.control}
-          name='password'
-          render={({ field }) => (
-            <FormItem className='relative'>
-              <FormLabel>{t('Password')}</FormLabel>
-              <FormControl>
-                <PasswordInput placeholder={t('Enter password')} {...field} />
-              </FormControl>
-              <FormMessage />
-              <Link
-                to='/forgot-password'
-                className='text-muted-foreground absolute end-0 -top-0.5 text-sm font-medium hover:opacity-75'
-              >
-                {t('Forgot password?')}
-              </Link>
-            </FormItem>
-          )}
-        />
+            {/* Password Field */}
+            <FormField
+              control={form.control}
+              name='password'
+              render={({ field }) => (
+                <FormItem className='relative'>
+                  <FormLabel>{t('Password')}</FormLabel>
+                  <FormControl>
+                    <PasswordInput
+                      placeholder={t('Enter password')}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                  <Link
+                    to='/forgot-password'
+                    className='text-muted-foreground absolute end-0 -top-0.5 text-sm font-medium hover:opacity-75'
+                  >
+                    {t('Forgot password?')}
+                  </Link>
+                </FormItem>
+              )}
+            />
 
-        {/* Submit Button */}
-        <Button
-          type='submit'
-          className='mt-2 w-full justify-center gap-2'
-          disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
-        >
-          {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
-          {t('Sign in')}
-        </Button>
+            {/* Submit Button */}
+            <Button
+              type='submit'
+              className='mt-2 w-full justify-center gap-2'
+              disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
+            >
+              {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
+              {t('Sign in')}
+            </Button>
+          </>
+        )}
 
         {/* Turnstile */}
-        {isTurnstileEnabled && (
+        {passwordLoginEnabled && isTurnstileEnabled && (
           <div className='mt-2'>
             <Turnstile
               siteKey={turnstileSiteKey}
@@ -376,9 +418,16 @@ export function UserAuthForm({
         <OAuthProviders
           status={status}
           disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
+          showDivider={passwordLoginEnabled || passkeyLoginEnabled}
           onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
           isWeChatLoading={isWeChatSubmitting}
         />
+
+        {!hasVisibleLoginMethod && (
+          <p className='text-muted-foreground text-center text-sm'>
+            {t('No sign-in methods are currently available')}
+          </p>
+        )}
       </form>
 
       {hasWeChatLogin && (

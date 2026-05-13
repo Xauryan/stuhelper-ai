@@ -133,6 +133,7 @@ const LoginForm = () => {
   }, [statusState?.status]);
   const hasCustomOAuthProviders =
     (status.custom_oauth_providers || []).length > 0;
+  const passwordLoginEnabled = status.password_login !== false;
   const hasOAuthLoginOptions = Boolean(
     status.github_oauth ||
       status.discord_oauth ||
@@ -216,6 +217,10 @@ const LoginForm = () => {
   }
 
   async function handleSubmit(e) {
+    if (!passwordLoginEnabled) {
+      showInfo(t('管理员已关闭密码登录'));
+      return;
+    }
     if ((hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms) {
       showInfo(t('请先阅读并同意用户协议和隐私政策'));
       return;
@@ -642,20 +647,32 @@ const LoginForm = () => {
                   </Button>
                 )}
 
-                <Divider margin='12px' align='center'>
-                  {t('或')}
-                </Divider>
+                {passwordLoginEnabled && (
+                  <>
+                    <Divider margin='12px' align='center'>
+                      {t('或')}
+                    </Divider>
 
-                <Button
-                  theme='solid'
-                  type='primary'
-                  className='w-full h-12 flex items-center justify-center bg-black text-white !rounded-full hover:bg-gray-800 transition-colors'
-                  icon={<IconMail size='large' />}
-                  onClick={handleEmailLoginClick}
-                  loading={emailLoginLoading}
-                >
-                  <span className='ml-3'>{t('使用 邮箱或用户名 登录')}</span>
-                </Button>
+                    <Button
+                      theme='solid'
+                      type='primary'
+                      className='w-full h-12 flex items-center justify-center bg-black text-white !rounded-full hover:bg-gray-800 transition-colors'
+                      icon={<IconMail size='large' />}
+                      onClick={handleEmailLoginClick}
+                      loading={emailLoginLoading}
+                    >
+                      <span className='ml-3'>
+                        {t('使用 邮箱或用户名 登录')}
+                      </span>
+                    </Button>
+                  </>
+                )}
+
+                {!passwordLoginEnabled && !hasOAuthLoginOptions && (
+                  <Text className='block text-center text-gray-500'>
+                    {t('暂无可用登录方式，请联系管理员')}
+                  </Text>
+                )}
               </div>
 
               {(hasUserAgreement || hasPrivacyPolicy) && (
@@ -958,14 +975,14 @@ const LoginForm = () => {
         style={{ top: '50%', left: '-120px' }}
       />
       <div className='w-full max-w-sm mt-[60px]'>
-        {showEmailLogin ||
-        !hasOAuthLoginOptions
+        {(passwordLoginEnabled && showEmailLogin) ||
+        (passwordLoginEnabled && !hasOAuthLoginOptions)
           ? renderEmailLoginForm()
           : renderOAuthOptions()}
         {renderWeChatLoginModal()}
         {render2FAModal()}
 
-        {turnstileEnabled && (
+        {turnstileEnabled && (passwordLoginEnabled || status.wechat_login) && (
           <div className='flex justify-center mt-6'>
             <Turnstile
               sitekey={turnstileSiteKey}

@@ -1,5 +1,12 @@
 {
   "translation": {
+    "模型列表加载失败，当前无法安全配置模型限制": "Model list failed to load. Model restrictions cannot be configured safely right now.",
+    "模型列表加载失败，无法提交，请重试": "Model list failed to load. Retry before submitting.",
+    "模型列表加载失败，请重试": "Model list failed to load. Please retry.",
+    "模型限制": "Model restrictions",
+    "请选择该套餐支持的模型，留空支持所有模型": "Select models supported by this plan, leave empty for all models",
+    "选择后，通过该订阅套餐计费的请求只能使用选中的模型；留空则不限制": "After selection, requests billed by this subscription plan can only use selected models; leave empty for no restriction",
+    "限制该订阅套餐可使用的模型范围": "Limit which models this subscription plan can use",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_one": " + Web search {{count}} time / 1K times * {{symbol}}{{price}} * {{ratioType}} {{ratio}}",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_other": " + Web search {{count}} times / 1K times * {{symbol}}{{price}} * {{ratioType}} {{ratio}}",
     " + 图片生成调用 {{symbol}}{{price}} / 1次 * {{ratioType}} {{ratio}}": " + Image generation call {{symbol}}{{price}} / 1 time * {{ratioType}} {{ratio}}",
@@ -1884,6 +1891,8 @@
     "暂无可复制的版本信息": "No version information to copy",
     "暂无可展示数据": "No data available to display",
     "暂无可用的支付方式，请联系管理员配置": "No payment methods available, please contact administrator for configuration",
+    "暂无可用登录方式，请联系管理员": "No sign-in methods are currently available. Please contact the administrator",
+    "暂无可用注册方式，请联系管理员": "No registration methods are currently available. Please contact the administrator",
     "暂无可购买套餐": "No plans available for purchase",
     "暂无响应数据": "No response data",
     "暂无容器信息": "No container information",
@@ -2636,6 +2645,8 @@
     "管理员未开启在线充值！": "The administrator has not enabled online recharge!",
     "管理员未开启在线充值功能，请联系管理员开启或使用兑换码充值。": "The administrator has not enabled the online recharge function, please contact the administrator to enable it or recharge with a redemption code.",
     "管理员未开启在线支付功能，请联系管理员配置。": "Online payment is not enabled by the admin. Please contact the administrator.",
+    "管理员已关闭密码登录": "Password sign-in has been disabled by the administrator",
+    "管理员已关闭密码注册": "Password registration has been disabled by the administrator",
     "管理员未设置用户可选分组": "Administrator has not set user-selectable groups",
     "管理员给用户分配的分组（如 vip）不仅决定用户身份，还会影响后续两个功能：": "The group assigned to a user (e.g., vip) not only determines their identity, but also affects the following two features:",
     "管理员设置了外部链接，点击下方按钮访问": "Administrator has set up external links, click the button below to access",
@@ -3813,13 +3824,6 @@
     "Leaderboards": "Leaderboards",
     "New Frontend": "New Frontend",
     "StuHelper AI项目仓库地址：": "StuHelper AI project repository address: ",
-    "stuhelper-ai 默认不会将入口请求的 User-Agent 透传到上游渠道；该条件仅用于识别访问本站点的客户端。": "stuhelper-ai does not pass the incoming request's User-Agent to upstream channels by default; this condition is only used to identify clients accessing this site.",
-    "模型列表加载失败，当前无法安全配置模型限制": "Model list failed to load. Model restrictions cannot be configured safely right now.",
-    "模型列表加载失败，无法提交，请重试": "Model list failed to load. Retry before submitting.",
-    "模型列表加载失败，请重试": "Model list failed to load. Please retry.",
-    "模型限制": "Model restrictions",
-    "请选择该套餐支持的模型，留空支持所有模型": "Select models supported by this plan, leave empty for all models",
-    "选择后，通过该订阅套餐计费的请求只能使用选中的模型；留空则不限制": "After selection, requests billed by this subscription plan can only use selected models; leave empty for no restriction",
-    "限制该订阅套餐可使用的模型范围": "Limit which models this subscription plan can use"
+    "stuhelper-ai 默认不会将入口请求的 User-Agent 透传到上游渠道；该条件仅用于识别访问本站点的客户端。": "stuhelper-ai does not pass the incoming request's User-Agent to upstream channels by default; this condition is only used to identify clients accessing this site."
   }
 }
