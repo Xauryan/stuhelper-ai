@@ -595,6 +595,17 @@ func AlipayOfficialNotify(c *gin.Context) {
 
 	LockOrder(tradeNo)
 	defer UnlockOrder(tradeNo)
+	if err := completeAlipayOfficialSubscriptionOrderIfPresent(tradeNo, params, paidMoney); err != nil {
+		if !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方支付 订阅处理失败 trade_no=%s client_ip=%s error=%q", tradeNo, c.ClientIP(), err.Error()))
+			c.String(http.StatusOK, "fail")
+			return
+		}
+	} else {
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方支付 订阅成功 trade_no=%s client_ip=%s", tradeNo, c.ClientIP()))
+		c.String(http.StatusOK, "success")
+		return
+	}
 	if err := model.RechargeOfficialPayment(tradeNo, model.PaymentProviderAlipayOfficial, model.PaymentMethodAlipayOfficial, c.ClientIP(), paidMoney.InexactFloat64()); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方支付 充值处理失败 trade_no=%s client_ip=%s error=%q", tradeNo, c.ClientIP(), err.Error()))
 		c.String(http.StatusOK, "fail")
@@ -602,6 +613,22 @@ func AlipayOfficialNotify(c *gin.Context) {
 	}
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方支付 充值成功 trade_no=%s client_ip=%s", tradeNo, c.ClientIP()))
 	c.String(http.StatusOK, "success")
+}
+
+func completeAlipayOfficialSubscriptionOrderIfPresent(tradeNo string, params map[string]string, paidMoney decimal.Decimal) error {
+	order := model.GetSubscriptionOrderByTradeNo(tradeNo)
+	if order == nil {
+		return model.ErrSubscriptionOrderNotFound
+	}
+	if order.PaymentProvider != model.PaymentProviderAlipayOfficial {
+		return model.ErrPaymentMethodMismatch
+	}
+	expectedMoney := decimal.NewFromFloat(order.Money).Round(2)
+	actualMoney := paidMoney.Round(2)
+	if !expectedMoney.Equal(actualMoney) {
+		return errors.New("支付金额与订阅订单金额不一致")
+	}
+	return model.CompleteSubscriptionOrder(tradeNo, common.GetJsonString(params), model.PaymentProviderAlipayOfficial, model.PaymentMethodAlipayOfficial)
 }
 
 func handleAlipayOfficialRefundDepositbackCompleted(c *gin.Context, params map[string]string) error {

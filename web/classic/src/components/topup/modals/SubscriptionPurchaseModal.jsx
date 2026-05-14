@@ -29,7 +29,7 @@ import {
   Tooltip,
 } from '@douyinfe/semi-ui';
 import { Crown, CalendarClock, Package } from 'lucide-react';
-import { SiStripe } from 'react-icons/si';
+import { SiAlipay, SiStripe } from 'react-icons/si';
 import { IconCreditCard } from '@douyinfe/semi-icons';
 import { renderQuota } from '../../../helpers';
 import { getCurrencyConfig } from '../../../helpers/render';
@@ -52,10 +52,14 @@ const SubscriptionPurchaseModal = ({
   enableOnlineTopUp = false,
   enableStripeTopUp = false,
   enableCreemTopUp = false,
+  enableAlipayOfficialTopUp = false,
+  hasAlipayOfficial = false,
+  alipayOfficialUnitPrice,
   purchaseLimitInfo = null,
   onPayStripe,
   onPayCreem,
   onPayEpay,
+  onPayAlipayOfficial,
 }) => {
   const plan = selectedPlan?.plan;
   const totalAmount = Number(plan?.total_amount || 0);
@@ -69,7 +73,14 @@ const SubscriptionPurchaseModal = ({
   const hasStripe = enableStripeTopUp && !!plan?.stripe_price_id;
   const hasCreem = enableCreemTopUp && !!plan?.creem_product_id;
   const hasEpay = enableOnlineTopUp && epayMethods.length > 0;
-  const hasAnyPayment = hasStripe || hasCreem || hasEpay;
+  const canPayAlipayOfficial = enableAlipayOfficialTopUp && hasAlipayOfficial;
+  const hasAnyPayment =
+    hasStripe || hasCreem || hasEpay || canPayAlipayOfficial;
+  const alipayUnitPrice = Number(alipayOfficialUnitPrice);
+  const alipayOfficialPayAmount =
+    Number.isFinite(alipayUnitPrice) && alipayUnitPrice > 0
+      ? Math.ceil(price * alipayUnitPrice * 100) / 100
+      : 0;
   const purchaseLimit = Number(purchaseLimitInfo?.limit || 0);
   const purchaseCount = Number(purchaseLimitInfo?.count || 0);
   const purchaseLimitReached =
@@ -211,6 +222,27 @@ const SubscriptionPurchaseModal = ({
                     >
                       Creem
                     </Button>
+                  )}
+                </div>
+              )}
+
+              {/* 官方支付宝 */}
+              {canPayAlipayOfficial && (
+                <div className='space-y-1'>
+                  <Button
+                    theme='light'
+                    icon={<SiAlipay size={16} color='#1677FF' />}
+                    onClick={onPayAlipayOfficial}
+                    loading={paying}
+                    disabled={purchaseLimitReached}
+                    block
+                  >
+                    {t('支付宝')}
+                  </Button>
+                  {alipayOfficialPayAmount > 0 && (
+                    <Text size='small' type='tertiary'>
+                      {t('实付')} ¥{alipayOfficialPayAmount.toFixed(2)}
+                    </Text>
                   )}
                 </div>
               )}

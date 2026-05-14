@@ -49,6 +49,12 @@ import { IconGift } from '@douyinfe/semi-icons';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
 import { getCurrencyConfig } from '../../helpers/render';
 import { buildRechargeAmountDisplay } from './rechargeAmountDisplay';
+import {
+  getInitialRechargeTabKey,
+  getRechargeTabKeys,
+  RECHARGE_TAB_SUBSCRIPTION,
+  RECHARGE_TAB_TOPUP,
+} from './rechargeTabs';
 import SubscriptionPlansCard from './SubscriptionPlansCard';
 
 const { Text } = Typography;
@@ -114,11 +120,11 @@ const RechargeCard = ({
 }) => {
   const onlineFormApiRef = useRef(null);
   const redeemFormApiRef = useRef(null);
-  const initialTabSetRef = useRef(false);
   const showAmountSkeleton = useMinimumLoadingTime(amountLoading);
-  const [activeTab, setActiveTab] = useState('topup');
+  const [activeTab, setActiveTab] = useState(getInitialRechargeTabKey);
   const shouldShowSubscription =
     !subscriptionLoading && subscriptionPlans.length > 0;
+  const rechargeTabKeys = getRechargeTabKeys(shouldShowSubscription);
   const regularPayMethods = payMethods || [];
   const hasRegularTopUp =
     enableOnlineTopUp ||
@@ -130,15 +136,8 @@ const RechargeCard = ({
     regularPayMethods.length > 0;
 
   useEffect(() => {
-    if (initialTabSetRef.current) return;
-    if (subscriptionLoading) return;
-    setActiveTab(shouldShowSubscription ? 'subscription' : 'topup');
-    initialTabSetRef.current = true;
-  }, [shouldShowSubscription, subscriptionLoading]);
-
-  useEffect(() => {
-    if (!shouldShowSubscription && activeTab !== 'topup') {
-      setActiveTab('topup');
+    if (!shouldShowSubscription && activeTab !== RECHARGE_TAB_TOPUP) {
+      setActiveTab(RECHARGE_TAB_TOPUP);
     }
   }, [shouldShowSubscription, activeTab]);
   const topupContent = (
@@ -659,44 +658,57 @@ const RechargeCard = ({
 
       {shouldShowSubscription ? (
         <Tabs type='card' activeKey={activeTab} onChange={setActiveTab}>
-          <TabPane
-            tab={
-              <div className='flex items-center gap-2'>
-                <Sparkles size={16} />
-                {t('订阅套餐')}
-              </div>
-            }
-            itemKey='subscription'
-          >
-            <div className='py-2'>
-              <SubscriptionPlansCard
-                t={t}
-                loading={subscriptionLoading}
-                plans={subscriptionPlans}
-                payMethods={payMethods}
-                enableOnlineTopUp={enableOnlineTopUp}
-                enableStripeTopUp={enableStripeTopUp}
-                enableCreemTopUp={enableCreemTopUp}
-                billingPreference={billingPreference}
-                onChangeBillingPreference={onChangeBillingPreference}
-                activeSubscriptions={activeSubscriptions}
-                allSubscriptions={allSubscriptions}
-                reloadSubscriptionSelf={reloadSubscriptionSelf}
-                withCard={false}
-              />
-            </div>
-          </TabPane>
-          <TabPane
-            tab={
-              <div className='flex items-center gap-2'>
-                <Wallet size={16} />
-                {t('额度充值')}
-              </div>
-            }
-            itemKey='topup'
-          >
-            <div className='py-2'>{topupContent}</div>
-          </TabPane>
+          {rechargeTabKeys.map((tabKey) =>
+            tabKey === RECHARGE_TAB_TOPUP ? (
+              <TabPane
+                key={tabKey}
+                tab={
+                  <div className='flex items-center gap-2'>
+                    <Wallet size={16} />
+                    {t('额度充值')}
+                  </div>
+                }
+                itemKey={RECHARGE_TAB_TOPUP}
+              >
+                <div className='py-2'>{topupContent}</div>
+              </TabPane>
+            ) : (
+              <TabPane
+                key={tabKey}
+                tab={
+                  <div className='flex items-center gap-2'>
+                    <Sparkles size={16} />
+                    {t('订阅套餐')}
+                  </div>
+                }
+                itemKey={RECHARGE_TAB_SUBSCRIPTION}
+              >
+                <div className='py-2'>
+                  <SubscriptionPlansCard
+                    t={t}
+                    loading={subscriptionLoading}
+                    plans={subscriptionPlans}
+                    payMethods={payMethods}
+                    enableOnlineTopUp={enableOnlineTopUp}
+                    enableStripeTopUp={enableStripeTopUp}
+                    enableCreemTopUp={enableCreemTopUp}
+                    enableAlipayOfficialTopUp={enableAlipayOfficialTopUp}
+                    alipayOfficialUnitPrice={
+                      payMethods?.find(
+                        (method) => method.type === 'alipay_official',
+                      )?.unit_price
+                    }
+                    billingPreference={billingPreference}
+                    onChangeBillingPreference={onChangeBillingPreference}
+                    activeSubscriptions={activeSubscriptions}
+                    allSubscriptions={allSubscriptions}
+                    reloadSubscriptionSelf={reloadSubscriptionSelf}
+                    withCard={false}
+                  />
+                </div>
+              </TabPane>
+            ),
+          )}
         </Tabs>
       ) : (
         topupContent

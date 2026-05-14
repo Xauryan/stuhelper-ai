@@ -187,6 +187,18 @@ func TestFormatAlipayOfficialTimeoutExpressUsesConfiguredMinutes(t *testing.T) {
 	require.Equal(t, "10m", formatAlipayOfficialTimeoutExpress(-1))
 }
 
+func TestGetAlipayOfficialSubscriptionPayMoneyUsesConfiguredUnitPrice(t *testing.T) {
+	originalAlipayUnitPrice := setting.AlipayOfficialUnitPrice
+	t.Cleanup(func() {
+		setting.AlipayOfficialUnitPrice = originalAlipayUnitPrice
+	})
+
+	setting.AlipayOfficialUnitPrice = 7.231
+
+	require.InDelta(t, 7.24, getAlipayOfficialSubscriptionPayMoney(1), 0.000001)
+	require.Equal(t, "7.24", formatOfficialPayMoney(getAlipayOfficialSubscriptionPayMoney(1)))
+}
+
 func TestGetTopUpInfoStillExposesOfficialMethodsWhenEpayDisabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

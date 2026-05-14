@@ -44,20 +44,13 @@ import {
   formatSubscriptionDuration,
   formatSubscriptionResetPeriod,
 } from '../../helpers/subscriptionFormat';
+import {
+  getEpayMethods,
+  getOfficialAlipayMethod,
+} from './subscriptionPaymentMethods';
+import { shouldHighlightSubscriptionPlan } from './subscriptionPlanDisplay';
 
 const { Text } = Typography;
-
-// 过滤易支付方式
-function getEpayMethods(payMethods = []) {
-  return (payMethods || []).filter(
-    (m) =>
-      m?.type &&
-      m.type !== 'stripe' &&
-      m.type !== 'creem' &&
-      m.type !== 'alipay_official' &&
-      m.type !== 'wxpay_official',
-  );
-}
 
 // 提交易支付表单
 function submitEpayForm({ url, params }) {
@@ -88,6 +81,8 @@ const SubscriptionPlansCard = ({
   enableOnlineTopUp = false,
   enableStripeTopUp = false,
   enableCreemTopUp = false,
+  enableAlipayOfficialTopUp = false,
+  alipayOfficialUnitPrice,
   billingPreference,
   onChangeBillingPreference,
   activeSubscriptions = [],
@@ -102,6 +97,11 @@ const SubscriptionPlansCard = ({
   const [refreshing, setRefreshing] = useState(false);
 
   const epayMethods = useMemo(() => getEpayMethods(payMethods), [payMethods]);
+  const alipayOfficialMethod = useMemo(
+    () => getOfficialAlipayMethod(payMethods),
+    [payMethods],
+  );
+  const hasAlipayOfficial = enableAlipayOfficialTopUp && !!alipayOfficialMethod;
 
   const openBuy = (p) => {
     setSelectedPlan(p);
@@ -204,6 +204,63 @@ const SubscriptionPlansCard = ({
       }
     } catch (e) {
       showError(t('支付请求失败'));
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const isMobilePaymentScene = () => {
+    const userAgent = navigator.userAgent || '';
+    return (
+      /Mobi|Android|iPhone|iPad|iPod|Windows Phone/i.test(userAgent) ||
+      window.innerWidth < 768
+    );
+  };
+
+  const submitOfficialAlipayForm = (formHtml, payWindow) => {
+    if (!formHtml) {
+      showError(t('支付请求失败'));
+      payWindow?.close?.();
+      return false;
+    }
+    const targetDocument = payWindow?.document || window.document;
+    targetDocument.open();
+    targetDocument.write(formHtml);
+    targetDocument.close();
+    return true;
+  };
+
+  const payAlipayOfficial = async () => {
+    if (!hasAlipayOfficial) {
+      showError(t('管理员未开启支付宝官方支付充值！'));
+      return;
+    }
+    setPaying(true);
+    const scene = isMobilePaymentScene() ? 'h5' : 'pc';
+    const alipayWindow = scene === 'pc' ? window.open('', '_blank') : null;
+    try {
+      const res = await API.post('/api/subscription/alipay-official/pay', {
+        plan_id: selectedPlan.plan.id,
+        scene,
+      });
+      if (res.data?.message === 'success') {
+        if (
+          submitOfficialAlipayForm(res.data.data?.form_html || '', alipayWindow)
+        ) {
+          showSuccess(t('已发起支付'));
+          closeBuy();
+        }
+      } else {
+        const errorMsg =
+          typeof res.data?.data === 'string'
+            ? res.data.data
+            : res.data?.message || t('支付失败');
+        showError(errorMsg);
+        alipayWindow?.close?.();
+      }
+    } catch (e) {
+      showError(t('支付请求失败'));
+      alipayWindow?.close?.();
     } finally {
       setPaying(false);
     }
@@ -498,7 +555,7 @@ const SubscriptionPlansCard = ({
           {/* 可购买套餐 - 标准定价卡片 */}
           {plans.length > 0 ? (
             <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-5 w-full px-1'>
-              {plans.map((p, index) => {
+              {plans.map((p) => {
                 const plan = p?.plan;
                 const totalAmount = Number(plan?.total_amount || 0);
                 const { symbol, rate } = getCurrencyConfig();
@@ -507,7 +564,7 @@ const SubscriptionPlansCard = ({
                 const displayPrice = convertedPrice.toFixed(
                   Number.isInteger(convertedPrice) ? 0 : 2,
                 );
-                const isPopular = index === 0 && plans.length > 1;
+                const isRecommended = shouldHighlightSubscriptionPlan(plan);
                 const limit = Number(plan?.max_purchase_per_user || 0);
                 const limitLabel = limit > 0 ? `${t('限购')} ${limit}` : null;
                 const totalLabel =
@@ -551,13 +608,13 @@ const SubscriptionPlansCard = ({
                   <Card
                     key={plan?.id}
                     className={`!rounded-xl transition-all hover:shadow-lg w-full h-full ${
-                      isPopular ? 'ring-2 ring-purple-500' : ''
+                      isRecommended ? 'ring-2 ring-purple-500' : ''
                     }`}
                     bodyStyle={{ padding: 0 }}
                   >
                     <div className='p-4 h-full flex flex-col'>
                       {/* 推荐标签 */}
-                      {isPopular && (
+                      {isRecommended && (
                         <div className='mb-2'>
                           <Tag color='purple' shape='circle' size='small'>
                             <Sparkles size={10} className='mr-1' />
@@ -695,6 +752,11 @@ const SubscriptionPlansCard = ({
         enableOnlineTopUp={enableOnlineTopUp}
         enableStripeTopUp={enableStripeTopUp}
         enableCreemTopUp={enableCreemTopUp}
+        enableAlipayOfficialTopUp={enableAlipayOfficialTopUp}
+        hasAlipayOfficial={hasAlipayOfficial}
+        alipayOfficialUnitPrice={
+          alipayOfficialUnitPrice || alipayOfficialMethod?.unit_price
+        }
         purchaseLimitInfo={
           selectedPlan?.plan?.id
             ? {
@@ -706,6 +768,7 @@ const SubscriptionPlansCard = ({
         onPayStripe={payStripe}
         onPayCreem={payCreem}
         onPayEpay={payEpay}
+        onPayAlipayOfficial={payAlipayOfficial}
       />
     </>
   );

@@ -176,6 +176,16 @@ const renderEnabled = (text, record, t) => {
   );
 };
 
+const renderRecommended = (text, record, t) => {
+  return record?.plan?.recommended ? (
+    <Tag color='purple' shape='circle'>
+      {t('推荐')}
+    </Tag>
+  ) : (
+    <Text type='tertiary'>{t('否')}</Text>
+  );
+};
+
 const renderTotalAmount = (text, record, t) => {
   const total = Number(record?.plan?.total_amount || 0);
   return (
@@ -355,6 +365,12 @@ export const getSubscriptionsColumns = ({
       dataIndex: ['plan', 'enabled'],
       width: 80,
       render: (text, record) => renderEnabled(text, record, t),
+    },
+    {
+      title: t('推荐'),
+      dataIndex: ['plan', 'recommended'],
+      width: 80,
+      render: (text, record) => renderRecommended(text, record, t),
     },
     {
       title: t('支付渠道'),

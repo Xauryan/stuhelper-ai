@@ -158,6 +158,8 @@ type SubscriptionPlan struct {
 
 	Enabled   bool `json:"enabled" gorm:"default:true"`
 	SortOrder int  `json:"sort_order" gorm:"type:int;default:0"`
+	// Recommended controls the user-facing recommendation badge and highlight.
+	Recommended bool `json:"recommended" gorm:"default:false"`
 
 	StripePriceId  string `json:"stripe_price_id" gorm:"type:varchar(128);default:''"`
 	CreemProductId string `json:"creem_product_id" gorm:"type:varchar(128);default:''"`
@@ -663,14 +665,15 @@ func upsertSubscriptionTopUpTx(tx *gorm.DB, order *SubscriptionOrder) error {
 	if err := tx.Where("trade_no = ?", order.TradeNo).First(&topup).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			topup = TopUp{
-				UserId:        order.UserId,
-				Amount:        0,
-				Money:         order.Money,
-				TradeNo:       order.TradeNo,
-				PaymentMethod: order.PaymentMethod,
-				CreateTime:    order.CreateTime,
-				CompleteTime:  now,
-				Status:        common.TopUpStatusSuccess,
+				UserId:          order.UserId,
+				Amount:          0,
+				Money:           order.Money,
+				TradeNo:         order.TradeNo,
+				PaymentMethod:   order.PaymentMethod,
+				PaymentProvider: order.PaymentProvider,
+				CreateTime:      order.CreateTime,
+				CompleteTime:    now,
+				Status:          common.TopUpStatusSuccess,
 			}
 			return tx.Create(&topup).Error
 		}
@@ -684,6 +687,11 @@ func upsertSubscriptionTopUpTx(tx *gorm.DB, order *SubscriptionOrder) error {
 	}
 	if topup.CreateTime == 0 {
 		topup.CreateTime = order.CreateTime
+	}
+	if topup.PaymentProvider == "" {
+		topup.PaymentProvider = order.PaymentProvider
+	} else if order.PaymentProvider != "" && topup.PaymentProvider != order.PaymentProvider {
+		return ErrPaymentMethodMismatch
 	}
 	topup.CompleteTime = now
 	topup.Status = common.TopUpStatusSuccess
