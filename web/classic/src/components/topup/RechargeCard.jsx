@@ -48,9 +48,21 @@ import {
 import { IconGift } from '@douyinfe/semi-icons';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
 import { getCurrencyConfig } from '../../helpers/render';
+import { buildRechargeAmountDisplay } from './rechargeAmountDisplay';
 import SubscriptionPlansCard from './SubscriptionPlansCard';
 
 const { Text } = Typography;
+
+function getUsdExchangeRate() {
+  const statusStr = localStorage.getItem('status');
+  try {
+    if (statusStr) {
+      const status = JSON.parse(statusStr);
+      return status?.usd_exchange_rate || 7;
+    }
+  } catch (e) {}
+  return 7;
+}
 
 const RechargeCard = ({
   t,
@@ -84,6 +96,7 @@ const RechargeCard = ({
   openTopUpLink,
   userState,
   renderQuota,
+  getPaymentUnitPrice,
   statusLoading,
   topupInfo,
   onOpenHistory,
@@ -442,44 +455,28 @@ const RechargeCard = ({
                 >
                   <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2'>
                     {presetAmounts.map((preset, index) => {
-                      const discount =
-                        preset.discount ||
-                        topupInfo?.discount?.[preset.value] ||
-                        1.0;
-                      const originalPrice = preset.value * priceRatio;
-                      const discountedPrice = originalPrice * discount;
-                      const hasDiscount = discount < 1.0;
-                      const actualPay = discountedPrice;
-                      const save = originalPrice - discountedPrice;
-
-                      // 根据当前货币类型换算显示金额和数量
-                      const { symbol, rate, type } = getCurrencyConfig();
-                      const statusStr = localStorage.getItem('status');
-                      let usdRate = 7; // 默认CNY汇率
-                      try {
-                        if (statusStr) {
-                          const s = JSON.parse(statusStr);
-                          usdRate = s?.usd_exchange_rate || 7;
-                        }
-                      } catch (e) {}
-
-                      let displayValue = preset.value; // 显示的数量
-                      let displayActualPay = actualPay;
-                      let displaySave = save;
-
-                      if (type === 'USD') {
-                        // 数量保持USD，价格从CNY转USD
-                        displayActualPay = actualPay / usdRate;
-                        displaySave = save / usdRate;
-                      } else if (type === 'CNY') {
-                        // 数量转CNY，价格已是CNY
-                        displayValue = preset.value * usdRate;
-                      } else if (type === 'CUSTOM') {
-                        // 数量和价格都转自定义货币
-                        displayValue = preset.value * rate;
-                        displayActualPay = (actualPay / usdRate) * rate;
-                        displaySave = (save / usdRate) * rate;
-                      }
+                      const currencyConfig = getCurrencyConfig();
+                      const {
+                        displayValue,
+                        paymentSymbol,
+                        displayActualPay,
+                        displaySave,
+                        discount,
+                        hasDiscount,
+                        showSavings,
+                      } = buildRechargeAmountDisplay({
+                        preset,
+                        priceRatio:
+                          getPaymentUnitPrice?.(
+                            payWay || regularPayMethods[0]?.type || '',
+                          ) ?? priceRatio,
+                        discountConfig: topupInfo?.discount,
+                        currencyConfig,
+                        usdExchangeRate: getUsdExchangeRate(),
+                        selectedPaymentMethod:
+                          payWay || regularPayMethods[0]?.type || '',
+                      });
+                      const { symbol } = currencyConfig;
 
                       return (
                         <Card
@@ -528,11 +525,10 @@ const RechargeCard = ({
                                 margin: '4px 0',
                               }}
                             >
-                              {t('实付')} {symbol}
-                              {displayActualPay.toFixed(2)}，
-                              {hasDiscount
-                                ? `${t('节省')} ${symbol}${displaySave.toFixed(2)}`
-                                : `${t('节省')} ${symbol}0.00`}
+                              {t('实付')} {paymentSymbol}
+                              {displayActualPay.toFixed(2)}
+                              {showSavings &&
+                                `，${t('节省')} ${paymentSymbol}${displaySave.toFixed(2)}`}
                             </div>
                           </div>
                         </Card>

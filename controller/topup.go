@@ -105,10 +105,11 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 		if !hasAlipayOfficial {
 			payMethods = append(payMethods, map[string]string{
-				"name":      "支付宝",
-				"type":      model.PaymentMethodAlipayOfficial,
-				"color":     "rgba(var(--semi-blue-5), 1)",
-				"min_topup": strconv.Itoa(setting.AlipayOfficialMinTopUp),
+				"name":       "支付宝",
+				"type":       model.PaymentMethodAlipayOfficial,
+				"color":      "rgba(var(--semi-blue-5), 1)",
+				"min_topup":  strconv.Itoa(setting.AlipayOfficialMinTopUp),
+				"unit_price": strconv.FormatFloat(setting.AlipayOfficialUnitPrice, 'f', -1, 64),
 			})
 		}
 	}
@@ -124,10 +125,11 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 		if !hasWechatPayOfficial {
 			payMethods = append(payMethods, map[string]string{
-				"name":      "微信官方支付",
-				"type":      model.PaymentMethodWechatPayOfficial,
-				"color":     "rgba(var(--semi-green-5), 1)",
-				"min_topup": strconv.Itoa(setting.WechatPayOfficialMinTopUp),
+				"name":       "微信官方支付",
+				"type":       model.PaymentMethodWechatPayOfficial,
+				"color":      "rgba(var(--semi-green-5), 1)",
+				"min_topup":  strconv.Itoa(setting.WechatPayOfficialMinTopUp),
+				"unit_price": strconv.FormatFloat(setting.WechatPayOfficialUnitPrice, 'f', -1, 64),
 			})
 		}
 	}
