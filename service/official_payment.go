@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -27,10 +28,15 @@ import (
 const (
 	AlipayOfficialPagePayMethod      = "alipay.trade.page.pay"
 	AlipayOfficialWapPayMethod       = "alipay.trade.wap.pay"
+	AlipayOfficialRefundMethod       = "alipay.trade.refund"
+	AlipayOfficialRefundQueryMethod  = "alipay.trade.fastpay.refund.query"
+	AlipayOfficialTradeQueryMethod   = "alipay.trade.query"
+	AlipayOfficialTradeCloseMethod   = "alipay.trade.close"
 	AlipayOfficialPagePayProductCode = "FAST_INSTANT_TRADE_PAY"
 	AlipayOfficialWapPayProductCode  = "QUICK_WAP_WAY"
 	alipayOfficialProductionGateway  = "https://openapi.alipay.com/gateway.do"
 	alipayOfficialSandboxGateway     = "https://openapi-sandbox.dl.alipaydev.com/gateway.do"
+	alipayOfficialOpenAPITimeout     = 15 * time.Second
 )
 
 type AlipayOfficialBuildParams struct {
@@ -43,9 +49,36 @@ type AlipayOfficialBuildParams struct {
 	Method           string
 	NotifyURL        string
 	ReturnURL        string
+	QuitURL          string
 	OutTradeNo       string
 	TotalAmount      string
 	Subject          string
+}
+
+type AlipayOfficialClient struct {
+	AppID            string
+	PrivateKey       string
+	AppCertSN        string
+	AlipayRootCertSN string
+	AlipayCertSN     string
+	AlipayPublicKey  string
+	Sandbox          bool
+	HTTPClient       *http.Client
+}
+
+type AlipayOfficialOpenAPIResponse struct {
+	Code         string `json:"code"`
+	Msg          string `json:"msg"`
+	SubCode      string `json:"sub_code"`
+	SubMsg       string `json:"sub_msg"`
+	OutTradeNo   string `json:"out_trade_no"`
+	TradeNo      string `json:"trade_no"`
+	TradeStatus  string `json:"trade_status"`
+	TotalAmount  string `json:"total_amount"`
+	FundChange   string `json:"fund_change"`
+	RefundFee    string `json:"refund_fee"`
+	RefundAmount string `json:"refund_amount"`
+	RefundStatus string `json:"refund_status"`
 }
 
 type WechatPayOfficialClient struct {
@@ -166,6 +199,9 @@ func buildAlipayOfficialSignedValues(params AlipayOfficialBuildParams) (url.Valu
 		"subject":      params.Subject,
 		"product_code": productCode,
 	}
+	if method == AlipayOfficialWapPayMethod && strings.TrimSpace(params.QuitURL) != "" {
+		bizContent["quit_url"] = strings.TrimSpace(params.QuitURL)
+	}
 	bizContentBytes, err := common.Marshal(bizContent)
 	if err != nil {
 		return nil, fmt.Errorf("marshal Alipay biz_content: %w", err)
@@ -201,6 +237,180 @@ func buildAlipayOfficialSignedValues(params AlipayOfficialBuildParams) (url.Valu
 	}
 	values.Set("sign", signature)
 	return values, nil
+}
+
+func (c *AlipayOfficialClient) Refund(ctx context.Context, bizContent map[string]any) (*AlipayOfficialOpenAPIResponse, error) {
+	return c.DoOpenAPI(ctx, AlipayOfficialRefundMethod, bizContent)
+}
+
+func (c *AlipayOfficialClient) RefundQuery(ctx context.Context, bizContent map[string]any) (*AlipayOfficialOpenAPIResponse, error) {
+	return c.DoOpenAPI(ctx, AlipayOfficialRefundQueryMethod, bizContent)
+}
+
+func (c *AlipayOfficialClient) TradeQuery(ctx context.Context, bizContent map[string]any) (*AlipayOfficialOpenAPIResponse, error) {
+	return c.DoOpenAPI(ctx, AlipayOfficialTradeQueryMethod, bizContent)
+}
+
+func (c *AlipayOfficialClient) TradeClose(ctx context.Context, bizContent map[string]any) (*AlipayOfficialOpenAPIResponse, error) {
+	return c.DoOpenAPI(ctx, AlipayOfficialTradeCloseMethod, bizContent)
+}
+
+func (c *AlipayOfficialClient) DoOpenAPI(ctx context.Context, method string, bizContent map[string]any) (*AlipayOfficialOpenAPIResponse, error) {
+	if c == nil {
+		return nil, fmt.Errorf("missing Alipay client")
+	}
+	values, responseKey, err := c.buildOpenAPIRequestValues(method, bizContent)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, resolveAlipayOfficialGateway(c.Sandbox)+"?charset=utf-8", strings.NewReader(values.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("build Alipay request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded;charset=utf-8")
+	req.Header.Set("Accept", "application/json")
+
+	client := c.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: alipayOfficialOpenAPITimeout}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request Alipay %s: %w", method, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read Alipay response: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("Alipay %s failed with status %d: %s", method, resp.StatusCode, string(body))
+	}
+	if strings.TrimSpace(c.AlipayPublicKey) != "" {
+		if err := c.verifyOpenAPIResponseSignature(body, responseKey); err != nil {
+			return nil, err
+		}
+	}
+	return parseAlipayOfficialOpenAPIResponse(body, responseKey)
+}
+
+func (c *AlipayOfficialClient) buildOpenAPIRequestValues(method string, bizContent map[string]any) (url.Values, string, error) {
+	if c == nil {
+		return nil, "", fmt.Errorf("missing Alipay client")
+	}
+	method = strings.TrimSpace(method)
+	if method == "" {
+		return nil, "", fmt.Errorf("missing Alipay method")
+	}
+	bizContentBytes, err := common.Marshal(bizContent)
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal Alipay biz_content: %w", err)
+	}
+
+	values := url.Values{}
+	values.Set("app_id", strings.TrimSpace(c.AppID))
+	values.Set("method", method)
+	values.Set("format", "JSON")
+	values.Set("charset", "utf-8")
+	values.Set("sign_type", "RSA2")
+	values.Set("timestamp", time.Now().Format("2006-01-02 15:04:05"))
+	values.Set("version", "1.0")
+	if strings.TrimSpace(c.AppCertSN) != "" {
+		values.Set("app_cert_sn", strings.TrimSpace(c.AppCertSN))
+	}
+	if strings.TrimSpace(c.AlipayRootCertSN) != "" {
+		values.Set("alipay_root_cert_sn", strings.TrimSpace(c.AlipayRootCertSN))
+	}
+	if strings.TrimSpace(c.AlipayCertSN) != "" {
+		values.Set("alipay_cert_sn", strings.TrimSpace(c.AlipayCertSN))
+	}
+	values.Set("biz_content", string(bizContentBytes))
+
+	signContent := buildAlipaySignContent(valuesToMap(values), false)
+	signature, err := signRSA2(signContent, c.PrivateKey)
+	if err != nil {
+		return nil, "", err
+	}
+	values.Set("sign", signature)
+	return values, alipayOpenAPIResponseKey(method), nil
+}
+
+func alipayOpenAPIResponseKey(method string) string {
+	return strings.ReplaceAll(method, ".", "_") + "_response"
+}
+
+func parseAlipayOfficialOpenAPIResponse(body []byte, responseKey string) (*AlipayOfficialOpenAPIResponse, error) {
+	var envelope map[string]json.RawMessage
+	if err := common.Unmarshal(body, &envelope); err != nil {
+		return nil, fmt.Errorf("decode Alipay response envelope: %w", err)
+	}
+	rawResponse, ok := envelope[responseKey]
+	if !ok {
+		if rawError, hasError := envelope["error_response"]; hasError {
+			var apiError AlipayOfficialOpenAPIResponse
+			_ = common.Unmarshal(rawError, &apiError)
+			return nil, fmt.Errorf("Alipay error %s: %s", apiError.Code, firstNonEmpty(apiError.SubMsg, apiError.Msg))
+		}
+		return nil, fmt.Errorf("missing Alipay response node %s", responseKey)
+	}
+	var response AlipayOfficialOpenAPIResponse
+	if err := common.Unmarshal(rawResponse, &response); err != nil {
+		return nil, fmt.Errorf("decode Alipay %s: %w", responseKey, err)
+	}
+	if response.Code != "10000" {
+		return &response, fmt.Errorf("Alipay %s failed: %s", response.Code, firstNonEmpty(response.SubMsg, response.Msg))
+	}
+	return &response, nil
+}
+
+func (c *AlipayOfficialClient) verifyOpenAPIResponseSignature(body []byte, responseKey string) error {
+	var envelope map[string]json.RawMessage
+	if err := common.Unmarshal(body, &envelope); err != nil {
+		return fmt.Errorf("decode Alipay response for signature: %w", err)
+	}
+	rawSign, ok := envelope["sign"]
+	if !ok {
+		return fmt.Errorf("missing Alipay response signature")
+	}
+	sign := common.JsonRawMessageToString(rawSign)
+	if strings.TrimSpace(sign) == "" {
+		return fmt.Errorf("empty Alipay response signature")
+	}
+	rawResponse, ok := envelope[responseKey]
+	if !ok {
+		return fmt.Errorf("missing Alipay signed response node %s", responseKey)
+	}
+	if !verifyRSA2RawPayload(string(rawResponse), sign, c.AlipayPublicKey) {
+		return fmt.Errorf("invalid Alipay response signature")
+	}
+	return nil
+}
+
+func verifyRSA2RawPayload(content string, sign string, publicKey string) bool {
+	signature, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sign))
+	if err != nil {
+		return false
+	}
+	publicKeyPEM, err := normalizeRSAPublicKey(publicKey)
+	if err != nil {
+		return false
+	}
+	pub, err := parseRSAPublicKey(publicKeyPEM)
+	if err != nil {
+		return false
+	}
+	digest := sha256.Sum256([]byte(content))
+	return rsa.VerifyPKCS1v15(pub, crypto.SHA256, digest[:], signature) == nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func signRSA2(content string, rawPrivateKey string) (string, error) {

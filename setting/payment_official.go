@@ -13,6 +13,7 @@ var (
 	AlipayOfficialReturnURL       string
 	AlipayOfficialUnitPrice       float64 = 1.0
 	AlipayOfficialMinTopUp        int     = 1
+	AlipayOfficialOrderTimeoutMin int     = 10
 
 	WechatPayOfficialEnabled           bool
 	WechatPayOfficialAppID             string

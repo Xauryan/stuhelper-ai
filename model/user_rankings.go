@@ -84,7 +84,7 @@ func scanUserRankingTotals(query *gorm.DB, limit int) ([]UserRankingTotal, int64
 
 func mergeSuccessfulTopUpRankingRows(aggregates map[int]*UserRankingTotal, startTime int64, endTime int64) error {
 	var topUps []TopUp
-	query := DB.Where("status = ?", common.TopUpStatusSuccess)
+	query := DB.Where("status IN ?", []string{common.TopUpStatusSuccess, common.TopUpStatusPartialRefunded})
 	if startTime > 0 && endTime > 0 {
 		query = query.Where("(complete_time >= ? AND complete_time <= ?) OR (complete_time = 0 AND create_time >= ? AND create_time <= ?)", startTime, endTime, startTime, endTime)
 	} else if startTime > 0 {
@@ -96,7 +96,7 @@ func mergeSuccessfulTopUpRankingRows(aggregates map[int]*UserRankingTotal, start
 		return err
 	}
 	for _, topUp := range topUps {
-		quota := topUpCreditedQuota(topUp)
+		quota := topUpCreditedQuota(topUp) - topUp.RefundedQuota
 		if topUp.UserId <= 0 || quota <= 0 {
 			continue
 		}

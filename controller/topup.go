@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -104,7 +105,7 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 		if !hasAlipayOfficial {
 			payMethods = append(payMethods, map[string]string{
-				"name":      "支付宝官方支付",
+				"name":      "支付宝",
 				"type":      model.PaymentMethodAlipayOfficial,
 				"color":     "rgba(var(--semi-blue-5), 1)",
 				"min_topup": strconv.Itoa(setting.AlipayOfficialMinTopUp),
@@ -488,6 +489,9 @@ func GetUserTopUps(c *gin.Context) {
 func GetAllTopUps(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	keyword := c.Query("keyword")
+	expireCtx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+	runAlipayOfficialOrderExpireTaskOnce(expireCtx)
+	cancel()
 
 	var (
 		topups []*model.TopUp
@@ -511,6 +515,16 @@ func GetAllTopUps(c *gin.Context) {
 
 type AdminCompleteTopupRequest struct {
 	TradeNo string `json:"trade_no"`
+}
+
+type AdminTopUpTradeRequest struct {
+	TradeNo string `json:"trade_no"`
+}
+
+type AdminRefundTopUpRequest struct {
+	TradeNo      string  `json:"trade_no"`
+	RefundAmount float64 `json:"refund_amount"`
+	Reason       string  `json:"reason"`
 }
 
 // AdminCompleteTopUp 管理员补单接口

@@ -1,10 +1,13 @@
 package controller
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Xauryan/stuhelper-ai/common"
@@ -20,8 +23,14 @@ import (
 )
 
 const (
-	officialPaymentScenePC = "pc"
-	officialPaymentSceneH5 = "h5"
+	officialPaymentScenePC       = "pc"
+	officialPaymentSceneH5       = "h5"
+	alipayOfficialExpireInterval = time.Minute
+)
+
+var (
+	alipayOfficialExpireTaskOnce    sync.Once
+	alipayOfficialExpireTaskRunning sync.Mutex
 )
 
 type OfficialPayRequest struct {
@@ -123,6 +132,7 @@ func RequestAlipayOfficialPay(c *gin.Context) {
 		Method:           method,
 		NotifyURL:        notifyURL,
 		ReturnURL:        returnURL,
+		QuitURL:          paymentReturnPath("/console/topup"),
 		OutTradeNo:       tradeNo,
 		TotalAmount:      formatOfficialPayMoney(payMoney),
 		Subject:          fmt.Sprintf("StuHelper AI 充值 %d", req.Amount),
@@ -235,6 +245,270 @@ func RequestWechatPayOfficialPay(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": data})
 }
 
+func AdminRefundAlipayOfficialTopUp(c *gin.Context) {
+	if !isAlipayOfficialTopUpEnabled() {
+		common.ApiErrorMsg(c, "支付宝官方支付未启用或配置不完整")
+		return
+	}
+	var req AdminRefundTopUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	tradeNo := strings.TrimSpace(req.TradeNo)
+	refundAmount := decimal.NewFromFloat(req.RefundAmount).Round(2)
+	if !refundAmount.IsPositive() {
+		common.ApiErrorMsg(c, "退款金额必须大于 0")
+		return
+	}
+
+	LockOrder(tradeNo)
+	defer UnlockOrder(tradeNo)
+
+	refund, err := model.CreateOfficialPaymentRefund(model.OfficialPaymentRefundCreateParams{
+		TradeNo:         tradeNo,
+		PaymentProvider: model.PaymentProviderAlipayOfficial,
+		PaymentMethod:   model.PaymentMethodAlipayOfficial,
+		RefundAmount:    refundAmount.InexactFloat64(),
+		Reason:          req.Reason,
+		OutRequestNo:    buildOfficialRefundRequestNo(tradeNo),
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	client := newAlipayOfficialClient()
+	response, err := client.Refund(c.Request.Context(), map[string]any{
+		"out_trade_no":   refund.TradeNo,
+		"refund_amount":  decimal.NewFromFloat(refund.RefundAmount).StringFixed(2),
+		"refund_reason":  normalizeAlipayRefundReason(req.Reason),
+		"out_request_no": refund.OutRequestNo,
+		"query_options":  []string{"deposit_back_info"},
+	})
+	rawResponse := common.GetJsonString(response)
+	if err != nil {
+		rollbackErr := model.MarkTopUpRefundFailed(refund.OutRequestNo, err.Error())
+		if rollbackErr != nil {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方退款失败后回滚本地退款失败 trade_no=%s out_request_no=%s error=%q rollback_error=%q", refund.TradeNo, refund.OutRequestNo, err.Error(), rollbackErr.Error()))
+		}
+		common.ApiError(c, err)
+		return
+	}
+	if response.FundChange != "Y" {
+		queryResponse, queryErr := client.RefundQuery(c.Request.Context(), map[string]any{
+			"out_trade_no":   refund.TradeNo,
+			"out_request_no": refund.OutRequestNo,
+			"query_options":  []string{"deposit_back_info"},
+		})
+		queryRefundConfirmed := queryResponse != nil && queryResponse.RefundStatus == "REFUND_SUCCESS"
+		if queryErr != nil || !queryRefundConfirmed {
+			reason := fmt.Sprintf("支付宝退款未确认 fund_change=%s", response.FundChange)
+			if queryErr != nil {
+				reason = queryErr.Error()
+			}
+			rollbackErr := model.MarkTopUpRefundFailed(refund.OutRequestNo, reason)
+			if rollbackErr != nil {
+				logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方退款未确认后回滚本地退款失败 trade_no=%s out_request_no=%s reason=%q rollback_error=%q", refund.TradeNo, refund.OutRequestNo, reason, rollbackErr.Error()))
+			}
+			common.ApiErrorMsg(c, "支付宝退款结果未确认，请稍后重试或查询退款状态")
+			return
+		}
+		rawResponse = common.GetJsonString(queryResponse)
+		if strings.TrimSpace(response.TradeNo) == "" {
+			response.TradeNo = queryResponse.TradeNo
+		}
+	}
+	if err := model.MarkTopUpRefundSuccess(refund.OutRequestNo, response.TradeNo, rawResponse); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.RecordLog(refund.UserId, model.LogTypeRefund, fmt.Sprintf("管理员发起支付宝官方退款成功，订单号：%s，退款金额：%.2f，退回额度：%s", refund.TradeNo, refund.RefundAmount, logger.FormatQuota(int(refund.RefundQuota))))
+	common.ApiSuccess(c, gin.H{"out_request_no": refund.OutRequestNo})
+}
+
+func AdminQueryAlipayOfficialTopUp(c *gin.Context) {
+	if !isAlipayOfficialTopUpEnabled() {
+		common.ApiErrorMsg(c, "支付宝官方支付未启用或配置不完整")
+		return
+	}
+	var req AdminTopUpTradeRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	tradeNo := strings.TrimSpace(req.TradeNo)
+	client := newAlipayOfficialClient()
+	response, err := client.TradeQuery(c.Request.Context(), map[string]any{
+		"out_trade_no": tradeNo,
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if response.TradeStatus == "TRADE_SUCCESS" || response.TradeStatus == "TRADE_FINISHED" {
+		paidMoney, err := decimal.NewFromString(response.TotalAmount)
+		if err != nil {
+			common.ApiErrorMsg(c, "支付宝返回金额无效")
+			return
+		}
+		LockOrder(tradeNo)
+		defer UnlockOrder(tradeNo)
+		if err := model.RechargeOfficialPayment(tradeNo, model.PaymentProviderAlipayOfficial, model.PaymentMethodAlipayOfficial, c.ClientIP(), paidMoney.InexactFloat64()); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
+	common.ApiSuccess(c, response)
+}
+
+func AdminCloseAlipayOfficialTopUp(c *gin.Context) {
+	if !isAlipayOfficialTopUpEnabled() {
+		common.ApiErrorMsg(c, "支付宝官方支付未启用或配置不完整")
+		return
+	}
+	var req AdminTopUpTradeRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	tradeNo := strings.TrimSpace(req.TradeNo)
+	LockOrder(tradeNo)
+	defer UnlockOrder(tradeNo)
+
+	topUp := model.GetTopUpByTradeNo(tradeNo)
+	if topUp == nil {
+		common.ApiError(c, model.ErrTopUpNotFound)
+		return
+	}
+	if topUp.PaymentProvider != model.PaymentProviderAlipayOfficial {
+		common.ApiError(c, model.ErrPaymentMethodMismatch)
+		return
+	}
+	if topUp.Status != common.TopUpStatusPending {
+		common.ApiError(c, model.ErrTopUpStatusInvalid)
+		return
+	}
+	client := newAlipayOfficialClient()
+	response, err := client.TradeClose(c.Request.Context(), map[string]any{
+		"out_trade_no": tradeNo,
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.UpdatePendingTopUpStatus(tradeNo, model.PaymentProviderAlipayOfficial, common.TopUpStatusExpired); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, response)
+}
+
+func ExpireAlipayOfficialPendingTopUps(ctx context.Context) error {
+	if !isAlipayOfficialTopUpEnabled() {
+		return nil
+	}
+	timeoutMinutes := setting.AlipayOfficialOrderTimeoutMin
+	if timeoutMinutes <= 0 {
+		timeoutMinutes = 10
+	}
+	expireBefore := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute).Unix()
+	expiredTopUps, err := model.ListPendingTopUpsBefore(model.PaymentProviderAlipayOfficial, expireBefore, 20)
+	if err != nil {
+		return err
+	}
+	if len(expiredTopUps) == 0 {
+		return nil
+	}
+	client := newAlipayOfficialClient()
+	for _, topUp := range expiredTopUps {
+		if topUp == nil {
+			continue
+		}
+		LockOrder(topUp.TradeNo)
+		currentTopUp := model.GetTopUpByTradeNo(topUp.TradeNo)
+		if currentTopUp == nil ||
+			currentTopUp.PaymentProvider != model.PaymentProviderAlipayOfficial ||
+			currentTopUp.Status != common.TopUpStatusPending {
+			UnlockOrder(topUp.TradeNo)
+			continue
+		}
+		response, closeErr := client.TradeClose(ctx, map[string]any{
+			"out_trade_no": topUp.TradeNo,
+		})
+		if closeErr != nil {
+			reconciled, reconcileErr := reconcileAlipayOfficialTopUpAfterCloseFailure(ctx, client, topUp.TradeNo)
+			if reconcileErr != nil {
+				logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单关闭失败后查询失败 trade_no=%s close_error=%q query_error=%q", topUp.TradeNo, closeErr.Error(), reconcileErr.Error()))
+			} else if !reconciled {
+				logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单关闭失败 trade_no=%s error=%q", topUp.TradeNo, closeErr.Error()))
+			}
+			UnlockOrder(topUp.TradeNo)
+			continue
+		}
+		if err := model.UpdatePendingTopUpStatus(topUp.TradeNo, model.PaymentProviderAlipayOfficial, common.TopUpStatusExpired); err != nil &&
+			!errors.Is(err, model.ErrTopUpStatusInvalid) {
+			logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单本地状态更新失败 trade_no=%s response=%q error=%q", topUp.TradeNo, common.GetJsonString(response), err.Error()))
+		}
+		UnlockOrder(topUp.TradeNo)
+	}
+	return nil
+}
+
+func reconcileAlipayOfficialTopUpAfterCloseFailure(ctx context.Context, client *service.AlipayOfficialClient, tradeNo string) (bool, error) {
+	response, err := client.TradeQuery(ctx, map[string]any{
+		"out_trade_no": tradeNo,
+	})
+	if err != nil {
+		return false, err
+	}
+	switch response.TradeStatus {
+	case "TRADE_SUCCESS", "TRADE_FINISHED":
+		paidMoney, err := decimal.NewFromString(response.TotalAmount)
+		if err != nil {
+			return false, err
+		}
+		if err := model.RechargeOfficialPayment(tradeNo, model.PaymentProviderAlipayOfficial, model.PaymentMethodAlipayOfficial, "", paidMoney.InexactFloat64()); err != nil {
+			return false, err
+		}
+		return true, nil
+	case "TRADE_CLOSED":
+		if err := model.UpdatePendingTopUpStatus(tradeNo, model.PaymentProviderAlipayOfficial, common.TopUpStatusExpired); err != nil &&
+			!errors.Is(err, model.ErrTopUpStatusInvalid) {
+			return false, err
+		}
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+func StartAlipayOfficialOrderExpireTask() {
+	alipayOfficialExpireTaskOnce.Do(func() {
+		if !common.IsMasterNode {
+			return
+		}
+		go func() {
+			runAlipayOfficialOrderExpireTaskOnce(context.Background())
+			ticker := time.NewTicker(alipayOfficialExpireInterval)
+			defer ticker.Stop()
+			for range ticker.C {
+				runAlipayOfficialOrderExpireTaskOnce(context.Background())
+			}
+		}()
+	})
+}
+
+func runAlipayOfficialOrderExpireTaskOnce(ctx context.Context) {
+	if !alipayOfficialExpireTaskRunning.TryLock() {
+		return
+	}
+	defer alipayOfficialExpireTaskRunning.Unlock()
+	if err := ExpireAlipayOfficialPendingTopUps(ctx); err != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单维护失败 error=%q", err.Error()))
+	}
+}
+
 func AlipayOfficialNotify(c *gin.Context) {
 	if !isAlipayOfficialWebhookEnabled() {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("支付宝官方支付 webhook 被拒绝 reason=webhook_disabled path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
@@ -255,6 +529,16 @@ func AlipayOfficialNotify(c *gin.Context) {
 	if !service.VerifyAlipayOfficialNotify(params, setting.AlipayOfficialAlipayPublicKey) {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("支付宝官方支付 webhook 验签失败 path=%q client_ip=%s trade_no=%s", c.Request.RequestURI, c.ClientIP(), params["out_trade_no"]))
 		c.String(http.StatusOK, "fail")
+		return
+	}
+
+	if params["msg_method"] == "alipay.trade.refund.depositback.completed" {
+		if err := handleAlipayOfficialRefundDepositbackCompleted(c, params); err != nil {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方退款冲退完成通知处理失败 out_request_no=%s error=%q", params["out_request_no"], err.Error()))
+			c.String(http.StatusOK, "fail")
+			return
+		}
+		c.String(http.StatusOK, "success")
 		return
 	}
 
@@ -281,6 +565,31 @@ func AlipayOfficialNotify(c *gin.Context) {
 	}
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方支付 充值成功 trade_no=%s client_ip=%s", tradeNo, c.ClientIP()))
 	c.String(http.StatusOK, "success")
+}
+
+func handleAlipayOfficialRefundDepositbackCompleted(c *gin.Context, params map[string]string) error {
+	bizContent := params["biz_content"]
+	if strings.TrimSpace(bizContent) == "" {
+		return fmt.Errorf("missing biz_content")
+	}
+	var payload struct {
+		OutTradeNo   string `json:"out_trade_no"`
+		TradeNo      string `json:"trade_no"`
+		OutRequestNo string `json:"out_request_no"`
+		DbackStatus  string `json:"dback_status"`
+		DbackAmount  string `json:"dback_amount"`
+	}
+	if err := common.UnmarshalJsonStr(bizContent, &payload); err != nil {
+		return fmt.Errorf("decode refund depositback biz_content: %w", err)
+	}
+	if payload.DbackStatus == "S" {
+		return model.MarkTopUpRefundSuccess(payload.OutRequestNo, payload.TradeNo, bizContent)
+	}
+	if payload.DbackStatus == "F" {
+		return model.MarkTopUpRefundFailed(payload.OutRequestNo, bizContent)
+	}
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方退款冲退通知忽略未知状态 out_request_no=%s status=%s", payload.OutRequestNo, payload.DbackStatus))
+	return nil
 }
 
 func WechatPayOfficialNotify(c *gin.Context) {
@@ -373,6 +682,29 @@ func normalizeOfficialPaymentScene(scene string) string {
 
 func buildOfficialTradeNo(prefix string, userID int) string {
 	return fmt.Sprintf("%s_%d_%d_%s", prefix, userID, time.Now().UnixMilli(), randstr.String(6))
+}
+
+func buildOfficialRefundRequestNo(tradeNo string) string {
+	return fmt.Sprintf("%s_RF_%d_%s", strings.TrimSpace(tradeNo), time.Now().UnixMilli(), randstr.String(4))
+}
+
+func normalizeAlipayRefundReason(reason string) string {
+	if strings.TrimSpace(reason) == "" {
+		return "管理员退款"
+	}
+	return strings.TrimSpace(reason)
+}
+
+func newAlipayOfficialClient() *service.AlipayOfficialClient {
+	return &service.AlipayOfficialClient{
+		AppID:            setting.AlipayOfficialAppID,
+		PrivateKey:       setting.AlipayOfficialPrivateKey,
+		AppCertSN:        setting.AlipayOfficialAppCertSN,
+		AlipayRootCertSN: setting.AlipayOfficialRootCertSN,
+		AlipayCertSN:     setting.AlipayOfficialAlipayCertSN,
+		AlipayPublicKey:  setting.AlipayOfficialAlipayPublicKey,
+		Sandbox:          setting.AlipayOfficialSandbox,
+	}
 }
 
 func normalizeOfficialTopUpAmount(amount int64) int64 {

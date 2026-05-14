@@ -23,6 +23,7 @@ export const officialChinaPaymentOptionKeys = [
   'AlipayOfficialReturnURL',
   'AlipayOfficialUnitPrice',
   'AlipayOfficialMinTopUp',
+  'AlipayOfficialOrderTimeoutMin',
   'WechatPayOfficialEnabled',
   'WechatPayOfficialAppID',
   'WechatPayOfficialMchID',

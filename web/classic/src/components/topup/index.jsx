@@ -782,6 +782,9 @@ const TopUp = () => {
                   method.color = 'rgba(var(--semi-primary-5), 1)';
                 }
               }
+              if (method.type === 'alipay_official') {
+                method.name = t('支付宝');
+              }
               return method;
             });
           } else {

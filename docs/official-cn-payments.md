@@ -22,6 +22,30 @@
 - Alipay Open Docs：`/websites/opendocs_alipay`
 - WeChat Pay API v3：`/websites/pay_weixin_qq_doc_v3`
 
+本轮支付宝官方支付按以下开放平台文档校准：
+
+- 电脑网站支付快速接入：
+  `https://opendocs.alipay.com/open-v3/05w3qg?pathHash=e5f3724a`
+- `alipay.trade.page.pay`：
+  `https://opendocs.alipay.com/open-v3/2423fad5_alipay.trade.page.pay?scene=22&pathHash=86a404ff`
+- 手机网站支付快速接入：
+  `https://opendocs.alipay.com/open-v3/05w4kt?pathHash=51d42218`
+- `alipay.trade.wap.pay`：
+  `https://opendocs.alipay.com/open-v3/1a957be0_alipay.trade.wap.pay?scene=21&pathHash=9012db1f`
+- 支付宝异步通知说明：
+  `https://opendocs.alipay.com/open-v3/05w3qh?pathHash=78bd7a2c` 和
+  `https://opendocs.alipay.com/open-v3/05w4ku?pathHash=af025e20`
+- `alipay.trade.refund`：
+  `https://opendocs.alipay.com/open-v3/01073208_alipay.trade.refund?scene=common&pathHash=a6d8f430`
+- `alipay.trade.fastpay.refund.query`：
+  `https://opendocs.alipay.com/open-v3/46bff59c_alipay.trade.fastpay.refund.query?scene=common&pathHash=cfdb9929`
+- `alipay.trade.query`：
+  `https://opendocs.alipay.com/open-v3/e9ce4f59_alipay.trade.query?scene=23&pathHash=6efa478d`
+- `alipay.trade.close`：
+  `https://opendocs.alipay.com/open-v3/429ffb46_alipay.trade.close?scene=common&pathHash=42b295c0`
+- `alipay.trade.refund.depositback.completed`：
+  `https://opendocs.alipay.com/open-v3/42a9ce75_alipay.trade.refund.depositback.completed?scene=common&pathHash=9c33d734`
+
 ## 后端配置项
 
 支付宝官方支付：
@@ -38,6 +62,9 @@
 - `AlipayOfficialReturnURL`：自定义支付返回地址，留空返回充值页。
 - `AlipayOfficialUnitPrice`：站内充值单价。
 - `AlipayOfficialMinTopUp`：最低充值数量。
+- `AlipayOfficialOrderTimeoutMin`：支付宝官方订单超时时间，默认 `10`
+  分钟。超时后后台维护任务会调用 `alipay.trade.close` 关闭支付宝侧订单，
+  并把本地待支付充值单标记为 `expired`，classic 账单显示“已超时”。
 
 微信支付官方支付：
 
@@ -93,6 +120,31 @@ AppID、商户号、商户证书序列号、APIv3 密钥、商户私钥和平台
 - 只处理 `TRADE_SUCCESS` 和 `TRADE_FINISHED`。
 - 回调 `total_amount` 必须与本地充值订单金额一致。
 - 成功响应支付宝要求的纯文本 `success`。
+- `alipay.trade.refund.depositback.completed` 退款冲退完成通知会在同一
+  回调入口验签后处理；`dback_status=S` 标记退款成功，`F` 回滚本地退款。
+
+支付宝主动接口：
+
+- 创建电脑网站支付使用 `alipay.trade.page.pay`，`product_code` 固定为
+  `FAST_INSTANT_TRADE_PAY`。
+- 创建手机网站支付使用 `alipay.trade.wap.pay`，`product_code` 固定为
+  `QUICK_WAP_WAY`，并在 `biz_content` 中携带 `quit_url` 返回充值页。
+- 管理员账单中的“查询”会调用 `alipay.trade.query`，若返回
+  `TRADE_SUCCESS` 或 `TRADE_FINISHED`，会按回调同样的金额校验和入账流程
+  补齐订单。
+- 管理员账单中的“关闭”和超时任务会调用 `alipay.trade.close`。如果超时
+  关闭失败，会再调用 `alipay.trade.query` 对账：已支付则入账，已关闭则
+  标记本地订单已超时，其他状态保留待支付并记录日志。
+- 管理员账单中的“退款”会调用 `alipay.trade.refund`。本地先创建退款请求
+  号 `out_request_no` 并预留可退金额/额度，支付宝返回 `fund_change=Y` 时
+  标记成功；如果 `fund_change` 不是 `Y`，会继续调用
+  `alipay.trade.fastpay.refund.query`，只有 `refund_status=REFUND_SUCCESS`
+  才确认成功。失败或未确认会回滚本地预留。
+- 退款请求和退款查询会携带 `query_options=["deposit_back_info"]`，用于让
+  支付宝在涉及银行卡退款冲退时返回/通知冲退信息。
+- 支持部分退款和全额退款。部分退款后充值单状态为 `partial_refunded`，全额
+  退款后状态为 `refunded`；退款会按退款金额比例扣回用户额度，并按同样比例
+  冲回充值返佣。
 
 微信支付处理：
 
@@ -127,8 +179,13 @@ classic 充值页根据浏览器环境选择支付场景：
 只有后端判定配置完整时，classic 钱包页才会展示对应支付按钮。充值数量变化或
 选择预设额度时，classic 钱包页会按当前支付方式调用对应金额接口，避免官方支付
 沿用易支付单价。
-充值账单会将 `alipay_official` 和 `wxpay_official` 映射为本地化后的官方支付
-名称，避免直接向用户展示后端枚举值。
+钱包管理的支付方式选择会把 `alipay_official` 简化显示为“支付宝”，避免用户侧
+出现“支付宝官方支付”这种运营语义；管理员支付设置中仍保留“支付宝官方”以区分
+易支付和官方直连配置。
+充值账单会将 `alipay_official` 映射为本地化后的“支付宝”，避免直接向用户展示
+后端枚举值。管理员查看充值账单时会额外显示用户名列，并支持按用户 ID、用户名
+和订单号搜索。账单弹窗使用更宽的自适应宽度，便于显示退款、用户名和操作列。
+待支付的支付宝官方订单在超过配置的订单超时时间后显示红色“已超时”。
 
 ## 外部参考 PR
 
