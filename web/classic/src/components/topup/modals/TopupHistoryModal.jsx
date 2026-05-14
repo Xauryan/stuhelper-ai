@@ -52,8 +52,11 @@ const PAYMENT_METHOD_MAP = {
   stripe: 'Stripe',
   creem: 'Creem',
   waffo: 'Waffo',
+  waffo_pancake: 'Waffo Pancake',
   alipay: '支付宝',
   wxpay: '微信',
+  alipay_official: '支付宝官方',
+  wxpay_official: '微信支付官方',
 };
 
 const TopupHistoryModal = ({ visible, onCancel, t }) => {

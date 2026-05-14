@@ -7,9 +7,11 @@
 ## 支持范围
 
 - 支付宝电脑网站支付：`alipay.trade.page.pay`，`product_code` 为
-  `FAST_INSTANT_PAY_PAY`。
+  `FAST_INSTANT_TRADE_PAY`。这是支付宝电脑网站支付官方文档中
+  `biz_content.product_code` 的固定产品码，错误产品码会导致支付宝收银台
+  提示订单信息无法识别或 `INVALID_PARAMETER`。
 - 支付宝手机网站支付：`alipay.trade.wap.pay`，`product_code` 为
-  `QUICK_WAP_PAY`。
+  `QUICK_WAP_WAY`。
 - 微信支付 Native 支付：`POST /v3/pay/transactions/native`，前端展示
   `code_url` 二维码，适用于电脑网站扫码支付。
 - 微信支付 H5 支付：`POST /v3/pay/transactions/h5`，前端使用 `h5_url`
@@ -125,6 +127,8 @@ classic 充值页根据浏览器环境选择支付场景：
 只有后端判定配置完整时，classic 钱包页才会展示对应支付按钮。充值数量变化或
 选择预设额度时，classic 钱包页会按当前支付方式调用对应金额接口，避免官方支付
 沿用易支付单价。
+充值账单会将 `alipay_official` 和 `wxpay_official` 映射为本地化后的官方支付
+名称，避免直接向用户展示后端枚举值。
 
 ## 外部参考 PR
 
