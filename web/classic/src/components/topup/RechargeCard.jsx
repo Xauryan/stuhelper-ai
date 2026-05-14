@@ -693,11 +693,10 @@ const RechargeCard = ({
                     enableStripeTopUp={enableStripeTopUp}
                     enableCreemTopUp={enableCreemTopUp}
                     enableAlipayOfficialTopUp={enableAlipayOfficialTopUp}
-                    alipayOfficialUnitPrice={
-                      payMethods?.find(
-                        (method) => method.type === 'alipay_official',
-                      )?.unit_price
+                    enableWechatPayOfficialTopUp={
+                      enableWechatPayOfficialTopUp
                     }
+                    priceRatio={priceRatio}
                     billingPreference={billingPreference}
                     onChangeBillingPreference={onChangeBillingPreference}
                     activeSubscriptions={activeSubscriptions}

@@ -125,6 +125,14 @@ func TestBuildOfficialTradeNoUsesAlipaySafeCharacters(t *testing.T) {
 	require.NotContains(t, tradeNo, "-")
 }
 
+func TestBuildWechatPayOfficialTradeNoUsesWechatLengthLimit(t *testing.T) {
+	tradeNo := buildWechatPayOfficialTradeNo("WXSUB", 1234567890)
+
+	require.LessOrEqual(t, len(tradeNo), 32)
+	require.Regexp(t, regexp.MustCompile(`^WXSUB_[0-9]+_[A-Za-z0-9]+$`), tradeNo)
+	require.NotContains(t, tradeNo, "-")
+}
+
 func TestConfiguredTopUpPayMoneyCeilsToCents(t *testing.T) {
 	originalPrice := operation_setting.Price
 	originalQuotaDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
@@ -197,6 +205,37 @@ func TestGetAlipayOfficialSubscriptionPayMoneyUsesConfiguredUnitPrice(t *testing
 
 	require.InDelta(t, 7.24, getAlipayOfficialSubscriptionPayMoney(1), 0.000001)
 	require.Equal(t, "7.24", formatOfficialPayMoney(getAlipayOfficialSubscriptionPayMoney(1)))
+}
+
+func TestGetWechatPayOfficialSubscriptionPayMoneyUsesConfiguredUnitPrice(t *testing.T) {
+	originalWechatUnitPrice := setting.WechatPayOfficialUnitPrice
+	t.Cleanup(func() {
+		setting.WechatPayOfficialUnitPrice = originalWechatUnitPrice
+	})
+
+	setting.WechatPayOfficialUnitPrice = 1.006
+
+	require.InDelta(t, 50.30, getWechatPayOfficialSubscriptionPayMoney(50), 0.000001)
+	require.Equal(t, int64(5030), yuanToFen(getWechatPayOfficialSubscriptionPayMoney(50)))
+}
+
+func TestGetEpaySubscriptionPayMoneyUsesConfiguredUnitPrice(t *testing.T) {
+	originalPrice := operation_setting.Price
+	originalPayMethods := operation_setting.PayMethods
+	t.Cleanup(func() {
+		operation_setting.Price = originalPrice
+		operation_setting.PayMethods = originalPayMethods
+	})
+
+	operation_setting.Price = 1.006
+	operation_setting.PayMethods = []map[string]string{
+		{"name": "支付宝", "type": "alipay", "unit_price": "1.2"},
+	}
+
+	require.InDelta(t, 50.30, getEpaySubscriptionPayMoney(50, "wxpay"), 0.000001)
+	require.Equal(t, "50.30", formatPayMoneyToCents(getEpaySubscriptionPayMoney(50, "wxpay")))
+	require.InDelta(t, 60.00, getEpaySubscriptionPayMoney(50, "alipay"), 0.000001)
+	require.Equal(t, "60.00", formatPayMoneyToCents(getEpaySubscriptionPayMoney(50, "alipay")))
 }
 
 func TestGetTopUpInfoStillExposesOfficialMethodsWhenEpayDisabled(t *testing.T) {

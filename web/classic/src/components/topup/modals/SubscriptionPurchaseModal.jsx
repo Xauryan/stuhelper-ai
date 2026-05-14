@@ -23,16 +23,12 @@ import {
   Modal,
   Typography,
   Card,
-  Button,
-  Select,
   Divider,
   Tooltip,
 } from '@douyinfe/semi-ui';
-import { Crown, CalendarClock, Package } from 'lucide-react';
-import { SiAlipay, SiStripe } from 'react-icons/si';
-import { IconCreditCard } from '@douyinfe/semi-icons';
+import { Crown, CalendarClock, CreditCard, Package } from 'lucide-react';
+import { SiAlipay, SiStripe, SiWechat } from 'react-icons/si';
 import { renderQuota } from '../../../helpers';
-import { getCurrencyConfig } from '../../../helpers/render';
 import {
   formatSubscriptionDuration,
   formatSubscriptionResetPeriod,
@@ -40,47 +36,32 @@ import {
 
 const { Text } = Typography;
 
+const renderPaymentIcon = (method) => {
+  if (method?.type === 'alipay' || method?.type === 'alipay_official') {
+    return <SiAlipay className='mr-2' size={16} color='#1677FF' />;
+  }
+  if (method?.type === 'wxpay' || method?.type === 'wxpay_official') {
+    return <SiWechat className='mr-2' size={16} color='#07C160' />;
+  }
+  if (method?.type === 'stripe') {
+    return <SiStripe className='mr-2' size={16} color='#635BFF' />;
+  }
+  return <CreditCard className='mr-2' size={16} />;
+};
+
 const SubscriptionPurchaseModal = ({
   t,
   visible,
   onCancel,
   selectedPlan,
   paying,
-  selectedEpayMethod,
-  setSelectedEpayMethod,
-  epayMethods = [],
-  enableOnlineTopUp = false,
-  enableStripeTopUp = false,
-  enableCreemTopUp = false,
-  enableAlipayOfficialTopUp = false,
-  hasAlipayOfficial = false,
-  alipayOfficialUnitPrice,
+  selectedPaymentMethod,
+  displayPayAmount,
   purchaseLimitInfo = null,
-  onPayStripe,
-  onPayCreem,
-  onPayEpay,
-  onPayAlipayOfficial,
+  onConfirm,
 }) => {
   const plan = selectedPlan?.plan;
   const totalAmount = Number(plan?.total_amount || 0);
-  const { symbol, rate } = getCurrencyConfig();
-  const price = plan ? Number(plan.price_amount || 0) : 0;
-  const convertedPrice = price * rate;
-  const displayPrice = convertedPrice.toFixed(
-    Number.isInteger(convertedPrice) ? 0 : 2,
-  );
-  // 只有当管理员开启支付网关 AND 套餐配置了对应的支付ID时才显示
-  const hasStripe = enableStripeTopUp && !!plan?.stripe_price_id;
-  const hasCreem = enableCreemTopUp && !!plan?.creem_product_id;
-  const hasEpay = enableOnlineTopUp && epayMethods.length > 0;
-  const canPayAlipayOfficial = enableAlipayOfficialTopUp && hasAlipayOfficial;
-  const hasAnyPayment =
-    hasStripe || hasCreem || hasEpay || canPayAlipayOfficial;
-  const alipayUnitPrice = Number(alipayOfficialUnitPrice);
-  const alipayOfficialPayAmount =
-    Number.isFinite(alipayUnitPrice) && alipayUnitPrice > 0
-      ? Math.ceil(price * alipayUnitPrice * 100) / 100
-      : 0;
   const purchaseLimit = Number(purchaseLimitInfo?.limit || 0);
   const purchaseCount = Number(purchaseLimitInfo?.count || 0);
   const purchaseLimitReached =
@@ -95,13 +76,18 @@ const SubscriptionPurchaseModal = ({
         </div>
       }
       visible={visible}
+      onOk={onConfirm}
       onCancel={onCancel}
-      footer={null}
       size='small'
       centered
+      maskClosable={false}
+      confirmLoading={paying}
+      okButtonProps={{
+        disabled: !selectedPaymentMethod || purchaseLimitReached,
+      }}
     >
       {plan ? (
-        <div className='space-y-4 pb-10'>
+        <div className='space-y-4'>
           {/* 套餐信息 */}
           <Card className='!rounded-xl !border-0 bg-slate-50 dark:bg-slate-800'>
             <div className='space-y-3'>
@@ -173,14 +159,27 @@ const SubscriptionPurchaseModal = ({
                   {t('应付金额')}：
                 </Text>
                 <Text strong className='text-xl text-purple-600'>
-                  {symbol}
-                  {displayPrice}
+                  {displayPayAmount || '-'}
                 </Text>
+              </div>
+              <div className='flex justify-between items-center'>
+                <Text strong className='text-slate-700 dark:text-slate-200'>
+                  {t('支付方式')}：
+                </Text>
+                {selectedPaymentMethod ? (
+                  <div className='flex items-center'>
+                    {renderPaymentIcon(selectedPaymentMethod)}
+                    <Text className='text-slate-900 dark:text-slate-100'>
+                      {selectedPaymentMethod.name}
+                    </Text>
+                  </div>
+                ) : (
+                  <Text type='tertiary'>{t('请选择支付方式')}</Text>
+                )}
               </div>
             </div>
           </Card>
 
-          {/* 支付方式 */}
           {purchaseLimitReached && (
             <Banner
               type='warning'
@@ -189,95 +188,10 @@ const SubscriptionPurchaseModal = ({
               closeIcon={null}
             />
           )}
-
-          {hasAnyPayment ? (
-            <div className='space-y-3'>
-              <Text size='small' type='tertiary'>
-                {t('选择支付方式')}：
-              </Text>
-
-              {/* Stripe / Creem */}
-              {(hasStripe || hasCreem) && (
-                <div className='flex gap-2'>
-                  {hasStripe && (
-                    <Button
-                      theme='light'
-                      className='flex-1'
-                      icon={<SiStripe size={14} color='#635BFF' />}
-                      onClick={onPayStripe}
-                      loading={paying}
-                      disabled={purchaseLimitReached}
-                    >
-                      Stripe
-                    </Button>
-                  )}
-                  {hasCreem && (
-                    <Button
-                      theme='light'
-                      className='flex-1'
-                      icon={<IconCreditCard />}
-                      onClick={onPayCreem}
-                      loading={paying}
-                      disabled={purchaseLimitReached}
-                    >
-                      Creem
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {/* 官方支付宝 */}
-              {canPayAlipayOfficial && (
-                <div className='space-y-1'>
-                  <Button
-                    theme='light'
-                    icon={<SiAlipay size={16} color='#1677FF' />}
-                    onClick={onPayAlipayOfficial}
-                    loading={paying}
-                    disabled={purchaseLimitReached}
-                    block
-                  >
-                    {t('支付宝')}
-                  </Button>
-                  {alipayOfficialPayAmount > 0 && (
-                    <Text size='small' type='tertiary'>
-                      {t('实付')} ¥{alipayOfficialPayAmount.toFixed(2)}
-                    </Text>
-                  )}
-                </div>
-              )}
-
-              {/* 易支付 */}
-              {hasEpay && (
-                <div className='flex gap-2'>
-                  <Select
-                    value={selectedEpayMethod}
-                    onChange={setSelectedEpayMethod}
-                    style={{ flex: 1 }}
-                    size='default'
-                    placeholder={t('选择支付方式')}
-                    optionList={epayMethods.map((m) => ({
-                      value: m.type,
-                      label: m.name || m.type,
-                    }))}
-                    disabled={purchaseLimitReached}
-                  />
-                  <Button
-                    theme='solid'
-                    type='primary'
-                    onClick={onPayEpay}
-                    loading={paying}
-                    disabled={!selectedEpayMethod || purchaseLimitReached}
-                  >
-                    {t('支付')}
-                  </Button>
-                </div>
-              )}
-            </div>
-          ) : (
+          {!selectedPaymentMethod && (
             <Banner
               type='info'
-              description={t('管理员未开启在线支付功能，请联系管理员配置。')}
+              description={t('请选择支付方式')}
               className='!rounded-xl'
               closeIcon={null}
             />

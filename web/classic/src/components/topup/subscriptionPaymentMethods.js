@@ -15,3 +15,105 @@ export function getOfficialAlipayMethod(payMethods = []) {
     null
   );
 }
+
+export function getOfficialWechatPayMethod(payMethods = []) {
+  return (
+    (payMethods || []).find((method) => method?.type === 'wxpay_official') ||
+    null
+  );
+}
+
+function normalizeUnitPrice(unitPrice) {
+  const value = Number(unitPrice);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export function buildSubscriptionPaymentMethods({
+  plan,
+  payMethods = [],
+  epayMethods = [],
+  epayUnitPrice,
+  enableOnlineTopUp = false,
+  enableStripeTopUp = false,
+  enableCreemTopUp = false,
+  enableAlipayOfficialTopUp = false,
+  enableWechatPayOfficialTopUp = false,
+  hasAlipayOfficial = false,
+  hasWechatPayOfficial = false,
+} = {}) {
+  const methods = [];
+
+  if (enableStripeTopUp && plan?.stripe_price_id) {
+    const stripeMethod = (payMethods || []).find(
+      (method) => method?.type === 'stripe',
+    );
+    methods.push({
+      key: 'stripe',
+      type: 'stripe',
+      provider: 'stripe',
+      name: stripeMethod?.name || 'Stripe',
+      unitPrice: normalizeUnitPrice(stripeMethod?.unit_price),
+      icon: stripeMethod?.icon,
+      color: stripeMethod?.color,
+    });
+  }
+
+  if (enableCreemTopUp && plan?.creem_product_id) {
+    const creemMethod = (payMethods || []).find(
+      (method) => method?.type === 'creem',
+    );
+    methods.push({
+      key: 'creem',
+      type: 'creem',
+      provider: 'creem',
+      name: creemMethod?.name || 'Creem',
+      unitPrice: normalizeUnitPrice(creemMethod?.unit_price),
+      icon: creemMethod?.icon,
+      color: creemMethod?.color,
+    });
+  }
+
+  if (enableAlipayOfficialTopUp && hasAlipayOfficial) {
+    const alipayMethod = getOfficialAlipayMethod(payMethods);
+    methods.push({
+      key: 'alipay_official',
+      type: 'alipay_official',
+      provider: 'alipay_official',
+      name: alipayMethod?.name || '支付宝',
+      unitPrice: normalizeUnitPrice(alipayMethod?.unit_price),
+      icon: alipayMethod?.icon,
+      color: alipayMethod?.color,
+    });
+  }
+
+  if (enableWechatPayOfficialTopUp && hasWechatPayOfficial) {
+    const wechatMethod = getOfficialWechatPayMethod(payMethods);
+    methods.push({
+      key: 'wxpay_official',
+      type: 'wxpay_official',
+      provider: 'wxpay_official',
+      name: wechatMethod?.name || '微信',
+      unitPrice: normalizeUnitPrice(wechatMethod?.unit_price),
+      icon: wechatMethod?.icon,
+      color: wechatMethod?.color,
+    });
+  }
+
+  if (enableOnlineTopUp) {
+    (epayMethods || []).forEach((method) => {
+      if (!method?.type) return;
+      methods.push({
+        key: `epay:${method.type}`,
+        type: method.type,
+        provider: 'epay',
+        name: method.name || method.type,
+        unitPrice: normalizeUnitPrice(method.unit_price ?? epayUnitPrice),
+        icon: method.icon,
+        color: method.color,
+        raw: method,
+      });
+    });
+  }
+
+  return methods;
+}

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   getRemainingRefundMoney,
   isAlipayOfficialRefundable,
+  isSubscriptionTopup,
 } from './topupHistoryUtils.mjs';
 
 assert.equal(
@@ -46,6 +47,41 @@ assert.equal(
     status: 'success',
     money: 1,
     refunded_money: 0,
+  }),
+  false,
+);
+assert.equal(
+  isSubscriptionTopup({
+    trade_no: 'SUB_1_1778750000',
+    amount: 0,
+  }),
+  true,
+);
+assert.equal(
+  isSubscriptionTopup({
+    trade_no: 'ALIPAYSUB_1_1778750000_ABCDEF',
+    amount: 0,
+  }),
+  true,
+);
+assert.equal(
+  isSubscriptionTopup({
+    trade_no: 'WXSUB_1_ABCDEF1234567890',
+    amount: 0,
+  }),
+  true,
+);
+assert.equal(
+  isSubscriptionTopup({
+    trade_no: 'ALIPAY_1_1778750000_ABCDEF',
+    amount: 0,
+  }),
+  false,
+);
+assert.equal(
+  isSubscriptionTopup({
+    trade_no: 'WXSUB_1_ABCDEF1234567890',
+    amount: 10,
   }),
   false,
 );

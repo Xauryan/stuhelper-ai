@@ -797,6 +797,9 @@ const TopUp = () => {
               if (method.type === 'alipay_official') {
                 method.name = t('支付宝');
               }
+              if (method.type === 'wxpay_official') {
+                method.name = t('微信');
+              }
               return method;
             });
           } else {

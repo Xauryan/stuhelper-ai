@@ -188,7 +188,7 @@ func RequestWechatPayOfficialPay(c *gin.Context) {
 		return
 	}
 
-	tradeNo := buildOfficialTradeNo("WXPAY", id)
+	tradeNo := buildWechatPayOfficialTradeNo("WX", id)
 	topUp := buildOfficialTopUp(id, req.Amount, payMoney, tradeNo, model.PaymentMethodWechatPayOfficial, model.PaymentProviderWechatPayOfficial)
 	if err := topUp.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("微信支付官方 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, tradeNo, req.Amount, err.Error()))
@@ -697,6 +697,17 @@ func WechatPayOfficialNotify(c *gin.Context) {
 
 	LockOrder(transaction.OutTradeNo)
 	defer UnlockOrder(transaction.OutTradeNo)
+	if err := completeWechatPayOfficialSubscriptionOrderIfPresent(*envelope, *transaction); err != nil {
+		if !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("微信支付官方 订阅处理失败 trade_no=%s transaction_id=%s client_ip=%s error=%q", transaction.OutTradeNo, transaction.TransactionID, c.ClientIP(), err.Error()))
+			c.JSON(http.StatusInternalServerError, gin.H{"code": "FAIL", "message": "retry"})
+			return
+		}
+	} else {
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方 订阅成功 trade_no=%s transaction_id=%s client_ip=%s", transaction.OutTradeNo, transaction.TransactionID, c.ClientIP()))
+		c.Status(http.StatusNoContent)
+		return
+	}
 	if err := model.RechargeOfficialPayment(transaction.OutTradeNo, model.PaymentProviderWechatPayOfficial, model.PaymentMethodWechatPayOfficial, c.ClientIP(), float64(transaction.Amount.Total)/100); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("微信支付官方 充值处理失败 trade_no=%s transaction_id=%s client_ip=%s error=%q", transaction.OutTradeNo, transaction.TransactionID, c.ClientIP(), err.Error()))
 		c.JSON(http.StatusInternalServerError, gin.H{"code": "FAIL", "message": "retry"})
@@ -704,6 +715,28 @@ func WechatPayOfficialNotify(c *gin.Context) {
 	}
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方 充值成功 trade_no=%s transaction_id=%s client_ip=%s", transaction.OutTradeNo, transaction.TransactionID, c.ClientIP()))
 	c.Status(http.StatusNoContent)
+}
+
+func completeWechatPayOfficialSubscriptionOrderIfPresent(envelope service.WechatPayOfficialNotifyEnvelope, transaction service.WechatPayOfficialTransaction) error {
+	order := model.GetSubscriptionOrderByTradeNo(transaction.OutTradeNo)
+	if order == nil {
+		return model.ErrSubscriptionOrderNotFound
+	}
+	if order.PaymentProvider != model.PaymentProviderWechatPayOfficial {
+		return model.ErrPaymentMethodMismatch
+	}
+	expectedFen := yuanToFen(order.Money)
+	if expectedFen != transaction.Amount.Total {
+		return errors.New("支付金额与订阅订单金额不一致")
+	}
+	payload := struct {
+		Envelope    service.WechatPayOfficialNotifyEnvelope `json:"envelope"`
+		Transaction service.WechatPayOfficialTransaction    `json:"transaction"`
+	}{
+		Envelope:    envelope,
+		Transaction: transaction,
+	}
+	return model.CompleteSubscriptionOrder(transaction.OutTradeNo, common.GetJsonString(payload), model.PaymentProviderWechatPayOfficial, model.PaymentMethodWechatPayOfficial)
 }
 
 func getOfficialPayMoney(amount int64, group string, unitPrice float64) float64 {
@@ -758,6 +791,19 @@ func normalizeOfficialPaymentScene(scene string) string {
 
 func buildOfficialTradeNo(prefix string, userID int) string {
 	return fmt.Sprintf("%s_%d_%d_%s", prefix, userID, time.Now().UnixMilli(), randstr.String(6))
+}
+
+func buildWechatPayOfficialTradeNo(prefix string, userID int) string {
+	base := fmt.Sprintf("%s_%d_", prefix, userID)
+	randomLength := 32 - len(base)
+	if randomLength < 6 {
+		randomLength = 6
+	}
+	tradeNo := base + randstr.String(randomLength)
+	if len(tradeNo) > 32 {
+		return tradeNo[:32]
+	}
+	return tradeNo
 }
 
 func buildOfficialRefundRequestNo(tradeNo string) string {

@@ -168,6 +168,7 @@ func SetApiRouter(router *gin.Engine) {
 			subscriptionRoute.POST("/stripe/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestStripePay)
 			subscriptionRoute.POST("/creem/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestCreemPay)
 			subscriptionRoute.POST("/alipay-official/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestAlipayOfficialPay)
+			subscriptionRoute.POST("/wechat-pay-official/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestWechatPayOfficialPay)
 		}
 		subscriptionAdminRoute := apiRouter.Group("/subscription/admin")
 		subscriptionAdminRoute.Use(middleware.AdminAuth())

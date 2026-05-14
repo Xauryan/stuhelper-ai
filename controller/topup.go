@@ -125,7 +125,7 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 		if !hasWechatPayOfficial {
 			payMethods = append(payMethods, map[string]string{
-				"name":       "微信官方支付",
+				"name":       "微信",
 				"type":       model.PaymentMethodWechatPayOfficial,
 				"color":      "rgba(var(--semi-green-5), 1)",
 				"min_topup":  strconv.Itoa(setting.WechatPayOfficialMinTopUp),

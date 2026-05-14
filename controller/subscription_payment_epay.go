@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/Calcium-Ion/go-epay/epay"
@@ -14,6 +13,7 @@ import (
 	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
+	"github.com/shopspring/decimal"
 )
 
 type SubscriptionEpayPayRequest struct {
@@ -80,10 +80,16 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		return
 	}
 
+	payMoney := getEpaySubscriptionPayMoney(plan.PriceAmount, req.PaymentMethod)
+	if payMoney < 0.01 {
+		common.ApiErrorMsg(c, "套餐金额过低")
+		return
+	}
+
 	order := &model.SubscriptionOrder{
 		UserId:          userId,
 		PlanId:          plan.Id,
-		Money:           plan.PriceAmount,
+		Money:           payMoney,
 		TradeNo:         tradeNo,
 		PaymentMethod:   req.PaymentMethod,
 		PaymentProvider: model.PaymentProviderEpay,
@@ -98,7 +104,7 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		Type:           req.PaymentMethod,
 		ServiceTradeNo: tradeNo,
 		Name:           fmt.Sprintf("SUB:%s", plan.Title),
-		Money:          strconv.FormatFloat(plan.PriceAmount, 'f', 2, 64),
+		Money:          formatPayMoneyToCents(payMoney),
 		Device:         epay.PC,
 		NotifyUrl:      notifyUrl,
 		ReturnUrl:      returnUrl,
@@ -109,6 +115,23 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": params, "url": uri})
+}
+
+func getEpaySubscriptionPayMoney(priceAmount float64, paymentMethod string) float64 {
+	unitPrice := operation_setting.Price
+	for _, method := range operation_setting.PayMethods {
+		if method["type"] != paymentMethod {
+			continue
+		}
+		if configuredPrice, err := decimal.NewFromString(method["unit_price"]); err == nil && configuredPrice.IsPositive() {
+			unitPrice = configuredPrice.InexactFloat64()
+		}
+		break
+	}
+	return decimal.NewFromFloat(priceAmount).
+		Mul(decimal.NewFromFloat(unitPrice)).
+		RoundCeil(2).
+		InexactFloat64()
 }
 
 func SubscriptionEpayNotify(c *gin.Context) {

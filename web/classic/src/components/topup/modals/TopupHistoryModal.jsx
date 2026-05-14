@@ -43,6 +43,7 @@ import {
   formatCurrency,
   getRemainingRefundMoney,
   isAlipayOfficialRefundable,
+  isSubscriptionTopup,
 } from './topupHistoryUtils.mjs';
 const { Text } = Typography;
 
@@ -254,11 +255,6 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
   const renderPaymentMethod = (pm) => {
     const displayName = PAYMENT_METHOD_MAP[pm];
     return <Text>{displayName ? t(displayName) : pm || '-'}</Text>;
-  };
-
-  const isSubscriptionTopup = (record) => {
-    const tradeNo = (record?.trade_no || '').toLowerCase();
-    return Number(record?.amount || 0) === 0 && tradeNo.startsWith('sub');
   };
 
   // 检查是否为管理员

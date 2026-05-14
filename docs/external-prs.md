@@ -2,13 +2,15 @@
 
 本文档记录不是通过常规上游 release 同步引入的 PR 或补丁。
 
-## 官方支付宝订阅支付与 classic 订阅展示控制
+## 官方支付订阅购买与 classic 订阅展示控制
 
 - 来源：StuHelper AI 本地补丁。
 - 相关参考：
   - 支付宝官方电脑网站支付 / 手机网站支付文档。
+  - 微信支付 API v3 Native 支付 / H5 支付 / 支付成功通知文档。
   - `docs/official-cn-payments.md` 中记录的官方支付宝和微信支付接入约束。
 - 本地导入日期：2026-05-14
+- 更新日期：2026-05-15，补齐微信支付官方订阅购买。
 - 导入方式：按本地官方支付架构手工实现；没有套用支付宝当面付或易支付实现。
 - 本地涉及文件：
   - `controller/subscription_payment_alipay_official.go`
@@ -32,27 +34,42 @@
 
 ### 原因
 
-官方支付宝此前只覆盖额度充值。用户在只启用官方支付宝、不启用易支付时，
-订阅套餐购买流程仍会提示未开启在线支付；同时 classic 钱包页默认切到订阅，
-订阅卡片把第一个套餐默认标记为“推荐”，不利于后台手动运营。
+官方支付宝和微信支付官方此前都先覆盖额度充值，订阅购买流程需要补齐官方支付
+能力。用户在只启用官方支付、不启用易支付时，订阅套餐购买流程不应提示未开启
+在线支付；同时 classic 钱包页默认切到订阅，订阅卡片把第一个套餐默认标记为
+“推荐”，不利于后台手动运营。
 
 ### 本地行为
 
 - 新增 `POST /api/subscription/alipay-official/pay`，用于订阅套餐官方支付宝支付。
-- 订阅订单使用官方支付宝电脑网站支付或手机网站支付，移动端使用
+- 新增 `POST /api/subscription/wechat-pay-official/pay`，用于订阅套餐微信支付官方
+  支付。
+- 支付宝订阅订单使用官方电脑网站支付或手机网站支付，移动端使用
   `alipay.trade.wap.pay`，电脑端使用 `alipay.trade.page.pay`。
-- 订阅价格按套餐美元金额乘以 `AlipayOfficialUnitPrice` 换算成人民币，并按
-  进一法保留两位小数提交给支付宝。
+- 微信支付官方订阅订单复用微信支付 API v3，电脑端使用
+  `/v3/pay/transactions/native` 并展示扫码二维码，移动端使用
+  `/v3/pay/transactions/h5` 并跳转 `h5_url`。
+- 订阅价格按套餐美元金额乘以对应官方支付单价换算成人民币，并按进一法保留两位
+  小数提交给支付平台；支付宝使用 `AlipayOfficialUnitPrice`，微信支付官方使用
+  `WechatPayOfficialUnitPrice`。
 - 如果站点以服务商/第三方代理身份代商户调用支付宝接口，`AlipayOfficialAppAuthToken`
   会被电脑网站支付、手机网站支付、查询、关闭、退款和退款查询共用；该授权
   Token 作为敏感配置保存，不从 `/api/option/` 回显，只暴露
   `AlipayOfficialAppAuthTokenConfigured`。
 - 支付宝官方异步通知会先识别订阅订单；如果命中订阅订单，则完成订阅并写入与
   充值账单兼容的支付记录；如果不是订阅订单，再走普通额度充值完成逻辑。
+- 微信支付官方异步通知会先识别订阅订单；如果命中订阅订单，则校验微信支付回调
+  金额与订阅订单金额一致后完成订阅；如果不是订阅订单，再走普通额度充值完成逻辑。
 - 订阅完成写入的充值账单必须保留 `PaymentProvider=alipay_official`，并执行
-  支付方式和支付提供方一致性保护，避免不同支付网关订单串用。
-- classic 订阅购买弹窗会在官方支付宝完整配置时展示“支付宝”支付方式，不再依赖
-  易支付 `enable_online_topup` 开关。
+  支付方式和支付提供方一致性保护；微信支付官方订阅保留
+  `PaymentProvider=wxpay_official`，避免不同支付网关订单串用。
+- classic 充值账单把 `SUB`、`ALIPAYSUB`、`WXSUB` 前缀且充值额度为 0 的账单
+  识别为“订阅套餐”，官方订阅不会显示成普通 0 额度充值。
+- classic 订阅购买页会在官方支付宝或微信支付官方完整配置时展示“支付宝”或
+  “微信”支付方式，不再依赖易支付 `enable_online_topup` 开关，也不会把官方
+  支付混入易支付子渠道。
+- classic 订阅购买流程改为先选套餐、再选支付方式，页面即时展示该方式换算后的
+  实付人民币，确认弹窗只展示套餐、支付方式和应付金额。
 - classic 钱包页同时存在“额度充值”和“订阅套餐”时，默认进入“额度充值”，且
   “额度充值”位于“订阅套餐”左侧。
 - 订阅套餐新增 `recommended` 字段。classic 后台“订阅管理”中可手动开关
@@ -64,6 +81,7 @@
 ```powershell
 go test ./controller ./model ./service -count=1
 bun web/classic/src/components/topup/subscriptionPaymentMethods.test.mjs
+bun web/classic/src/components/topup/subscriptionPaymentDisplay.test.mjs
 bun web/classic/src/components/topup/rechargeAmountDisplay.test.mjs
 bun web/classic/src/components/topup/subscriptionPlanDisplay.test.mjs
 bun web/classic/src/components/topup/rechargeTabs.test.mjs
@@ -76,9 +94,10 @@ git diff --check
 
 每次同步上游 release 时：
 
-- 不要把官方支付宝订阅支付回退成易支付子渠道或支付宝当面付。
+- 不要把官方支付宝或微信支付官方订阅支付回退成易支付子渠道，也不要把支付宝
+  订阅回退成支付宝当面付。
 - 如果上游新增订阅支付能力，需要比较订单字段、回调幂等、支付提供方保护和金额
-  换算规则，确保本地官方支付宝路径仍独立且可用。
+  换算规则，确保本地官方支付路径仍独立且可用。
 - 保留 classic 钱包页默认“额度充值”的 tab 顺序，以及订阅推荐由后台手动控制的
   运营能力。
 - 如果上游新增订阅套餐展示字段，确认不会覆盖或忽略本地 `recommended` 字段。

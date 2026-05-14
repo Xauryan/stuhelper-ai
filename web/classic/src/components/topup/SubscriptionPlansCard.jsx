@@ -20,9 +20,11 @@ For commercial licensing, please contact support@xauryan.com
 import React, { useMemo, useState } from 'react';
 import {
   Badge,
+  Banner,
   Button,
   Card,
   Divider,
+  Modal,
   Select,
   Skeleton,
   Space,
@@ -38,17 +40,22 @@ import {
   renderQuota,
 } from '../../helpers';
 import { getCurrencyConfig } from '../../helpers/render';
-import { RefreshCw, Sparkles } from 'lucide-react';
+import { CreditCard, RefreshCw, Sparkles } from 'lucide-react';
+import { SiAlipay, SiStripe, SiWechat } from 'react-icons/si';
+import { QRCodeSVG } from 'qrcode.react';
 import SubscriptionPurchaseModal from './modals/SubscriptionPurchaseModal';
 import {
   formatSubscriptionDuration,
   formatSubscriptionResetPeriod,
 } from '../../helpers/subscriptionFormat';
 import {
+  buildSubscriptionPaymentMethods,
   getEpayMethods,
   getOfficialAlipayMethod,
+  getOfficialWechatPayMethod,
 } from './subscriptionPaymentMethods';
 import { shouldHighlightSubscriptionPlan } from './subscriptionPlanDisplay';
+import { formatSubscriptionPayAmount } from './subscriptionPaymentDisplay';
 
 const { Text } = Typography;
 
@@ -82,7 +89,8 @@ const SubscriptionPlansCard = ({
   enableStripeTopUp = false,
   enableCreemTopUp = false,
   enableAlipayOfficialTopUp = false,
-  alipayOfficialUnitPrice,
+  enableWechatPayOfficialTopUp = false,
+  priceRatio,
   billingPreference,
   onChangeBillingPreference,
   activeSubscriptions = [],
@@ -93,8 +101,11 @@ const SubscriptionPlansCard = ({
   const [open, setOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [paying, setPaying] = useState(false);
-  const [selectedEpayMethod, setSelectedEpayMethod] = useState('');
+  const [selectedPaymentKey, setSelectedPaymentKey] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [wechatQrOpen, setWechatQrOpen] = useState(false);
+  const [wechatQrCodeUrl, setWechatQrCodeUrl] = useState('');
+  const [wechatQrOrderId, setWechatQrOrderId] = useState('');
 
   const epayMethods = useMemo(() => getEpayMethods(payMethods), [payMethods]);
   const alipayOfficialMethod = useMemo(
@@ -102,17 +113,117 @@ const SubscriptionPlansCard = ({
     [payMethods],
   );
   const hasAlipayOfficial = enableAlipayOfficialTopUp && !!alipayOfficialMethod;
+  const wechatPayOfficialMethod = useMemo(
+    () => getOfficialWechatPayMethod(payMethods),
+    [payMethods],
+  );
+  const hasWechatPayOfficial =
+    enableWechatPayOfficialTopUp && !!wechatPayOfficialMethod;
 
-  const openBuy = (p) => {
+  const selectPlan = (p) => {
     setSelectedPlan(p);
-    setSelectedEpayMethod(epayMethods?.[0]?.type || '');
-    setOpen(true);
   };
 
   const closeBuy = () => {
     setOpen(false);
-    setSelectedPlan(null);
     setPaying(false);
+  };
+
+  const subscriptionPaymentMethods = useMemo(
+    () =>
+      buildSubscriptionPaymentMethods({
+        plan: selectedPlan?.plan,
+        payMethods,
+        epayMethods,
+        epayUnitPrice: priceRatio,
+        enableOnlineTopUp,
+        enableStripeTopUp,
+        enableCreemTopUp,
+        enableAlipayOfficialTopUp,
+        enableWechatPayOfficialTopUp,
+        hasAlipayOfficial,
+        hasWechatPayOfficial,
+      }),
+    [
+      selectedPlan?.plan,
+      payMethods,
+      epayMethods,
+      priceRatio,
+      enableOnlineTopUp,
+      enableStripeTopUp,
+      enableCreemTopUp,
+      enableAlipayOfficialTopUp,
+      enableWechatPayOfficialTopUp,
+      hasAlipayOfficial,
+      hasWechatPayOfficial,
+    ],
+  );
+  const selectedPaymentMethod = useMemo(
+    () =>
+      subscriptionPaymentMethods.find(
+        (method) => method.key === selectedPaymentKey,
+      ) || null,
+    [subscriptionPaymentMethods, selectedPaymentKey],
+  );
+
+  React.useEffect(() => {
+    if (!selectedPlan?.plan) {
+      setSelectedPaymentKey('');
+      return;
+    }
+    if (
+      subscriptionPaymentMethods.some(
+        (method) => method.key === selectedPaymentKey,
+      )
+    ) {
+      return;
+    }
+    setSelectedPaymentKey(subscriptionPaymentMethods[0]?.key || '');
+  }, [selectedPlan?.plan, selectedPaymentKey, subscriptionPaymentMethods]);
+
+  const getPlanPriceDisplay = (plan) => {
+    const { symbol, rate } = getCurrencyConfig();
+    const price = Number(plan?.price_amount || 0);
+    const convertedPrice = price * rate;
+    const displayPrice = convertedPrice.toFixed(
+      Number.isInteger(convertedPrice) ? 0 : 2,
+    );
+    return { symbol, displayPrice };
+  };
+
+  const currencyConfig = getCurrencyConfig();
+  const selectedPayAmount = formatSubscriptionPayAmount({
+    priceAmount: selectedPlan?.plan?.price_amount || 0,
+    symbol: currencyConfig.symbol,
+    rate: currencyConfig.rate,
+    unitPrice: selectedPaymentMethod?.unitPrice,
+  });
+
+  const renderPaymentIcon = (method) => {
+    if (method?.type === 'alipay' || method?.type === 'alipay_official') {
+      return <SiAlipay size={18} color='#1677FF' />;
+    }
+    if (method?.type === 'wxpay' || method?.type === 'wxpay_official') {
+      return <SiWechat size={18} color='#07C160' />;
+    }
+    if (method?.type === 'stripe') {
+      return <SiStripe size={18} color='#635BFF' />;
+    }
+    if (method?.icon) {
+      return (
+        <img
+          src={method.icon}
+          alt={method.name}
+          style={{ width: 18, height: 18, objectFit: 'contain' }}
+        />
+      );
+    }
+    return (
+      <CreditCard
+        size={18}
+        color={method?.color || 'var(--semi-color-text-2)'}
+      />
+    );
   };
 
   const handleRefresh = async () => {
@@ -181,7 +292,7 @@ const SubscriptionPlansCard = ({
   };
 
   const payEpay = async () => {
-    if (!selectedEpayMethod) {
+    if (!selectedPaymentMethod?.type) {
       showError(t('请选择支付方式'));
       return;
     }
@@ -189,7 +300,7 @@ const SubscriptionPlansCard = ({
     try {
       const res = await API.post('/api/subscription/epay/pay', {
         plan_id: selectedPlan.plan.id,
-        payment_method: selectedEpayMethod,
+        payment_method: selectedPaymentMethod.type,
       });
       if (res.data?.message === 'success') {
         submitEpayForm({ url: res.data.url, params: res.data.data });
@@ -230,6 +341,20 @@ const SubscriptionPlansCard = ({
     return true;
   };
 
+  const openWechatOfficialPayment = (data) => {
+    if (data?.payment_type === 'redirect' && data?.payment_url) {
+      window.location.href = data.payment_url;
+      return true;
+    }
+    if (data?.payment_type === 'qrcode' && data?.code_url) {
+      setWechatQrCodeUrl(data.code_url);
+      setWechatQrOrderId(data.order_id || '');
+      setWechatQrOpen(true);
+      return true;
+    }
+    return false;
+  };
+
   const payAlipayOfficial = async () => {
     if (!hasAlipayOfficial) {
       showError(t('管理员未开启支付宝官方支付充值！'));
@@ -261,6 +386,39 @@ const SubscriptionPlansCard = ({
     } catch (e) {
       showError(t('支付请求失败'));
       alipayWindow?.close?.();
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const payWechatPayOfficial = async () => {
+    if (!hasWechatPayOfficial) {
+      showError(t('管理员未开启微信支付官方充值！'));
+      return;
+    }
+    setPaying(true);
+    const scene = isMobilePaymentScene() ? 'h5' : 'pc';
+    try {
+      const res = await API.post('/api/subscription/wechat-pay-official/pay', {
+        plan_id: selectedPlan.plan.id,
+        scene,
+      });
+      if (res.data?.message === 'success') {
+        if (openWechatOfficialPayment(res.data.data)) {
+          showSuccess(t('已发起支付'));
+          closeBuy();
+        } else {
+          showError(t('支付请求失败'));
+        }
+      } else {
+        const errorMsg =
+          typeof res.data?.data === 'string'
+            ? res.data.data
+            : res.data?.message || t('支付失败');
+        showError(errorMsg);
+      }
+    } catch (e) {
+      showError(t('支付请求失败'));
     } finally {
       setPaying(false);
     }
@@ -302,6 +460,66 @@ const SubscriptionPlansCard = ({
 
   const getPlanPurchaseCount = (planId) =>
     planPurchaseCountMap.get(planId) || 0;
+
+  const selectedPlanPurchaseInfo = selectedPlan?.plan?.id
+    ? {
+        limit: Number(selectedPlan?.plan?.max_purchase_per_user || 0),
+        count: getPlanPurchaseCount(selectedPlan?.plan?.id),
+      }
+    : null;
+  const selectedPlanPurchaseLimit = Number(
+    selectedPlanPurchaseInfo?.limit || 0,
+  );
+  const selectedPlanPurchaseCount = Number(
+    selectedPlanPurchaseInfo?.count || 0,
+  );
+  const selectedPlanPurchaseLimitReached =
+    selectedPlanPurchaseLimit > 0 &&
+    selectedPlanPurchaseCount >= selectedPlanPurchaseLimit;
+
+  const openBuy = () => {
+    if (!selectedPlan?.plan) {
+      showError(t('请选择订阅套餐'));
+      return;
+    }
+    if (selectedPlanPurchaseLimitReached) {
+      showError(t('已达到购买上限'));
+      return;
+    }
+    if (!selectedPaymentMethod) {
+      showError(t('请选择支付方式'));
+      return;
+    }
+    setOpen(true);
+  };
+
+  const confirmSubscriptionPurchase = async () => {
+    if (!selectedPaymentMethod) {
+      showError(t('请选择支付方式'));
+      return;
+    }
+    if (selectedPaymentMethod.provider === 'stripe') {
+      await payStripe();
+      return;
+    }
+    if (selectedPaymentMethod.provider === 'creem') {
+      await payCreem();
+      return;
+    }
+    if (selectedPaymentMethod.provider === 'alipay_official') {
+      await payAlipayOfficial();
+      return;
+    }
+    if (selectedPaymentMethod.provider === 'wxpay_official') {
+      await payWechatPayOfficial();
+      return;
+    }
+    if (selectedPaymentMethod.provider === 'epay') {
+      await payEpay();
+      return;
+    }
+    showError(t('支付方式不存在'));
+  };
 
   // 计算单个订阅的剩余天数
   const getRemainingDays = (sub) => {
@@ -558,13 +776,9 @@ const SubscriptionPlansCard = ({
               {plans.map((p) => {
                 const plan = p?.plan;
                 const totalAmount = Number(plan?.total_amount || 0);
-                const { symbol, rate } = getCurrencyConfig();
-                const price = Number(plan?.price_amount || 0);
-                const convertedPrice = price * rate;
-                const displayPrice = convertedPrice.toFixed(
-                  Number.isInteger(convertedPrice) ? 0 : 2,
-                );
+                const { symbol, displayPrice } = getPlanPriceDisplay(plan);
                 const isRecommended = shouldHighlightSubscriptionPlan(plan);
+                const isSelected = selectedPlan?.plan?.id === plan?.id;
                 const limit = Number(plan?.max_purchase_per_user || 0);
                 const limitLabel = limit > 0 ? `${t('限购')} ${limit}` : null;
                 const totalLabel =
@@ -609,7 +823,12 @@ const SubscriptionPlansCard = ({
                     key={plan?.id}
                     className={`!rounded-xl transition-all hover:shadow-lg w-full h-full ${
                       isRecommended ? 'ring-2 ring-purple-500' : ''
-                    }`}
+                    } ${isSelected ? 'border-primary' : ''}`}
+                    style={{
+                      border: isSelected
+                        ? '2px solid var(--semi-color-primary)'
+                        : undefined,
+                    }}
                     bodyStyle={{ padding: 0 }}
                   >
                     <div className='p-4 h-full flex flex-col'>
@@ -696,15 +915,19 @@ const SubscriptionPlansCard = ({
                             : '';
                           const buttonEl = (
                             <Button
-                              theme='outline'
+                              theme={isSelected ? 'solid' : 'outline'}
                               type='primary'
                               block
                               disabled={reached}
                               onClick={() => {
-                                if (!reached) openBuy(p);
+                                if (!reached) selectPlan(p);
                               }}
                             >
-                              {reached ? t('已达上限') : t('立即订阅')}
+                              {reached
+                                ? t('已达上限')
+                                : isSelected
+                                  ? t('已选择')
+                                  : t('选择订阅套餐')}
                             </Button>
                           );
                           return reached ? (
@@ -726,6 +949,81 @@ const SubscriptionPlansCard = ({
               {t('暂无可购买套餐')}
             </div>
           )}
+
+          {plans.length > 0 && selectedPlan?.plan && (
+            <Card className='!rounded-xl w-full' bodyStyle={{ padding: 16 }}>
+              <div className='space-y-4'>
+                <div className='flex flex-col gap-1'>
+                  <Text strong>{t('选择支付方式')}</Text>
+                  <Text type='tertiary' size='small'>
+                    {selectedPlan.plan.title || t('订阅套餐')}
+                  </Text>
+                </div>
+
+                {subscriptionPaymentMethods.length > 0 ? (
+                  <>
+                    <div className='flex flex-wrap gap-2'>
+                      {subscriptionPaymentMethods.map((method) => (
+                        <Button
+                          key={method.key}
+                          theme={
+                            selectedPaymentKey === method.key
+                              ? 'solid'
+                              : 'outline'
+                          }
+                          type='primary'
+                          icon={renderPaymentIcon(method)}
+                          onClick={() => setSelectedPaymentKey(method.key)}
+                          className='!rounded-lg !px-4 !py-2'
+                        >
+                          {method.name}
+                        </Button>
+                      ))}
+                    </div>
+
+                    <Divider margin={8} />
+                    <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3'>
+                      <div>
+                        <Text type='tertiary' size='small'>
+                          {t('应付金额')}
+                        </Text>
+                        <div className='text-2xl font-bold text-purple-600'>
+                          {selectedPayAmount}
+                        </div>
+                      </div>
+                      <Button
+                        theme='solid'
+                        type='primary'
+                        loading={paying}
+                        disabled={
+                          !selectedPaymentMethod ||
+                          selectedPlanPurchaseLimitReached
+                        }
+                        onClick={openBuy}
+                      >
+                        {t('立即订阅')}
+                      </Button>
+                    </div>
+                    {selectedPlanPurchaseLimitReached && (
+                      <Text type='warning' size='small'>
+                        {t('已达到购买上限')} ({selectedPlanPurchaseCount}/
+                        {selectedPlanPurchaseLimit})
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <Banner
+                    type='info'
+                    description={t(
+                      '管理员未开启在线支付功能，请联系管理员配置。',
+                    )}
+                    className='!rounded-xl'
+                    closeIcon={null}
+                  />
+                )}
+              </div>
+            </Card>
+          )}
         </Space>
       )}
     </>
@@ -746,30 +1044,34 @@ const SubscriptionPlansCard = ({
         onCancel={closeBuy}
         selectedPlan={selectedPlan}
         paying={paying}
-        selectedEpayMethod={selectedEpayMethod}
-        setSelectedEpayMethod={setSelectedEpayMethod}
-        epayMethods={epayMethods}
-        enableOnlineTopUp={enableOnlineTopUp}
-        enableStripeTopUp={enableStripeTopUp}
-        enableCreemTopUp={enableCreemTopUp}
-        enableAlipayOfficialTopUp={enableAlipayOfficialTopUp}
-        hasAlipayOfficial={hasAlipayOfficial}
-        alipayOfficialUnitPrice={
-          alipayOfficialUnitPrice || alipayOfficialMethod?.unit_price
-        }
-        purchaseLimitInfo={
-          selectedPlan?.plan?.id
-            ? {
-                limit: Number(selectedPlan?.plan?.max_purchase_per_user || 0),
-                count: getPlanPurchaseCount(selectedPlan?.plan?.id),
-              }
-            : null
-        }
-        onPayStripe={payStripe}
-        onPayCreem={payCreem}
-        onPayEpay={payEpay}
-        onPayAlipayOfficial={payAlipayOfficial}
+        selectedPaymentMethod={selectedPaymentMethod}
+        displayPayAmount={selectedPayAmount}
+        purchaseLimitInfo={selectedPlanPurchaseInfo}
+        onConfirm={confirmSubscriptionPurchase}
       />
+
+      <Modal
+        title={t('微信支付扫码')}
+        visible={wechatQrOpen}
+        onCancel={() => setWechatQrOpen(false)}
+        footer={null}
+        size='small'
+        centered
+      >
+        <div className='flex flex-col items-center gap-3 py-2'>
+          {wechatQrCodeUrl && (
+            <QRCodeSVG value={wechatQrCodeUrl} size={220} level='M' />
+          )}
+          <div className='text-sm text-gray-500 text-center'>
+            {t('请使用微信扫码完成支付')}
+          </div>
+          {wechatQrOrderId && (
+            <div className='text-xs text-gray-400 break-all text-center'>
+              {wechatQrOrderId}
+            </div>
+          )}
+        </div>
+      </Modal>
     </>
   );
 };
