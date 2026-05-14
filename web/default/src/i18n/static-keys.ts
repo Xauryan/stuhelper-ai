@@ -276,6 +276,8 @@ export const STATIC_I18N_KEYS = [
   'Limit Reached',
   'No plans available',
   'Select payment method',
+  'Official Alipay',
+  'Official WeChat Pay',
   'Wallet First',
   'Wallet Only',
   'Subscription First',

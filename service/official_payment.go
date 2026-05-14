@@ -27,8 +27,8 @@ import (
 const (
 	AlipayOfficialPagePayMethod      = "alipay.trade.page.pay"
 	AlipayOfficialWapPayMethod       = "alipay.trade.wap.pay"
-	AlipayOfficialPagePayProductCode = "FAST_INSTANT_PAY_PAY"
-	AlipayOfficialWapPayProductCode  = "QUICK_WAP_PAY"
+	AlipayOfficialPagePayProductCode = "FAST_INSTANT_TRADE_PAY"
+	AlipayOfficialWapPayProductCode  = "QUICK_WAP_WAY"
 	alipayOfficialProductionGateway  = "https://openapi.alipay.com/gateway.do"
 	alipayOfficialSandboxGateway     = "https://openapi-sandbox.dl.alipaydev.com/gateway.do"
 )

@@ -49,7 +49,7 @@ func TestBuildAlipayOfficialPageExecuteFormUsesOfficialProductCodes(t *testing.T
 	})
 	require.NoError(t, err)
 	require.Contains(t, form, `alipay.trade.page.pay`)
-	require.Contains(t, form, `FAST_INSTANT_PAY_PAY`)
+	require.Contains(t, form, `FAST_INSTANT_TRADE_PAY`)
 	require.Contains(t, form, `name="sign"`)
 
 	wapForm, err := BuildAlipayOfficialPageExecuteForm(AlipayOfficialBuildParams{
@@ -64,7 +64,7 @@ func TestBuildAlipayOfficialPageExecuteFormUsesOfficialProductCodes(t *testing.T
 	})
 	require.NoError(t, err)
 	require.Contains(t, wapForm, `alipay.trade.wap.pay`)
-	require.Contains(t, wapForm, `QUICK_WAP_PAY`)
+	require.Contains(t, wapForm, `QUICK_WAP_WAY`)
 }
 
 func TestBuildAlipayOfficialSignedValuesUsesRecognizedProductCodes(t *testing.T) {
@@ -81,7 +81,7 @@ func TestBuildAlipayOfficialSignedValuesUsesRecognizedProductCodes(t *testing.T)
 		Subject:     "StuHelper AI recharge",
 	})
 	require.NoError(t, err)
-	require.Contains(t, pageValues.Get("biz_content"), `"product_code":"FAST_INSTANT_PAY_PAY"`)
+	require.Contains(t, pageValues.Get("biz_content"), `"product_code":"FAST_INSTANT_TRADE_PAY"`)
 
 	wapValues, err := buildAlipayOfficialSignedValues(AlipayOfficialBuildParams{
 		AppID:       "app_123",
@@ -94,7 +94,7 @@ func TestBuildAlipayOfficialSignedValuesUsesRecognizedProductCodes(t *testing.T)
 		Subject:     "StuHelper AI recharge",
 	})
 	require.NoError(t, err)
-	require.Contains(t, wapValues.Get("biz_content"), `"product_code":"QUICK_WAP_PAY"`)
+	require.Contains(t, wapValues.Get("biz_content"), `"product_code":"QUICK_WAP_WAY"`)
 }
 
 func TestVerifyAlipayOfficialNotifyExcludesSignAndSignType(t *testing.T) {
