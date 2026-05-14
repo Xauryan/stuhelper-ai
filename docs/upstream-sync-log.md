@@ -2,6 +2,57 @@
 
 本文档记录从 `QuantumNous/new-api` 同步到 StuHelper AI 分叉仓库的过程。
 
+## 2026-05-14 - 检查 upstream/main `18282e61`，无需合入
+
+- 状态：已检查上次同步点 `aa56667b` 之后的上游提交；本次不引入代码改动。
+- 当前 `upstream/main`：`18282e61`
+- 上游 tag：`v1.0.0-rc.6`
+- 当前本地 `HEAD`：`0e3546ba`
+- 检查范围：`aa56667b..18282e61`
+
+### 本次明确跳过的上游提交
+
+- `0526a226` feat: require compliance confirmation for paid features
+  - 结论：不引入。
+  - 原因：该提交新增的是上游运营策略性质的付费功能合规确认总门禁，
+    不是安全漏洞修复、支付正确性修复或 StuHelper AI 当前产品刚需。
+    它会在 root 管理员确认前锁住或隐藏充值、兑换码、订阅购买和邀请奖励
+    等付费相关能力，影响本地已经维护的官方支付宝/微信、订阅模型限制、
+    邀请返佣、首充后奖励解锁和 classic 充值体验，侵入面与维护成本过高。
+  - 后续处理：后续同步上游时不要重复评估该提交，除非 StuHelper AI 明确决定
+    引入类似的本地运营合规确认流程。
+- `51b5cbe1` fix: prevent combobox from over-filtering options on focus (#4829)
+  - 结论：不引入。
+  - 原因：该提交只修复新版 `web/default` 前端的 combobox 聚焦过滤行为；
+    StuHelper AI 当前产品基线是只使用 classic 前端，default-only UI 细节
+    不作为同步目标。
+  - 后续处理：后续同步上游时，default-only 前端修复默认跳过，除非同时影响
+    后端接口契约、安全边界、共享构建链路，或 classic 前端实际用户路径。
+
+### 本地已满足目标状态的上游提交
+
+- `3e588b4d` chore(deps-dev): bump ip-address from 10.1.0 to 10.2.0 in /electron (#4811)
+  - 本地 `electron/package-lock.json` 已经包含 `ip-address` `10.2.0`。
+  - 不应按上游整文件覆盖，因为本地 lockfile 还保留 StuHelper AI 项目身份和
+    后续依赖更新。
+- `18282e61` chore(deps): update axios from 1.15.0 to 1.15.2
+  - 本地 `web/classic/package.json` 和 `web/classic/bun.lock` 已经包含
+    `axios` `1.15.2`。
+  - 不应按上游整文件覆盖，因为本地 classic 前端保留 Vite 8、显式
+    `esbuild` devDependency、Bun lockfile 镜像源记录和 StuHelper AI 构建基线。
+
+### 本次检查命令
+
+```powershell
+git fetch --prune --tags https://github.com/QuantumNous/new-api.git +refs/heads/main:refs/remotes/upstream/main
+git rev-parse --short refs/remotes/upstream/main
+git log --oneline --reverse aa56667b..refs/remotes/upstream/main
+rg -n "Compliance|compliance|RiskAcknowledgement|payment_compliance" controller model setting router web docs i18n -S
+rg -n "axios|ip-address|10\.1\.0|10\.2\.0|1\.15\.0|1\.15\.2" web/classic/package.json web/classic/bun.lock electron/package-lock.json -S
+```
+
+备注：本次检查只更新维护记录，不修改业务代码；无需运行构建或测试。
+
 ## 2026-05-13 - 已同步到 upstream/main `aa56667b`
 
 - 状态：已按语义分批 cherry-pick / 手工移植，已提交。
