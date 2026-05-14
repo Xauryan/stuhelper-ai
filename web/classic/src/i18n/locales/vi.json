@@ -4286,6 +4286,26 @@
     "用户ID/用户名/订单号": "ID người dùng / tên / mã đơn",
     "订单超时时间（分钟）": "Thời gian quá hạn đơn (phút)",
     "默认 10 分钟，超时后自动关闭支付宝订单": "Mặc định 10 phút. Đơn Alipay quá hạn sẽ tự động đóng.",
-    "订单超时时间必须大于 0": "Thời gian quá hạn đơn phải lớn hơn 0"
+    "订单超时时间必须大于 0": "Thời gian quá hạn đơn phải lớn hơn 0",
+    "版权方": "Chu so huu ban quyen",
+    "版权年份": "Nam ban quyen",
+    "例如：2026 或 2025-2026": "Vi du: 2026 hoac 2025-2026",
+    "例如：StuHelper AI.": "Vi du: StuHelper AI.",
+    "留空则不显示": "De trong de an",
+    "留空则链接到工信部备案系统": "De trong de lien ket den he thong dang ky MIIT",
+    "留空则链接到工信部电信业务市场综合管理信息系统": "De trong de lien ket den he thong quan ly vien thong MIIT",
+    "默认页脚模板": "Mau chan trang mac dinh",
+    "设置默认页脚模板": "Dat mau chan trang mac dinh",
+    "许可证类型": "Loai giay phep",
+    "页脚模板更新失败": "Cap nhat mau chan trang that bai",
+    "页脚模板已更新": "Da cap nhat mau chan trang",
+    "预览": "Xem truoc",
+    "在此输入自定义页脚 HTML。留空时使用下方默认模板，模板也为空时使用系统默认页脚": "Nhap HTML chan trang tuy chinh. De trong de dung mau mac dinh ben duoi; neu mau cung trong, chan trang mac dinh cua he thong se duoc su dung.",
+    "增值电信业务经营许可证号": "So giay phep dich vu vien thong gia tang",
+    "增值电信业务经营许可证链接": "Lien ket giay phep dich vu vien thong gia tang",
+    "自定义页脚": "Chan trang tuy chinh",
+    "自定义页脚支持 HTML。留空时将使用默认页脚模板；默认页脚模板也为空时展示系统默认页脚。右侧设计与开发信息会保持显示。": "Chan trang tuy chinh ho tro HTML. De trong de dung mau chan trang mac dinh; neu mau cung trong, chan trang mac dinh cua he thong se duoc hien thi. Thong tin thiet ke va phat trien ben phai van duoc giu lai.",
+    "ICP备案号": "So dang ky ICP",
+    "ICP备案链接": "Lien ket dang ky ICP"
   }
 }

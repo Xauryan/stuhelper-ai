@@ -79,6 +79,11 @@ StuHelper AI 本地任务决定修改它们：
   `<title>`、`description`、Open Graph 和 Twitter Card 标签不得重新出现旧项目
   名称或旧产品描述，避免 Telegram、QQ 等聊天工具抓取旧分享卡片。
   当前默认分享描述为：`StuHelper AI 是 StuHelper 团队部署的统一 AI 模型聚合与分发网关，提供高性价比的集中式模型管理与网关服务。`
+- classic 页脚必须保留“设计与开发由 StuHelper AI”右侧署名。系统设置 -> 其他设置
+  中的 `Footer` 继续作为自定义 HTML 页脚；当 `Footer` 留空时，才使用默认页脚
+  模板字段生成 ICP 备案、增值电信业务经营许可证和版权信息。备案号、许可证号
+  或版权字段为空时不显示对应项；移动端必须允许这些内容换行，避免长备案号或
+  许可证号挤压右侧署名。
 - classic 前端在 Vite 8 下仍有自定义 `treat-js-files-as-jsx` 插件调用
   `transformWithEsbuild`。Docker/GitHub Actions 干净环境必须安装显式
   `esbuild` devDependency，否则 classic 构建会因为 Vite 无法解析 `esbuild`

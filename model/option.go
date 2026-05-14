@@ -69,6 +69,13 @@ func InitOptionMap() {
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""
 	common.OptionMap["Footer"] = common.Footer
+	common.OptionMap["FooterTemplateCopyrightYear"] = ""
+	common.OptionMap["FooterTemplateCopyrightOwner"] = ""
+	common.OptionMap["FooterTemplateIcpBeianNumber"] = ""
+	common.OptionMap["FooterTemplateIcpBeianUrl"] = ""
+	common.OptionMap["FooterTemplateTelecomLicenseNumber"] = ""
+	common.OptionMap["FooterTemplateTelecomLicenseUrl"] = ""
+	common.OptionMap["FooterTemplateTelecomLicenseTypes"] = ""
 	common.OptionMap["SystemName"] = common.SystemName
 	common.OptionMap["Logo"] = common.Logo
 	common.OptionMap["ServerAddress"] = ""

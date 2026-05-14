@@ -3753,6 +3753,26 @@
     "用户ID/用户名/订单号": "ID utilisateur / nom / commande",
     "订单超时时间（分钟）": "Expiration de commande (minutes)",
     "默认 10 分钟，超时后自动关闭支付宝订单": "Par défaut 10 minutes. Les commandes Alipay expirées sont fermées automatiquement.",
-    "订单超时时间必须大于 0": "Le délai d expiration doit être supérieur à 0"
+    "订单超时时间必须大于 0": "Le délai d expiration doit être supérieur à 0",
+    "版权方": "Titulaire du copyright",
+    "版权年份": "Annee de copyright",
+    "例如：2026 或 2025-2026": "Exemple : 2026 ou 2025-2026",
+    "例如：StuHelper AI.": "Exemple : StuHelper AI.",
+    "留空则不显示": "Laisser vide pour masquer",
+    "留空则链接到工信部备案系统": "Laisser vide pour pointer vers le systeme de depot MIIT",
+    "留空则链接到工信部电信业务市场综合管理信息系统": "Laisser vide pour pointer vers le systeme telecom MIIT",
+    "默认页脚模板": "Modele de pied de page par defaut",
+    "设置默认页脚模板": "Definir le modele de pied de page",
+    "许可证类型": "Type de licence",
+    "页脚模板更新失败": "Echec de la mise a jour du modele de pied de page",
+    "页脚模板已更新": "Modele de pied de page mis a jour",
+    "预览": "Apercu",
+    "在此输入自定义页脚 HTML。留空时使用下方默认模板，模板也为空时使用系统默认页脚": "Saisissez le HTML du pied de page personnalise. Laissez vide pour utiliser le modele ci-dessous ; si ce modele est aussi vide, le pied de page systeme est utilise.",
+    "增值电信业务经营许可证号": "Numero de licence telecom a valeur ajoutee",
+    "增值电信业务经营许可证链接": "Lien de licence telecom a valeur ajoutee",
+    "自定义页脚": "Pied de page personnalise",
+    "自定义页脚支持 HTML。留空时将使用默认页脚模板；默认页脚模板也为空时展示系统默认页脚。右侧设计与开发信息会保持显示。": "Le pied de page personnalise prend en charge le HTML. Laissez-le vide pour utiliser le modele par defaut ; si ce modele est aussi vide, le pied de page systeme est affiche. Le credit de conception et developpement a droite reste visible.",
+    "ICP备案号": "Numero de depot ICP",
+    "ICP备案链接": "Lien de depot ICP"
   }
 }

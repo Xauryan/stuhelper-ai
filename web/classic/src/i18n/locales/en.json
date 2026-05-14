@@ -3914,6 +3914,26 @@
     "用户ID/用户名/订单号": "User ID / username / order number",
     "订单超时时间（分钟）": "Order timeout (minutes)",
     "默认 10 分钟，超时后自动关闭支付宝订单": "Default 10 minutes. Timed-out Alipay orders are closed automatically.",
-    "订单超时时间必须大于 0": "Order timeout must be greater than 0"
+    "订单超时时间必须大于 0": "Order timeout must be greater than 0",
+    "版权方": "Copyright owner",
+    "版权年份": "Copyright year",
+    "例如：2026 或 2025-2026": "Example: 2026 or 2025-2026",
+    "例如：StuHelper AI.": "Example: StuHelper AI.",
+    "留空则不显示": "Leave empty to hide",
+    "留空则链接到工信部备案系统": "Leave empty to link to the MIIT filing system",
+    "留空则链接到工信部电信业务市场综合管理信息系统": "Leave empty to link to the MIIT telecom business system",
+    "默认页脚模板": "Default footer template",
+    "设置默认页脚模板": "Set default footer template",
+    "许可证类型": "License type",
+    "页脚模板更新失败": "Failed to update footer template",
+    "页脚模板已更新": "Footer template updated",
+    "预览": "Preview",
+    "在此输入自定义页脚 HTML。留空时使用下方默认模板，模板也为空时使用系统默认页脚": "Enter custom footer HTML. Leave empty to use the default template below; if the template is also empty, the system default footer is used.",
+    "增值电信业务经营许可证号": "Value-added telecom license number",
+    "增值电信业务经营许可证链接": "Value-added telecom license link",
+    "自定义页脚": "Custom footer",
+    "自定义页脚支持 HTML。留空时将使用默认页脚模板；默认页脚模板也为空时展示系统默认页脚。右侧设计与开发信息会保持显示。": "Custom footer supports HTML. Leave it empty to use the default footer template; if the template is also empty, the system default footer is shown. The design and development credit on the right remains visible.",
+    "ICP备案号": "ICP filing number",
+    "ICP备案链接": "ICP filing link"
   }
 }

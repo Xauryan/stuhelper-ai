@@ -27,15 +27,31 @@ import {
   Modal,
   Space,
   Card,
+  Checkbox,
 } from '@douyinfe/semi-ui';
 import { API, showError, showSuccess, timestamp2string } from '../../helpers';
 import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
 import { StatusContext } from '../../context/Status';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
+import {
+  FOOTER_TEMPLATE_DEFAULTS,
+  buildFooterTemplateHTML,
+  joinFooterLicenseTypes,
+  parseFooterLicenseTypes,
+} from '../layout/footerTemplate';
 
 const LEGAL_USER_AGREEMENT_KEY = 'legal.user_agreement';
 const LEGAL_PRIVACY_POLICY_KEY = 'legal.privacy_policy';
+const FOOTER_TEMPLATE_OPTION_KEYS = [
+  'FooterTemplateCopyrightYear',
+  'FooterTemplateCopyrightOwner',
+  'FooterTemplateIcpBeianNumber',
+  'FooterTemplateIcpBeianUrl',
+  'FooterTemplateTelecomLicenseNumber',
+  'FooterTemplateTelecomLicenseUrl',
+  'FooterTemplateTelecomLicenseTypes',
+];
 
 const OtherSetting = () => {
   const { t } = useTranslation();
@@ -46,6 +62,13 @@ const OtherSetting = () => {
     SystemName: '',
     Logo: '',
     Footer: '',
+    FooterTemplateCopyrightYear: '',
+    FooterTemplateCopyrightOwner: '',
+    FooterTemplateIcpBeianNumber: '',
+    FooterTemplateIcpBeianUrl: '',
+    FooterTemplateTelecomLicenseNumber: '',
+    FooterTemplateTelecomLicenseUrl: '',
+    FooterTemplateTelecomLicenseTypes: '',
     About: '',
     HomePageContent: '',
   });
@@ -59,17 +82,43 @@ const OtherSetting = () => {
 
   const updateOption = async (key, value) => {
     setLoading(true);
-    const res = await API.put('/api/option/', {
-      key,
-      value,
-    });
-    const { success, message } = res.data;
-    if (success) {
-      setInputs((inputs) => ({ ...inputs, [key]: value }));
-    } else {
-      showError(message);
+    try {
+      const res = await API.put('/api/option/', {
+        key,
+        value,
+      });
+      const { success, message } = res.data;
+      if (success) {
+        setInputs((inputs) => ({ ...inputs, [key]: value }));
+        return true;
+      } else {
+        showError(message);
+        return false;
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  const updateOptions = async (options) => {
+    setLoading(true);
+    try {
+      for (const option of options) {
+        const res = await API.put('/api/option/', option);
+        const { success, message } = res.data;
+        if (!success) {
+          showError(message);
+          return false;
+        }
+      }
+      setInputs((inputs) => ({
+        ...inputs,
+        ...Object.fromEntries(options.map(({ key, value }) => [key, value])),
+      }));
+      return true;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const [loadingInput, setLoadingInput] = useState({
@@ -81,12 +130,85 @@ const OtherSetting = () => {
     HomePageContent: false,
     About: false,
     Footer: false,
+    FooterTemplate: false,
     CheckUpdate: false,
     FrontendTheme: false,
   });
   const handleInputChange = async (value, e) => {
     const name = e.target.id;
     setInputs((inputs) => ({ ...inputs, [name]: value }));
+  };
+
+  const handleFooterLicenseTypesChange = (values) => {
+    setInputs((inputs) => ({
+      ...inputs,
+      FooterTemplateTelecomLicenseTypes: joinFooterLicenseTypes(values),
+    }));
+  };
+
+  const getFooterTemplateConfig = (source = inputs) => ({
+    icpBeianNumber: source.FooterTemplateIcpBeianNumber,
+    icpBeianUrl: source.FooterTemplateIcpBeianUrl,
+    telecomLicenseNumber: source.FooterTemplateTelecomLicenseNumber,
+    telecomLicenseUrl: source.FooterTemplateTelecomLicenseUrl,
+    telecomLicenseTypes: parseFooterLicenseTypes(
+      source.FooterTemplateTelecomLicenseTypes,
+    ),
+    copyrightYear: source.FooterTemplateCopyrightYear,
+    copyrightOwner: source.FooterTemplateCopyrightOwner,
+  });
+
+  const getFooterTemplateOptions = () =>
+    FOOTER_TEMPLATE_OPTION_KEYS.map((key) => ({
+      key,
+      value: inputs[key] || '',
+    }));
+
+  const footerTemplatePreview = buildFooterTemplateHTML(
+    getFooterTemplateConfig(),
+  );
+
+  const refreshFooterStatus = (overrides = {}) => {
+    const currentStatus = statusState?.status || {};
+    const getStatusValue = (optionKey, statusKey) => {
+      if (Object.prototype.hasOwnProperty.call(overrides, optionKey)) {
+        return overrides[optionKey] || '';
+      }
+      return currentStatus[statusKey] ?? inputs[optionKey] ?? '';
+    };
+    const payload = {
+      ...currentStatus,
+      footer_html: getStatusValue('Footer', 'footer_html'),
+      footer_template_copyright_year: getStatusValue(
+        'FooterTemplateCopyrightYear',
+        'footer_template_copyright_year',
+      ),
+      footer_template_copyright_owner: getStatusValue(
+        'FooterTemplateCopyrightOwner',
+        'footer_template_copyright_owner',
+      ),
+      footer_template_icp_beian_number: getStatusValue(
+        'FooterTemplateIcpBeianNumber',
+        'footer_template_icp_beian_number',
+      ),
+      footer_template_icp_beian_url: getStatusValue(
+        'FooterTemplateIcpBeianUrl',
+        'footer_template_icp_beian_url',
+      ),
+      footer_template_telecom_license_number: getStatusValue(
+        'FooterTemplateTelecomLicenseNumber',
+        'footer_template_telecom_license_number',
+      ),
+      footer_template_telecom_license_url: getStatusValue(
+        'FooterTemplateTelecomLicenseUrl',
+        'footer_template_telecom_license_url',
+      ),
+      footer_template_telecom_license_types: getStatusValue(
+        'FooterTemplateTelecomLicenseTypes',
+        'footer_template_telecom_license_types',
+      ),
+    };
+    statusDispatch({ type: 'set', payload });
   };
 
   // 通用设置
@@ -219,13 +341,44 @@ const OtherSetting = () => {
   const submitFooter = async () => {
     try {
       setLoadingInput((loadingInput) => ({ ...loadingInput, Footer: true }));
-      await updateOption('Footer', inputs.Footer);
+      const success = await updateOption('Footer', inputs.Footer);
+      if (!success) {
+        return;
+      }
+      refreshFooterStatus({ Footer: inputs.Footer });
       showSuccess('页脚内容已更新');
     } catch (error) {
       console.error('页脚内容更新失败', error);
       showError('页脚内容更新失败');
     } finally {
       setLoadingInput((loadingInput) => ({ ...loadingInput, Footer: false }));
+    }
+  };
+
+  const submitFooterTemplate = async () => {
+    try {
+      setLoadingInput((loadingInput) => ({
+        ...loadingInput,
+        FooterTemplate: true,
+      }));
+      const success = await updateOptions(getFooterTemplateOptions());
+      if (!success) {
+        return;
+      }
+      refreshFooterStatus(
+        Object.fromEntries(
+          getFooterTemplateOptions().map(({ key, value }) => [key, value]),
+        ),
+      );
+      showSuccess(t('页脚模板已更新'));
+    } catch (error) {
+      console.error(t('页脚模板更新失败'), error);
+      showError(t('页脚模板更新失败'));
+    } finally {
+      setLoadingInput((loadingInput) => ({
+        ...loadingInput,
+        FooterTemplate: false,
+      }));
     }
   };
 
@@ -524,22 +677,124 @@ const OtherSetting = () => {
                 fullMode={false}
                 type='info'
                 description={t(
-                  '移除 One API 的版权标识必须首先获得授权，项目维护需要花费大量精力，如果本项目对你有意义，请主动支持本项目',
+                  '自定义页脚支持 HTML。留空时将使用默认页脚模板；默认页脚模板也为空时展示系统默认页脚。右侧设计与开发信息会保持显示。',
                 )}
                 closeIcon={null}
                 style={{ marginTop: 15 }}
               />
-              <Form.Input
-                label={t('页脚')}
+              <Form.TextArea
+                label={t('自定义页脚')}
                 placeholder={t(
-                  '在此输入新的页脚，留空则使用默认页脚，支持 HTML 代码',
+                  '在此输入自定义页脚 HTML。留空时使用下方默认模板，模板也为空时使用系统默认页脚',
                 )}
                 field={'Footer'}
                 onChange={handleInputChange}
+                style={{ fontFamily: 'JetBrains Mono, Consolas' }}
+                autosize={{ minRows: 3, maxRows: 8 }}
               />
               <Button onClick={submitFooter} loading={loadingInput['Footer']}>
                 {t('设置页脚')}
               </Button>
+              <div className='footer-template-settings'>
+                <Text strong>{t('默认页脚模板')}</Text>
+                <Row
+                  gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                >
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Input
+                      label={t('版权年份')}
+                      placeholder='2026'
+                      field={'FooterTemplateCopyrightYear'}
+                      onChange={handleInputChange}
+                      extraText={t('例如：2026 或 2025-2026')}
+                    />
+                  </Col>
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Input
+                      label={t('版权方')}
+                      placeholder='StuHelper AI.'
+                      field={'FooterTemplateCopyrightOwner'}
+                      onChange={handleInputChange}
+                      extraText={t('例如：StuHelper AI.')}
+                    />
+                  </Col>
+                </Row>
+                <Row
+                  gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                >
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Input
+                      label={t('ICP备案号')}
+                      placeholder='京ICP备2025154912号'
+                      field={'FooterTemplateIcpBeianNumber'}
+                      onChange={handleInputChange}
+                      extraText={t('留空则不显示')}
+                    />
+                  </Col>
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Input
+                      label={t('ICP备案链接')}
+                      placeholder={FOOTER_TEMPLATE_DEFAULTS.icpBeianUrl}
+                      field={'FooterTemplateIcpBeianUrl'}
+                      onChange={handleInputChange}
+                      extraText={t('留空则链接到工信部备案系统')}
+                    />
+                  </Col>
+                </Row>
+                <Row
+                  gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                >
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Input
+                      label={t('增值电信业务经营许可证号')}
+                      placeholder='京B2-20253869'
+                      field={'FooterTemplateTelecomLicenseNumber'}
+                      onChange={handleInputChange}
+                      extraText={t('留空则不显示')}
+                    />
+                  </Col>
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Input
+                      label={t('增值电信业务经营许可证链接')}
+                      placeholder={FOOTER_TEMPLATE_DEFAULTS.telecomLicenseUrl}
+                      field={'FooterTemplateTelecomLicenseUrl'}
+                      onChange={handleInputChange}
+                      extraText={t(
+                        '留空则链接到工信部电信业务市场综合管理信息系统',
+                      )}
+                    />
+                  </Col>
+                </Row>
+                <div className='footer-template-license-types'>
+                  <Text strong>{t('许可证类型')}</Text>
+                  <Checkbox.Group
+                    value={parseFooterLicenseTypes(
+                      inputs.FooterTemplateTelecomLicenseTypes,
+                    )}
+                    onChange={handleFooterLicenseTypesChange}
+                  >
+                    <Checkbox value='ICP'>ICP</Checkbox>
+                    <Checkbox value='EDI'>EDI</Checkbox>
+                  </Checkbox.Group>
+                </div>
+                {footerTemplatePreview && (
+                  <div className='footer-template-preview'>
+                    <Text type='tertiary'>{t('预览')}</Text>
+                    <div
+                      className='classic-footer-template-slot'
+                      dangerouslySetInnerHTML={{
+                        __html: footerTemplatePreview,
+                      }}
+                    />
+                  </div>
+                )}
+                <Button
+                  onClick={submitFooterTemplate}
+                  loading={loadingInput['FooterTemplate']}
+                >
+                  {t('设置默认页脚模板')}
+                </Button>
+              </div>
             </Form.Section>
           </Card>
         </Form>

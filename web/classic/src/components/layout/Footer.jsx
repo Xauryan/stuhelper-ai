@@ -17,28 +17,62 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@xauryan.com
 */
 
-import React, { useEffect, useState, useMemo, useContext } from 'react';
+import React, { useMemo, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Typography } from '@douyinfe/semi-ui';
 import { getFooterHTML, getLogo, getSystemName } from '../../helpers';
 import { StatusContext } from '../../context/Status';
+import {
+  buildFooterTemplateHTML,
+  hasFooterTemplateConfig,
+} from './footerTemplate';
+
+const getStorageValue = (key) => localStorage.getItem(key) || '';
 
 const FooterBar = () => {
   const { t } = useTranslation();
-  const [footer, setFooter] = useState(getFooterHTML());
   const systemName = getSystemName();
   const logo = getLogo();
   const [statusState] = useContext(StatusContext);
+  const status = statusState?.status || {};
   const isDemoSiteMode = statusState?.status?.demo_site_enabled || false;
 
-  const loadFooter = () => {
-    let footer_html = localStorage.getItem('footer_html');
-    if (footer_html) {
-      setFooter(footer_html);
-    }
-  };
-
   const currentYear = new Date().getFullYear();
+  const customFooterHTML =
+    status.footer_html !== undefined ? status.footer_html : getFooterHTML();
+  const templateFooterConfig = useMemo(
+    () => ({
+      icpBeianNumber:
+        status.footer_template_icp_beian_number ??
+        getStorageValue('footer_template_icp_beian_number'),
+      icpBeianUrl:
+        status.footer_template_icp_beian_url ??
+        getStorageValue('footer_template_icp_beian_url'),
+      telecomLicenseNumber:
+        status.footer_template_telecom_license_number ??
+        getStorageValue('footer_template_telecom_license_number'),
+      telecomLicenseUrl:
+        status.footer_template_telecom_license_url ??
+        getStorageValue('footer_template_telecom_license_url'),
+      telecomLicenseTypes:
+        status.footer_template_telecom_license_types ??
+        getStorageValue('footer_template_telecom_license_types'),
+      copyrightYear:
+        status.footer_template_copyright_year ??
+        getStorageValue('footer_template_copyright_year'),
+      copyrightOwner:
+        status.footer_template_copyright_owner ??
+        getStorageValue('footer_template_copyright_owner'),
+    }),
+    [status],
+  );
+  const templateFooterHTML = useMemo(() => {
+    if (!hasFooterTemplateConfig(templateFooterConfig)) {
+      return '';
+    }
+    return buildFooterTemplateHTML(templateFooterConfig);
+  }, [templateFooterConfig]);
+  const footer = customFooterHTML || templateFooterHTML;
 
   const customFooter = useMemo(
     () => (
@@ -206,20 +240,16 @@ const FooterBar = () => {
     [logo, systemName, t, currentYear, isDemoSiteMode],
   );
 
-  useEffect(() => {
-    loadFooter();
-  }, []);
-
   return (
     <div className='w-full'>
       {footer ? (
-        <footer className='relative h-auto py-4 px-6 md:px-24 w-full flex items-center justify-center overflow-hidden'>
-          <div className='flex flex-col md:flex-row items-center justify-between w-full max-w-[1110px] gap-4'>
+        <div className='classic-footer-shell'>
+          <div className='classic-footer-content'>
             <div
-              className='custom-footer na-cb6feafeb3990c78 text-sm !text-semi-color-text-1'
+              className='classic-footer-template-slot custom-footer na-cb6feafeb3990c78 text-sm !text-semi-color-text-1'
               dangerouslySetInnerHTML={{ __html: footer }}
             ></div>
-            <div className='text-sm flex-shrink-0'>
+            <div className='classic-footer-credit text-sm'>
               <span className='!text-semi-color-text-1'>
                 {t('设计与开发由')}{' '}
               </span>
@@ -233,7 +263,7 @@ const FooterBar = () => {
               </a>
             </div>
           </div>
-        </footer>
+        </div>
       ) : (
         customFooter
       )}

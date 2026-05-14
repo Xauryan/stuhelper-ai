@@ -480,6 +480,119 @@ html.dark .sbg-variant-green {
   position: relative;
 }
 
+.classic-footer-shell {
+  position: relative;
+  width: 100%;
+  padding: 18px 24px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.classic-footer-content {
+  width: 100%;
+  max-width: 1110px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.classic-footer-template-slot {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.classic-footer-credit {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.stuhelper-footer {
+  width: 100%;
+  font-size: 14px;
+  box-sizing: border-box;
+  text-align: center;
+  color: var(--semi-color-text-1);
+}
+
+.stuhelper-footer-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stuhelper-footer a {
+  color: var(--semi-color-text-1);
+  text-decoration: none;
+}
+
+.stuhelper-footer a:hover {
+  text-decoration: underline;
+}
+
+.stuhelper-copyright {
+  color: var(--semi-color-primary);
+  font-weight: 500;
+}
+
+.footer-template-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.footer-template-license-types {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.footer-template-preview {
+  border: 1px solid var(--semi-color-border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--semi-color-bg-1);
+}
+
+@media (max-width: 767px) {
+  .classic-footer-shell {
+    padding: 16px 12px;
+  }
+
+  .classic-footer-content {
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .classic-footer-credit {
+    white-space: normal;
+    text-align: center;
+  }
+
+  .stuhelper-footer {
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .stuhelper-footer-content {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stuhelper-footer-separator {
+    display: none;
+  }
+}
+
+
 /* 卡片内容容器通用样式 */
 .card-content-container {
   position: relative;
