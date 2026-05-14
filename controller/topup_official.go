@@ -136,6 +136,7 @@ func RequestAlipayOfficialPay(c *gin.Context) {
 		OutTradeNo:       tradeNo,
 		TotalAmount:      formatOfficialPayMoney(payMoney),
 		Subject:          fmt.Sprintf("StuHelper AI 充值 %d", req.Amount),
+		TimeoutExpress:   formatAlipayOfficialTimeoutExpress(setting.AlipayOfficialOrderTimeoutMin),
 	})
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方支付 生成表单失败 user_id=%d trade_no=%s error=%q", id, tradeNo, err.Error()))
@@ -417,18 +418,15 @@ func AdminCloseAlipayOfficialTopUp(c *gin.Context) {
 	client := newAlipayOfficialClient()
 	response, err := client.TradeClose(c.Request.Context(), map[string]any{
 		"out_trade_no": tradeNo,
+		"operator_id":  "admin",
 	})
-	if err != nil {
-		if !service.IsAlipayOfficialTradeNotFound(err) {
-			common.ApiError(c, err)
+	if !shouldExpireAlipayOfficialOrderAfterClose(err) {
+		if service.IsAlipayOfficialTradeNotFound(err) {
+			common.ApiErrorMsg(c, "支付宝侧交易不存在，无法确认关闭。请稍后重试或等待订单自动过期后再次关闭。")
 			return
 		}
-		response = &service.AlipayOfficialOpenAPIResponse{
-			Code:        "10000",
-			Msg:         "Local closed because Alipay trade does not exist",
-			OutTradeNo:  tradeNo,
-			TradeStatus: "TRADE_NOT_EXIST",
-		}
+		common.ApiError(c, err)
+		return
 	}
 	if err := model.UpdatePendingTopUpStatus(tradeNo, model.PaymentProviderAlipayOfficial, common.TopUpStatusExpired); err != nil {
 		common.ApiError(c, err)
@@ -468,13 +466,11 @@ func ExpireAlipayOfficialPendingTopUps(ctx context.Context) error {
 		}
 		response, closeErr := client.TradeClose(ctx, map[string]any{
 			"out_trade_no": topUp.TradeNo,
+			"operator_id":  "timeout",
 		})
 		if closeErr != nil {
 			if service.IsAlipayOfficialTradeNotFound(closeErr) {
-				if err := model.UpdatePendingTopUpStatus(topUp.TradeNo, model.PaymentProviderAlipayOfficial, common.TopUpStatusExpired); err != nil &&
-					!errors.Is(err, model.ErrTopUpStatusInvalid) {
-					logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单交易不存在但本地状态更新失败 trade_no=%s error=%q", topUp.TradeNo, err.Error()))
-				}
+				logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单交易不存在，保留本地待支付状态以避免旧支付入口后续付款造成资金悬挂 trade_no=%s", topUp.TradeNo))
 				UnlockOrder(topUp.TradeNo)
 				continue
 			}
@@ -708,6 +704,17 @@ func getOfficialPayMoney(amount int64, group string, unitPrice float64) float64 
 
 func formatOfficialPayMoney(payMoney float64) string {
 	return formatPayMoneyToCents(payMoney)
+}
+
+func formatAlipayOfficialTimeoutExpress(timeoutMinutes int) string {
+	if timeoutMinutes <= 0 {
+		timeoutMinutes = 10
+	}
+	return fmt.Sprintf("%dm", timeoutMinutes)
+}
+
+func shouldExpireAlipayOfficialOrderAfterClose(err error) bool {
+	return err == nil
 }
 
 func yuanToFen(payMoney float64) int64 {

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/model"
+	"github.com/Xauryan/stuhelper-ai/service"
 	"github.com/Xauryan/stuhelper-ai/setting"
 	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 	"github.com/gin-gonic/gin"
@@ -171,6 +173,18 @@ func TestConfiguredTopUpPayMoneyCeilsToCents(t *testing.T) {
 
 	require.Equal(t, "7.24", formatOfficialPayMoney(7.231))
 	require.Equal(t, int64(724), yuanToFen(7.231))
+}
+
+func TestAlipayOfficialCloseDoesNotExpireOrderWhenTradeIsNotFound(t *testing.T) {
+	require.False(t, shouldExpireAlipayOfficialOrderAfterClose(service.ErrAlipayOfficialTradeNotFound))
+	require.False(t, shouldExpireAlipayOfficialOrderAfterClose(errors.New("temporary close failure")))
+	require.True(t, shouldExpireAlipayOfficialOrderAfterClose(nil))
+}
+
+func TestFormatAlipayOfficialTimeoutExpressUsesConfiguredMinutes(t *testing.T) {
+	require.Equal(t, "15m", formatAlipayOfficialTimeoutExpress(15))
+	require.Equal(t, "10m", formatAlipayOfficialTimeoutExpress(0))
+	require.Equal(t, "10m", formatAlipayOfficialTimeoutExpress(-1))
 }
 
 func TestGetTopUpInfoStillExposesOfficialMethodsWhenEpayDisabled(t *testing.T) {

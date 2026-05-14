@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -39,6 +40,9 @@ const (
 	AlipayOfficialWapPayProductCode  = "QUICK_WAP_WAY"
 	alipayOfficialProductionGateway  = "https://openapi.alipay.com/gateway.do"
 	alipayOfficialSandboxGateway     = "https://openapi-sandbox.dl.alipaydev.com/gateway.do"
+	alipayOfficialProductionV3Base   = "https://openapi.alipay.com"
+	alipayOfficialSandboxV3Base      = "https://openapi-sandbox.dl.alipaydev.com"
+	alipayOfficialTradeCloseV3Path   = "/v3/alipay/trade/close"
 	alipayOfficialOpenAPITimeout     = 15 * time.Second
 )
 
@@ -56,6 +60,7 @@ type AlipayOfficialBuildParams struct {
 	OutTradeNo       string
 	TotalAmount      string
 	Subject          string
+	TimeoutExpress   string
 }
 
 type AlipayOfficialClient struct {
@@ -100,7 +105,7 @@ func (e *AlipayOfficialError) Error() string {
 }
 
 func (e *AlipayOfficialError) Unwrap() error {
-	if e == nil || !isAlipayTradeNotFoundPayload(e.SubCode, e.SubMsg) {
+	if e == nil || (!isAlipayTradeNotFoundPayload(e.SubCode, e.SubMsg) && !isAlipayTradeNotFoundPayload(e.Code, e.Msg)) {
 		return nil
 	}
 	return ErrAlipayOfficialTradeNotFound
@@ -235,6 +240,9 @@ func buildAlipayOfficialSignedValues(params AlipayOfficialBuildParams) (url.Valu
 		"subject":      params.Subject,
 		"product_code": productCode,
 	}
+	if strings.TrimSpace(params.TimeoutExpress) != "" {
+		bizContent["timeout_express"] = strings.TrimSpace(params.TimeoutExpress)
+	}
 	if method == AlipayOfficialWapPayMethod && strings.TrimSpace(params.QuitURL) != "" {
 		bizContent["quit_url"] = strings.TrimSpace(params.QuitURL)
 	}
@@ -288,7 +296,7 @@ func (c *AlipayOfficialClient) TradeQuery(ctx context.Context, bizContent map[st
 }
 
 func (c *AlipayOfficialClient) TradeClose(ctx context.Context, bizContent map[string]any) (*AlipayOfficialOpenAPIResponse, error) {
-	return c.DoOpenAPI(ctx, AlipayOfficialTradeCloseMethod, bizContent)
+	return c.DoOpenAPIV3(ctx, http.MethodPost, alipayOfficialTradeCloseV3Path, bizContent)
 }
 
 func (c *AlipayOfficialClient) DoOpenAPI(ctx context.Context, method string, bizContent map[string]any) (*AlipayOfficialOpenAPIResponse, error) {
@@ -331,6 +339,80 @@ func (c *AlipayOfficialClient) DoOpenAPI(ctx context.Context, method string, biz
 	return parseAlipayOfficialOpenAPIResponse(body, responseKey)
 }
 
+func (c *AlipayOfficialClient) DoOpenAPIV3(ctx context.Context, method string, path string, body map[string]any) (*AlipayOfficialOpenAPIResponse, error) {
+	if c == nil {
+		return nil, fmt.Errorf("missing Alipay client")
+	}
+	bodyBytes, err := common.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Alipay V3 request body: %w", err)
+	}
+	method = strings.ToUpper(strings.TrimSpace(method))
+	if method == "" {
+		return nil, fmt.Errorf("missing Alipay V3 method")
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	req, err := http.NewRequestWithContext(ctx, method, resolveAlipayOfficialV3Base(c.Sandbox)+path, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("build Alipay V3 request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Alipay-Request-Id", newAlipayOfficialV3Nonce())
+	if strings.TrimSpace(c.AlipayRootCertSN) != "" {
+		req.Header.Set("Alipay-Root-Cert-Sn", strings.TrimSpace(c.AlipayRootCertSN))
+	}
+	auth, err := c.BuildOpenAPIV3Authorization(method, path, bodyBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", auth)
+
+	client := c.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: alipayOfficialOpenAPITimeout}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request Alipay V3 %s %s: %w", method, path, err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read Alipay V3 response: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, parseAlipayOfficialV3Error(responseBody, resp.StatusCode)
+	}
+	if strings.TrimSpace(c.AlipayPublicKey) != "" {
+		if err := verifyAlipayOfficialV3ResponseSignature(resp.Header, responseBody, c.AlipayPublicKey); err != nil {
+			return nil, err
+		}
+	}
+	return parseAlipayOfficialV3Response(responseBody)
+}
+
+func (c *AlipayOfficialClient) BuildOpenAPIV3Authorization(method string, path string, body []byte) (string, error) {
+	if c == nil {
+		return "", fmt.Errorf("missing Alipay client")
+	}
+	authString := "app_id=" + strings.TrimSpace(c.AppID)
+	if strings.TrimSpace(c.AppCertSN) != "" {
+		authString += ",app_cert_sn=" + strings.TrimSpace(c.AppCertSN)
+	}
+	authString += ",nonce=" + newAlipayOfficialV3Nonce()
+	authString += ",timestamp=" + strconv.FormatInt(time.Now().UnixMilli(), 10)
+	authString += ",expired_seconds=600"
+	signString := authString + "\n" + strings.ToUpper(strings.TrimSpace(method)) + "\n" + path + "\n" + string(body) + "\n"
+	signature, err := signRSA2(signString, c.PrivateKey)
+	if err != nil {
+		return "", err
+	}
+	return "ALIPAY-SHA256withRSA " + authString + ",sign=" + signature, nil
+}
+
 func (c *AlipayOfficialClient) buildOpenAPIRequestValues(method string, bizContent map[string]any) (url.Values, string, error) {
 	if c == nil {
 		return nil, "", fmt.Errorf("missing Alipay client")
@@ -370,6 +452,39 @@ func (c *AlipayOfficialClient) buildOpenAPIRequestValues(method string, bizConte
 	}
 	values.Set("sign", signature)
 	return values, alipayOpenAPIResponseKey(method), nil
+}
+
+func parseAlipayOfficialV3Response(body []byte) (*AlipayOfficialOpenAPIResponse, error) {
+	var response AlipayOfficialOpenAPIResponse
+	if err := common.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("decode Alipay V3 response: %w", err)
+	}
+	if response.Code == "" {
+		response.Code = "10000"
+		response.Msg = "Success"
+	}
+	return &response, nil
+}
+
+func parseAlipayOfficialV3Error(body []byte, statusCode int) error {
+	var apiError struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+		Msg     string `json:"msg"`
+		SubCode string `json:"sub_code"`
+		SubMsg  string `json:"sub_msg"`
+	}
+	if err := common.Unmarshal(body, &apiError); err != nil {
+		return fmt.Errorf("Alipay V3 failed with status %d: %s", statusCode, string(body))
+	}
+	message := firstNonEmpty(apiError.Message, apiError.Msg, apiError.SubMsg)
+	subCode := firstNonEmpty(apiError.SubCode, apiError.Code)
+	return &AlipayOfficialError{
+		Code:    apiError.Code,
+		Msg:     message,
+		SubCode: subCode,
+		SubMsg:  message,
+	}
 }
 
 func alipayOpenAPIResponseKey(method string) string {
@@ -452,6 +567,20 @@ func verifyRSA2RawPayload(content string, sign string, publicKey string) bool {
 	return rsa.VerifyPKCS1v15(pub, crypto.SHA256, digest[:], signature) == nil
 }
 
+func verifyAlipayOfficialV3ResponseSignature(header http.Header, body []byte, publicKey string) error {
+	timestamp := strings.TrimSpace(header.Get("Alipay-Timestamp"))
+	nonce := strings.TrimSpace(header.Get("Alipay-Nonce"))
+	signature := strings.TrimSpace(header.Get("Alipay-Signature"))
+	if timestamp == "" || nonce == "" || signature == "" {
+		return fmt.Errorf("missing Alipay V3 response signature")
+	}
+	signString := timestamp + "\n" + nonce + "\n" + string(body) + "\n"
+	if !verifyRSA2RawPayload(signString, signature, publicKey) {
+		return fmt.Errorf("invalid Alipay V3 response signature")
+	}
+	return nil
+}
+
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
@@ -459,6 +588,14 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func newAlipayOfficialV3Nonce() string {
+	var bytes [16]byte
+	if _, err := rand.Read(bytes[:]); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 10)
+	}
+	return hex.EncodeToString(bytes[:])
 }
 
 func signRSA2(content string, rawPrivateKey string) (string, error) {
@@ -517,6 +654,13 @@ func resolveAlipayOfficialGateway(sandbox bool) string {
 		return alipayOfficialSandboxGateway
 	}
 	return alipayOfficialProductionGateway
+}
+
+func resolveAlipayOfficialV3Base(sandbox bool) string {
+	if sandbox {
+		return alipayOfficialSandboxV3Base
+	}
+	return alipayOfficialProductionV3Base
 }
 
 func htmlEscape(value string) string {

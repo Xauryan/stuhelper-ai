@@ -63,8 +63,10 @@
 - `AlipayOfficialUnitPrice`：站内充值单价。
 - `AlipayOfficialMinTopUp`：最低充值数量。
 - `AlipayOfficialOrderTimeoutMin`：支付宝官方订单超时时间，默认 `10`
-  分钟。超时后后台维护任务会调用 `alipay.trade.close` 关闭支付宝侧订单，
-  并把本地待支付充值单标记为 `expired`，classic 账单显示“已超时”。
+  分钟。创建支付宝电脑网站/手机网站支付时会同步写入 `timeout_express`。
+  超时后后台维护任务会调用 `alipay.trade.close` 关闭支付宝侧订单；只有
+  支付宝明确关闭成功或查询确认 `TRADE_CLOSED` 时，才把本地待支付充值单标记为
+  `expired`，classic 账单显示“已超时”。
 
 微信支付官方支付：
 
@@ -126,18 +128,19 @@ AppID、商户号、商户证书序列号、APIv3 密钥、商户私钥和平台
 支付宝主动接口：
 
 - 创建电脑网站支付使用 `alipay.trade.page.pay`，`product_code` 固定为
-  `FAST_INSTANT_TRADE_PAY`。
+  `FAST_INSTANT_TRADE_PAY`，并携带 `timeout_express`。
 - 创建手机网站支付使用 `alipay.trade.wap.pay`，`product_code` 固定为
-  `QUICK_WAP_WAY`，并在 `biz_content` 中携带 `quit_url` 返回充值页。
+  `QUICK_WAP_WAY`，并在 `biz_content` 中携带 `quit_url` 返回充值页和
+  `timeout_express`。
 - 管理员账单中的“查询”会调用 `alipay.trade.query`，若返回
   `TRADE_SUCCESS` 或 `TRADE_FINISHED`，会按回调同样的金额校验和入账流程
   补齐订单。若支付宝返回交易不存在，说明支付宝侧尚未形成可查询交易或交易
   已不存在，接口会返回本地订单状态，不再把这类可预期状态当成操作失败。
-- 管理员账单中的“关闭”和超时任务会调用 `alipay.trade.close`。如果超时
-  关闭失败，会再调用 `alipay.trade.query` 对账：已支付则入账，已关闭则
-  标记本地订单已超时，其他状态保留待支付并记录日志。
-  管理员手动关闭时，如果支付宝返回交易不存在，会关闭本地待支付订单并标记为
-  `expired`，避免管理员必须处理无法在支付宝侧关闭的空交易。
+- 管理员账单中的“关闭”和超时任务会调用 V3 REST
+  `POST /v3/alipay/trade/close`。如果超时关闭失败，会再调用
+  `alipay.trade.query` 对账：已支付则入账，已关闭则标记本地订单已超时，
+  其他状态保留待支付并记录日志。支付宝返回交易不存在时不会再把本地订单标记为
+  `expired`，避免用户继续使用旧支付入口付款后出现资金悬挂。
 - 管理员账单中的“退款”会调用 `alipay.trade.refund`。本地先创建退款请求
   号 `out_request_no` 并预留可退金额/额度，支付宝返回 `fund_change=Y` 时
   标记成功；如果 `fund_change` 不是 `Y`，会继续调用

@@ -151,6 +151,89 @@ func TestAlipayOfficialClientRefundBuildsSignedOpenAPIRequest(t *testing.T) {
 	require.NotContains(t, values.Encode(), "refund_amount=0.50")
 }
 
+func TestAlipayOfficialClientTradeCloseUsesV3RestAPI(t *testing.T) {
+	privateKey, _ := generateOfficialPaymentTestKey(t)
+	var capturedPath string
+	var capturedBody string
+	var capturedAuthorization string
+	client := &AlipayOfficialClient{
+		AppID:      "app_123",
+		PrivateKey: privateKey,
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			capturedPath = req.URL.Path
+			body, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			capturedBody = string(body)
+			capturedAuthorization = req.Header.Get("Authorization")
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader(`{"trade_no":"202605142200000000","out_trade_no":"ALIPAY_1"}`)),
+			}, nil
+		}).client(),
+	}
+
+	response, err := client.TradeClose(t.Context(), map[string]any{
+		"out_trade_no": "ALIPAY_1",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "/v3/alipay/trade/close", capturedPath)
+	require.JSONEq(t, `{"out_trade_no":"ALIPAY_1"}`, capturedBody)
+	require.Contains(t, capturedAuthorization, "ALIPAY-SHA256withRSA ")
+	require.Contains(t, capturedAuthorization, "app_id=app_123")
+	require.Contains(t, capturedAuthorization, "nonce=")
+	require.Contains(t, capturedAuthorization, "timestamp=")
+	require.Contains(t, capturedAuthorization, "sign=")
+	require.Equal(t, "ALIPAY_1", response.OutTradeNo)
+	require.Equal(t, "202605142200000000", response.TradeNo)
+}
+
+func TestAlipayOfficialClientTradeCloseV3DetectsTradeNotFound(t *testing.T) {
+	privateKey, _ := generateOfficialPaymentTestKey(t)
+	client := &AlipayOfficialClient{
+		AppID:      "app_123",
+		PrivateKey: privateKey,
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusBadRequest,
+				Header:     http.Header{},
+				Body: io.NopCloser(strings.NewReader(`{
+					"code":"ACQ.TRADE_NOT_EXIST",
+					"message":"交易不存在"
+				}`)),
+			}, nil
+		}).client(),
+	}
+
+	_, err := client.TradeClose(t.Context(), map[string]any{
+		"out_trade_no": "ALIPAY_NOT_EXIST",
+	})
+
+	require.Error(t, err)
+	require.True(t, IsAlipayOfficialTradeNotFound(err))
+}
+
+func TestBuildAlipayOfficialSignedValuesIncludesTimeoutExpress(t *testing.T) {
+	privateKey, _ := generateOfficialPaymentTestKey(t)
+
+	values, err := buildAlipayOfficialSignedValues(AlipayOfficialBuildParams{
+		AppID:          "app_123",
+		PrivateKey:     privateKey,
+		Method:         AlipayOfficialPagePayMethod,
+		NotifyURL:      "https://example.com/api/alipay/notify",
+		OutTradeNo:     "ORDER_TIMEOUT",
+		TotalAmount:    "1.23",
+		Subject:        "StuHelper AI recharge",
+		TimeoutExpress: "10m",
+	})
+
+	require.NoError(t, err)
+	var bizContent map[string]string
+	require.NoError(t, common.Unmarshal([]byte(values.Get("biz_content")), &bizContent))
+	require.Equal(t, "10m", bizContent["timeout_express"])
+}
+
 func TestParseAlipayOfficialOpenAPIResponseRequiresSuccessNode(t *testing.T) {
 	body := []byte(`{"alipay_trade_refund_response":{"code":"10000","msg":"Success","fund_change":"Y","refund_fee":"0.50"},"sign":"ignored"}`)
 
