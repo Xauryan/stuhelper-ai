@@ -43,6 +43,10 @@
   `alipay.trade.wap.pay`，电脑端使用 `alipay.trade.page.pay`。
 - 订阅价格按套餐美元金额乘以 `AlipayOfficialUnitPrice` 换算成人民币，并按
   进一法保留两位小数提交给支付宝。
+- 如果站点以服务商/第三方代理身份代商户调用支付宝接口，`AlipayOfficialAppAuthToken`
+  会被电脑网站支付、手机网站支付、查询、关闭、退款和退款查询共用；该授权
+  Token 作为敏感配置保存，不从 `/api/option/` 回显，只暴露
+  `AlipayOfficialAppAuthTokenConfigured`。
 - 支付宝官方异步通知会先识别订阅订单；如果命中订阅订单，则完成订阅并写入与
   充值账单兼容的支付记录；如果不是订阅订单，再走普通额度充值完成逻辑。
 - 订阅完成写入的充值账单必须保留 `PaymentProvider=alipay_official`，并执行

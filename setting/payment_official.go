@@ -3,6 +3,7 @@ package setting
 var (
 	AlipayOfficialEnabled         bool
 	AlipayOfficialAppID           string
+	AlipayOfficialAppAuthToken    string
 	AlipayOfficialPrivateKey      string
 	AlipayOfficialAlipayPublicKey string
 	AlipayOfficialAppCertSN       string

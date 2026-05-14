@@ -72,17 +72,20 @@ func TestBuildAlipayOfficialSignedValuesUsesRecognizedProductCodes(t *testing.T)
 	privateKey, _ := generateOfficialPaymentTestKey(t)
 
 	pageValues, err := buildAlipayOfficialSignedValues(AlipayOfficialBuildParams{
-		AppID:       "app_123",
-		PrivateKey:  privateKey,
-		Method:      AlipayOfficialPagePayMethod,
-		NotifyURL:   "https://example.com/api/alipay/notify",
-		ReturnURL:   "https://example.com/console/topup",
-		OutTradeNo:  "ORDER_123",
-		TotalAmount: "1.23",
-		Subject:     "StuHelper AI recharge",
+		AppID:        "app_123",
+		PrivateKey:   privateKey,
+		AppAuthToken: "app_auth_token_123",
+		Method:       AlipayOfficialPagePayMethod,
+		NotifyURL:    "https://example.com/api/alipay/notify",
+		ReturnURL:    "https://example.com/console/topup",
+		OutTradeNo:   "ORDER_123",
+		TotalAmount:  "1.23",
+		Subject:      "StuHelper AI recharge",
 	})
 	require.NoError(t, err)
 	require.Contains(t, pageValues.Get("biz_content"), `"product_code":"FAST_INSTANT_TRADE_PAY"`)
+	require.Equal(t, "app_auth_token_123", pageValues.Get("app_auth_token"))
+	require.Contains(t, buildAlipaySignContent(valuesToMap(pageValues), false), "app_auth_token=app_auth_token_123")
 
 	wapValues, err := buildAlipayOfficialSignedValues(AlipayOfficialBuildParams{
 		AppID:       "app_123",
@@ -124,8 +127,9 @@ func TestBuildAlipayOfficialWapPayIncludesQuitURLInBizContent(t *testing.T) {
 func TestAlipayOfficialClientRefundBuildsSignedOpenAPIRequest(t *testing.T) {
 	privateKey, _ := generateOfficialPaymentTestKey(t)
 	client := &AlipayOfficialClient{
-		AppID:      "app_123",
-		PrivateKey: privateKey,
+		AppID:        "app_123",
+		AppAuthToken: "app_auth_token_123",
+		PrivateKey:   privateKey,
 	}
 
 	values, responseKey, err := client.buildOpenAPIRequestValues(AlipayOfficialRefundMethod, map[string]any{
@@ -139,8 +143,10 @@ func TestAlipayOfficialClientRefundBuildsSignedOpenAPIRequest(t *testing.T) {
 	require.Equal(t, "alipay_trade_refund_response", responseKey)
 	require.Equal(t, "app_123", values.Get("app_id"))
 	require.Equal(t, AlipayOfficialRefundMethod, values.Get("method"))
+	require.Equal(t, "app_auth_token_123", values.Get("app_auth_token"))
 	require.Equal(t, "RSA2", values.Get("sign_type"))
 	require.NotEmpty(t, values.Get("sign"))
+	require.Contains(t, buildAlipaySignContent(valuesToMap(values), false), "app_auth_token=app_auth_token_123")
 
 	var bizContent map[string]any
 	require.NoError(t, common.Unmarshal([]byte(values.Get("biz_content")), &bizContent))
@@ -156,15 +162,18 @@ func TestAlipayOfficialClientTradeCloseUsesV3RestAPI(t *testing.T) {
 	var capturedPath string
 	var capturedBody string
 	var capturedAuthorization string
+	var capturedAppAuthToken string
 	client := &AlipayOfficialClient{
-		AppID:      "app_123",
-		PrivateKey: privateKey,
+		AppID:        "app_123",
+		AppAuthToken: "app_auth_token_123",
+		PrivateKey:   privateKey,
 		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			capturedPath = req.URL.Path
 			body, err := io.ReadAll(req.Body)
 			require.NoError(t, err)
 			capturedBody = string(body)
 			capturedAuthorization = req.Header.Get("Authorization")
+			capturedAppAuthToken = req.Header.Get("alipay-app-auth-token")
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     http.Header{},
@@ -185,6 +194,7 @@ func TestAlipayOfficialClientTradeCloseUsesV3RestAPI(t *testing.T) {
 	require.Contains(t, capturedAuthorization, "nonce=")
 	require.Contains(t, capturedAuthorization, "timestamp=")
 	require.Contains(t, capturedAuthorization, "sign=")
+	require.Equal(t, "app_auth_token_123", capturedAppAuthToken)
 	require.Equal(t, "ALIPAY_1", response.OutTradeNo)
 	require.Equal(t, "202605142200000000", response.TradeNo)
 }

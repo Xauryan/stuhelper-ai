@@ -122,6 +122,7 @@ func InitOptionMap() {
 	common.OptionMap["WaffoPancakeMinTopUp"] = strconv.Itoa(setting.WaffoPancakeMinTopUp)
 	common.OptionMap["AlipayOfficialEnabled"] = strconv.FormatBool(setting.AlipayOfficialEnabled)
 	common.OptionMap["AlipayOfficialAppID"] = setting.AlipayOfficialAppID
+	common.OptionMap["AlipayOfficialAppAuthToken"] = setting.AlipayOfficialAppAuthToken
 	common.OptionMap["AlipayOfficialPrivateKey"] = setting.AlipayOfficialPrivateKey
 	common.OptionMap["AlipayOfficialAlipayPublicKey"] = setting.AlipayOfficialAlipayPublicKey
 	common.OptionMap["AlipayOfficialAppCertSN"] = setting.AlipayOfficialAppCertSN
@@ -491,6 +492,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.AlipayOfficialEnabled = value == "true"
 	case "AlipayOfficialAppID":
 		setting.AlipayOfficialAppID = value
+	case "AlipayOfficialAppAuthToken":
+		setting.AlipayOfficialAppAuthToken = value
 	case "AlipayOfficialPrivateKey":
 		setting.AlipayOfficialPrivateKey = value
 	case "AlipayOfficialAlipayPublicKey":

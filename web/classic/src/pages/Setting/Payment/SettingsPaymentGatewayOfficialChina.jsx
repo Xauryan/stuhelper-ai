@@ -37,6 +37,7 @@ const defaultInputs = {
   AlipayOfficialEnabled: false,
   AlipayOfficialSandbox: false,
   AlipayOfficialAppID: '',
+  AlipayOfficialAppAuthToken: '',
   AlipayOfficialPrivateKey: '',
   AlipayOfficialAlipayPublicKey: '',
   AlipayOfficialAppCertSN: '',
@@ -76,6 +77,7 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
       AlipayOfficialEnabled: toBoolean(props.options.AlipayOfficialEnabled),
       AlipayOfficialSandbox: toBoolean(props.options.AlipayOfficialSandbox),
       AlipayOfficialAppID: props.options.AlipayOfficialAppID || '',
+      AlipayOfficialAppAuthToken: '',
       AlipayOfficialAppCertSN: props.options.AlipayOfficialAppCertSN || '',
       AlipayOfficialRootCertSN: props.options.AlipayOfficialRootCertSN || '',
       AlipayOfficialAlipayCertSN:
@@ -323,6 +325,25 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                     field='AlipayOfficialAppID'
                     label={t('支付宝 AppID')}
                     placeholder='2021000000000000'
+                  />
+                </Col>
+              </Row>
+
+              <Row
+                gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                style={{ marginTop: 16 }}
+              >
+                <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                  <Form.Input
+                    field='AlipayOfficialAppAuthToken'
+                    label={t('支付宝应用授权 Token')}
+                    placeholder={t(
+                      '服务商代商户调用时填写，留空表示保持当前不变或使用直连商户应用',
+                    )}
+                    extraText={t(
+                      '只有服务商/第三方代理调用需要；电脑网站支付、手机网站支付、查询、关闭和退款会使用同一个授权 Token。',
+                    )}
+                    type='password'
                   />
                 </Col>
               </Row>

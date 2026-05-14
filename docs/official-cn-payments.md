@@ -53,6 +53,11 @@
 - `AlipayOfficialEnabled`：是否启用。
 - `AlipayOfficialSandbox`：是否使用支付宝沙盒网关。
 - `AlipayOfficialAppID`：支付宝开放平台应用 AppID。
+- `AlipayOfficialAppAuthToken`：支付宝应用授权 Token。服务商/第三方代理代商户
+  调用时必须填写；直连商户应用可留空。电脑网站支付、手机网站支付、查询、
+  关闭、退款和退款查询都会携带同一个授权 Token，避免订单创建在被授权商户
+  上下文中、后续查询/关闭却落到服务商应用自身上下文而返回
+  `ACQ.TRADE_NOT_EXIST`。
 - `AlipayOfficialPrivateKey`：应用私钥，支持 PEM 或 Base64 DER。
 - `AlipayOfficialAlipayPublicKey`：支付宝公钥，支持 PEM 或 Base64 DER。
 - `AlipayOfficialAppCertSN`：应用公钥证书 SN，普通公钥模式可留空。
@@ -87,11 +92,12 @@
 
 后台入口位于 classic 前端的“系统设置 -> 支付设置 -> 官方支付设置”。
 私钥和 APIv3 密钥不会从 `/api/option/` 回显，但接口会返回
-`AlipayOfficialPrivateKeyConfigured`、`WechatPayOfficialAPIv3KeyConfigured`
-和 `WechatPayOfficialPrivateKeyConfigured` 这类布尔状态，供后台判断是否已有
-密钥可保留。后台保存时，敏感密钥输入框留空表示保持现有密钥不变；如果此前
-没有保存过密钥，启用官方支付时必须重新填写。支付宝公钥和微信平台公钥也支持
-“留空保持当前不变”，便于后续只调整价格、回调地址或开关配置。
+`AlipayOfficialAppAuthTokenConfigured`、`AlipayOfficialPrivateKeyConfigured`、
+`WechatPayOfficialAPIv3KeyConfigured` 和 `WechatPayOfficialPrivateKeyConfigured`
+这类布尔状态，供后台判断是否已有密钥可保留。后台保存时，敏感密钥输入框
+留空表示保持现有密钥不变；如果此前没有保存过密钥，启用官方支付时必须重新
+填写。支付宝公钥和微信平台公钥也支持“留空保持当前不变”，便于后续只调整
+价格、回调地址或开关配置。
 
 官方支付在钱包页展示前会做完整配置检查。支付宝官方支付必须同时满足
 `AlipayOfficialEnabled`、`AlipayOfficialAppID`、`AlipayOfficialPrivateKey` 和
@@ -132,12 +138,18 @@ AppID、商户号、商户证书序列号、APIv3 密钥、商户私钥和平台
 - 创建手机网站支付使用 `alipay.trade.wap.pay`，`product_code` 固定为
   `QUICK_WAP_WAY`，并在 `biz_content` 中携带 `quit_url` 返回充值页和
   `timeout_express`。
+- 如果配置了 `AlipayOfficialAppAuthToken`，创建支付表单时会把
+  `app_auth_token` 作为公共请求参数签名并提交；查询、退款、退款查询也会在
+  `gateway.do` 请求中携带该参数。官方文档要求服务商代调用场景必须携带
+  `app_auth_token`，否则支付宝会按服务商应用自身上下文查询，可能对真实存在的
+  被授权商户订单返回 `ACQ.TRADE_NOT_EXIST`。
 - 管理员账单中的“查询”会调用 `alipay.trade.query`，若返回
   `TRADE_SUCCESS` 或 `TRADE_FINISHED`，会按回调同样的金额校验和入账流程
   补齐订单。若支付宝返回交易不存在，说明支付宝侧尚未形成可查询交易或交易
   已不存在，接口会返回本地订单状态，不再把这类可预期状态当成操作失败。
 - 管理员账单中的“关闭”和超时任务会调用 V3 REST
-  `POST /v3/alipay/trade/close`。如果超时关闭失败，会再调用
+  `POST /v3/alipay/trade/close`。如果配置了应用授权 Token，会按 V3 文档通过
+  `alipay-app-auth-token` 请求头传给支付宝。如果超时关闭失败，会再调用
   `alipay.trade.query` 对账：已支付则入账，已关闭则标记本地订单已超时，
   其他状态保留待支付并记录日志。支付宝返回交易不存在时不会再把本地订单标记为
   `expired`，避免用户继续使用旧支付入口付款后出现资金悬挂。

@@ -10,9 +10,9 @@ assert.equal(normalizeOfficialChinaUnitPrice('7.2'), '7.200');
 
 assert.equal(
   hasSubmittedOrStoredOfficialChinaPaymentValue(
-    { AlipayOfficialPrivateKey: '' },
-    { AlipayOfficialPrivateKeyConfigured: 'true' },
-    'AlipayOfficialPrivateKey',
+    { AlipayOfficialAppAuthToken: '' },
+    { AlipayOfficialAppAuthTokenConfigured: 'true' },
+    'AlipayOfficialAppAuthToken',
   ),
   true,
 );
@@ -40,6 +40,7 @@ const retainedOptions = buildOfficialChinaPaymentOptions(
     AlipayOfficialEnabled: true,
     AlipayOfficialSandbox: false,
     AlipayOfficialAppID: 'app-id',
+    AlipayOfficialAppAuthToken: '',
     AlipayOfficialPrivateKey: '',
     AlipayOfficialAlipayPublicKey: '',
     AlipayOfficialUnitPrice: 7.231,
@@ -50,11 +51,16 @@ const retainedOptions = buildOfficialChinaPaymentOptions(
     WechatPayOfficialMinTopUp: 1,
   },
   {
+    AlipayOfficialAppAuthTokenConfigured: 'true',
     AlipayOfficialPrivateKeyConfigured: 'true',
     AlipayOfficialAlipayPublicKey: 'stored-public-key',
   },
 );
 
+assert.equal(
+  retainedOptions.some((option) => option.key === 'AlipayOfficialAppAuthToken'),
+  false,
+);
 assert.equal(
   retainedOptions.some((option) => option.key === 'AlipayOfficialPrivateKey'),
   false,
@@ -85,6 +91,7 @@ assert.equal(
 const sensitiveRetainedOptions = buildOfficialChinaPaymentOptions(
   {
     AlipayOfficialEnabled: true,
+    AlipayOfficialAppAuthToken: '',
     AlipayOfficialPrivateKey: '',
     AlipayOfficialAlipayPublicKey: 'public-key',
     AlipayOfficialUnitPrice: 7.231,
@@ -94,6 +101,12 @@ const sensitiveRetainedOptions = buildOfficialChinaPaymentOptions(
     WechatPayOfficialUnitPrice: 8.123,
   },
   {},
+);
+assert.equal(
+  sensitiveRetainedOptions.some(
+    (option) => option.key === 'AlipayOfficialAppAuthToken',
+  ),
+  false,
 );
 assert.equal(
   sensitiveRetainedOptions.some(

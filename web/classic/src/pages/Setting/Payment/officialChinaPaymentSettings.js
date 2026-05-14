@@ -1,4 +1,5 @@
 export const sensitiveOfficialChinaPaymentFields = new Set([
+  'AlipayOfficialAppAuthToken',
   'AlipayOfficialPrivateKey',
   'WechatPayOfficialAPIv3Key',
   'WechatPayOfficialPrivateKey',
@@ -14,6 +15,7 @@ export const officialChinaPaymentOptionKeys = [
   'AlipayOfficialEnabled',
   'AlipayOfficialSandbox',
   'AlipayOfficialAppID',
+  'AlipayOfficialAppAuthToken',
   'AlipayOfficialPrivateKey',
   'AlipayOfficialAlipayPublicKey',
   'AlipayOfficialAppCertSN',

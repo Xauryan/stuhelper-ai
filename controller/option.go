@@ -83,7 +83,7 @@ func GetOptions(c *gin.Context) {
 			strings.HasSuffix(k, "api_key")
 		if isSensitiveKey && !isVisiblePublicKeyOption(k) {
 			switch k {
-			case "AlipayOfficialPrivateKey", "WechatPayOfficialAPIv3Key", "WechatPayOfficialPrivateKey":
+			case "AlipayOfficialAppAuthToken", "AlipayOfficialPrivateKey", "WechatPayOfficialAPIv3Key", "WechatPayOfficialPrivateKey":
 				secretConfiguredOptions = append(secretConfiguredOptions, &model.Option{
 					Key:   k + "Configured",
 					Value: boolToString(strings.TrimSpace(value) != ""),

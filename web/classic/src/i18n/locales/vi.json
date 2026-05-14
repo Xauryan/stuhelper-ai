@@ -1,5 +1,8 @@
 {
   "translation": {
+    "支付宝应用授权 Token": "Token uy quyen ung dung Alipay",
+    "服务商代商户调用时填写，留空表示保持当前不变或使用直连商户应用": "Nhap khi nha cung cap dich vu goi thay cho thuong nhan. De trong de giu gia tri hien tai hoac dung ung dung thuong nhan truc tiep.",
+    "只有服务商/第三方代理调用需要；电脑网站支付、手机网站支付、查询、关闭和退款会使用同一个授权 Token。": "Chi can cho loi goi cua nha cung cap dich vu hoac ben thu ba dai ly. Thanh toan web PC, thanh toan web di dong, truy van, dong va hoan tien dung cung mot token uy quyen.",
     "模型列表加载失败，当前无法安全配置模型限制": "Tải danh sách mô hình thất bại. Hiện không thể cấu hình giới hạn mô hình một cách an toàn.",
     "模型列表加载失败，无法提交，请重试": "Tải danh sách mô hình thất bại. Hãy thử lại trước khi gửi.",
     "模型列表加载失败，请重试": "Tải danh sách mô hình thất bại. Vui lòng thử lại.",

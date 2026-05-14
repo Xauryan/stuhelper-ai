@@ -99,6 +99,7 @@ func SubscriptionRequestAlipayOfficialPay(c *gin.Context) {
 	}
 	form, err := service.BuildAlipayOfficialPageExecuteForm(service.AlipayOfficialBuildParams{
 		AppID:            setting.AlipayOfficialAppID,
+		AppAuthToken:     setting.AlipayOfficialAppAuthToken,
 		PrivateKey:       setting.AlipayOfficialPrivateKey,
 		AppCertSN:        setting.AlipayOfficialAppCertSN,
 		AlipayRootCertSN: setting.AlipayOfficialRootCertSN,

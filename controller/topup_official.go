@@ -124,6 +124,7 @@ func RequestAlipayOfficialPay(c *gin.Context) {
 	}
 	form, err := service.BuildAlipayOfficialPageExecuteForm(service.AlipayOfficialBuildParams{
 		AppID:            setting.AlipayOfficialAppID,
+		AppAuthToken:     setting.AlipayOfficialAppAuthToken,
 		PrivateKey:       setting.AlipayOfficialPrivateKey,
 		AppCertSN:        setting.AlipayOfficialAppCertSN,
 		AlipayRootCertSN: setting.AlipayOfficialRootCertSN,
@@ -773,6 +774,7 @@ func normalizeAlipayRefundReason(reason string) string {
 func newAlipayOfficialClient() *service.AlipayOfficialClient {
 	return &service.AlipayOfficialClient{
 		AppID:            setting.AlipayOfficialAppID,
+		AppAuthToken:     setting.AlipayOfficialAppAuthToken,
 		PrivateKey:       setting.AlipayOfficialPrivateKey,
 		AppCertSN:        setting.AlipayOfficialAppCertSN,
 		AlipayRootCertSN: setting.AlipayOfficialRootCertSN,

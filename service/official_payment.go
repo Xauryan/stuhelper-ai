@@ -48,6 +48,7 @@ const (
 
 type AlipayOfficialBuildParams struct {
 	AppID            string
+	AppAuthToken     string
 	PrivateKey       string
 	AppCertSN        string
 	AlipayRootCertSN string
@@ -65,6 +66,7 @@ type AlipayOfficialBuildParams struct {
 
 type AlipayOfficialClient struct {
 	AppID            string
+	AppAuthToken     string
 	PrivateKey       string
 	AppCertSN        string
 	AlipayRootCertSN string
@@ -260,6 +262,9 @@ func buildAlipayOfficialSignedValues(params AlipayOfficialBuildParams) (url.Valu
 	values.Set("timestamp", time.Now().Format("2006-01-02 15:04:05"))
 	values.Set("version", "1.0")
 	values.Set("notify_url", strings.TrimSpace(params.NotifyURL))
+	if strings.TrimSpace(params.AppAuthToken) != "" {
+		values.Set("app_auth_token", strings.TrimSpace(params.AppAuthToken))
+	}
 	if strings.TrimSpace(params.ReturnURL) != "" {
 		values.Set("return_url", strings.TrimSpace(params.ReturnURL))
 	}
@@ -361,6 +366,9 @@ func (c *AlipayOfficialClient) DoOpenAPIV3(ctx context.Context, method string, p
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Alipay-Request-Id", newAlipayOfficialV3Nonce())
+	if strings.TrimSpace(c.AppAuthToken) != "" {
+		req.Header.Set("alipay-app-auth-token", strings.TrimSpace(c.AppAuthToken))
+	}
 	if strings.TrimSpace(c.AlipayRootCertSN) != "" {
 		req.Header.Set("Alipay-Root-Cert-Sn", strings.TrimSpace(c.AlipayRootCertSN))
 	}
@@ -434,6 +442,9 @@ func (c *AlipayOfficialClient) buildOpenAPIRequestValues(method string, bizConte
 	values.Set("sign_type", "RSA2")
 	values.Set("timestamp", time.Now().Format("2006-01-02 15:04:05"))
 	values.Set("version", "1.0")
+	if strings.TrimSpace(c.AppAuthToken) != "" {
+		values.Set("app_auth_token", strings.TrimSpace(c.AppAuthToken))
+	}
 	if strings.TrimSpace(c.AppCertSN) != "" {
 		values.Set("app_cert_sn", strings.TrimSpace(c.AppCertSN))
 	}

@@ -22,6 +22,7 @@ func TestGetOptionsExposesOfficialPaymentSecretConfiguredFlags(t *testing.T) {
 
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = map[string]string{
+		"AlipayOfficialAppAuthToken":         "app-auth-token",
 		"AlipayOfficialPrivateKey":           "alipay-private-key",
 		"WechatPayOfficialAPIv3Key":          "12345678901234567890123456789012",
 		"WechatPayOfficialPrivateKey":        "",
@@ -51,8 +52,10 @@ func TestGetOptionsExposesOfficialPaymentSecretConfiguredFlags(t *testing.T) {
 		options[item.Key] = item.Value
 	}
 	require.NotContains(t, options, "AlipayOfficialPrivateKey")
+	require.NotContains(t, options, "AlipayOfficialAppAuthToken")
 	require.NotContains(t, options, "WechatPayOfficialAPIv3Key")
 	require.NotContains(t, options, "WechatPayOfficialPrivateKey")
+	require.Equal(t, "true", options["AlipayOfficialAppAuthTokenConfigured"])
 	require.Equal(t, "true", options["AlipayOfficialPrivateKeyConfigured"])
 	require.Equal(t, "true", options["WechatPayOfficialAPIv3KeyConfigured"])
 	require.Equal(t, "false", options["WechatPayOfficialPrivateKeyConfigured"])

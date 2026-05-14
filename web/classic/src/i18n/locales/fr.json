@@ -1,5 +1,8 @@
 {
   "translation": {
+    "支付宝应用授权 Token": "Jeton d'autorisation de l'application Alipay",
+    "服务商代商户调用时填写，留空表示保持当前不变或使用直连商户应用": "Renseignez-le lorsqu'un prestataire appelle les API pour le compte d'un marchand. Laissez vide pour conserver la valeur actuelle ou utiliser une application marchand directe.",
+    "只有服务商/第三方代理调用需要；电脑网站支付、手机网站支付、查询、关闭和退款会使用同一个授权 Token。": "Requis uniquement pour les appels prestataire ou proxy tiers. Le paiement web PC, le paiement web mobile, la requete, la cloture et le remboursement utilisent le meme jeton d'autorisation.",
     "模型列表加载失败，当前无法安全配置模型限制": "Le chargement de la liste des modeles a echoue. Les restrictions de modeles ne peuvent pas etre configurees en securite pour le moment.",
     "模型列表加载失败，无法提交，请重试": "Le chargement de la liste des modeles a echoue. Reessayez avant d'envoyer.",
     "模型列表加载失败，请重试": "Le chargement de la liste des modeles a echoue. Veuillez reessayer.",
