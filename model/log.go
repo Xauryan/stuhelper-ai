@@ -119,30 +119,37 @@ func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo m
 }
 
 func RecordTopupLog(userId int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {
+	recordPaymentAuditLog(userId, LogTypeTopup, content, callerIp, paymentMethod, callbackPaymentMethod)
+}
+
+func RecordOfficialPaymentRefundLog(userId int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {
+	recordPaymentAuditLog(userId, LogTypeRefund, content, callerIp, paymentMethod, callbackPaymentMethod)
+}
+
+func recordPaymentAuditLog(userId int, logType int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {
 	username, _ := GetUsernameById(userId, false)
-	adminInfo := map[string]interface{}{
-		"server_ip":               common.GetIp(),
-		"node_name":               common.NodeName,
-		"caller_ip":               callerIp,
-		"payment_method":          paymentMethod,
-		"callback_payment_method": callbackPaymentMethod,
-		"version":                 common.Version,
-	}
 	other := map[string]interface{}{
-		"admin_info": adminInfo,
+		"admin_info": map[string]interface{}{
+			"server_ip":               common.GetIp(),
+			"node_name":               common.NodeName,
+			"caller_ip":               callerIp,
+			"payment_method":          paymentMethod,
+			"callback_payment_method": callbackPaymentMethod,
+			"version":                 common.Version,
+		},
 	}
 	log := &Log{
 		UserId:    userId,
 		Username:  username,
 		CreatedAt: common.GetTimestamp(),
-		Type:      LogTypeTopup,
+		Type:      logType,
 		Content:   content,
 		Ip:        callerIp,
 		Other:     common.MapToJsonStr(other),
 	}
 	err := LOG_DB.Create(log).Error
 	if err != nil {
-		common.SysLog("failed to record topup log: " + err.Error())
+		common.SysLog("failed to record payment audit log: " + err.Error())
 	}
 }
 

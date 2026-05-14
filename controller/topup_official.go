@@ -323,7 +323,13 @@ func AdminRefundAlipayOfficialTopUp(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	model.RecordLog(refund.UserId, model.LogTypeRefund, fmt.Sprintf("管理员发起支付宝官方退款成功，订单号：%s，退款金额：%.2f，退回额度：%s", refund.TradeNo, refund.RefundAmount, logger.FormatQuota(int(refund.RefundQuota))))
+	model.RecordOfficialPaymentRefundLog(
+		refund.UserId,
+		fmt.Sprintf("管理员发起支付宝官方退款成功，订单号：%s，退款金额：%.2f，退回额度：%s", refund.TradeNo, refund.RefundAmount, logger.FormatQuota(int(refund.RefundQuota))),
+		c.ClientIP(),
+		refund.PaymentMethod,
+		refund.PaymentProvider,
+	)
 	common.ApiSuccess(c, gin.H{"out_request_no": refund.OutRequestNo})
 }
 
@@ -343,6 +349,25 @@ func AdminQueryAlipayOfficialTopUp(c *gin.Context) {
 		"out_trade_no": tradeNo,
 	})
 	if err != nil {
+		if service.IsAlipayOfficialTradeNotFound(err) {
+			topUp := model.GetTopUpByTradeNo(tradeNo)
+			if topUp == nil {
+				common.ApiError(c, model.ErrTopUpNotFound)
+				return
+			}
+			if topUp.PaymentProvider != model.PaymentProviderAlipayOfficial {
+				common.ApiError(c, model.ErrPaymentMethodMismatch)
+				return
+			}
+			common.ApiSuccess(c, gin.H{
+				"out_trade_no":  tradeNo,
+				"trade_status":  "LOCAL_" + strings.ToUpper(topUp.Status),
+				"local_status":  topUp.Status,
+				"alipay_status": "TRADE_NOT_EXIST",
+				"message":       "支付宝侧交易不存在，本地订单仍为待支付或已关闭状态",
+			})
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
@@ -394,8 +419,16 @@ func AdminCloseAlipayOfficialTopUp(c *gin.Context) {
 		"out_trade_no": tradeNo,
 	})
 	if err != nil {
-		common.ApiError(c, err)
-		return
+		if !service.IsAlipayOfficialTradeNotFound(err) {
+			common.ApiError(c, err)
+			return
+		}
+		response = &service.AlipayOfficialOpenAPIResponse{
+			Code:        "10000",
+			Msg:         "Local closed because Alipay trade does not exist",
+			OutTradeNo:  tradeNo,
+			TradeStatus: "TRADE_NOT_EXIST",
+		}
 	}
 	if err := model.UpdatePendingTopUpStatus(tradeNo, model.PaymentProviderAlipayOfficial, common.TopUpStatusExpired); err != nil {
 		common.ApiError(c, err)
@@ -437,6 +470,14 @@ func ExpireAlipayOfficialPendingTopUps(ctx context.Context) error {
 			"out_trade_no": topUp.TradeNo,
 		})
 		if closeErr != nil {
+			if service.IsAlipayOfficialTradeNotFound(closeErr) {
+				if err := model.UpdatePendingTopUpStatus(topUp.TradeNo, model.PaymentProviderAlipayOfficial, common.TopUpStatusExpired); err != nil &&
+					!errors.Is(err, model.ErrTopUpStatusInvalid) {
+					logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单交易不存在但本地状态更新失败 trade_no=%s error=%q", topUp.TradeNo, err.Error()))
+				}
+				UnlockOrder(topUp.TradeNo)
+				continue
+			}
 			reconciled, reconcileErr := reconcileAlipayOfficialTopUpAfterCloseFailure(ctx, client, topUp.TradeNo)
 			if reconcileErr != nil {
 				logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单关闭失败后查询失败 trade_no=%s close_error=%q query_error=%q", topUp.TradeNo, closeErr.Error(), reconcileErr.Error()))
