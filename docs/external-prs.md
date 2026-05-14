@@ -2,6 +2,83 @@
 
 本文档记录不是通过常规上游 release 同步引入的 PR 或补丁。
 
+## 官方支付宝订阅支付与 classic 订阅展示控制
+
+- 来源：StuHelper AI 本地补丁。
+- 相关参考：
+  - 支付宝官方电脑网站支付 / 手机网站支付文档。
+  - `docs/official-cn-payments.md` 中记录的官方支付宝和微信支付接入约束。
+- 本地导入日期：2026-05-14
+- 导入方式：按本地官方支付架构手工实现；没有套用支付宝当面付或易支付实现。
+- 本地涉及文件：
+  - `controller/subscription_payment_alipay_official.go`
+  - `controller/subscription.go`
+  - `controller/subscription_test.go`
+  - `controller/topup_official.go`
+  - `controller/topup_test.go`
+  - `model/subscription.go`
+  - `model/main.go`
+  - `model/payment_method_guard_test.go`
+  - `router/api-router.go`
+  - `web/classic/src/components/topup/RechargeCard.jsx`
+  - `web/classic/src/components/topup/SubscriptionPlansCard.jsx`
+  - `web/classic/src/components/topup/modals/SubscriptionPurchaseModal.jsx`
+  - `web/classic/src/components/topup/rechargeTabs.js`
+  - `web/classic/src/components/topup/subscriptionPaymentMethods.js`
+  - `web/classic/src/components/topup/subscriptionPlanDisplay.js`
+  - `web/classic/src/components/table/subscriptions/**`
+  - `docs/official-cn-payments.md`
+  - `docs/fork-maintenance.md`
+
+### 原因
+
+官方支付宝此前只覆盖额度充值。用户在只启用官方支付宝、不启用易支付时，
+订阅套餐购买流程仍会提示未开启在线支付；同时 classic 钱包页默认切到订阅，
+订阅卡片把第一个套餐默认标记为“推荐”，不利于后台手动运营。
+
+### 本地行为
+
+- 新增 `POST /api/subscription/alipay-official/pay`，用于订阅套餐官方支付宝支付。
+- 订阅订单使用官方支付宝电脑网站支付或手机网站支付，移动端使用
+  `alipay.trade.wap.pay`，电脑端使用 `alipay.trade.page.pay`。
+- 订阅价格按套餐美元金额乘以 `AlipayOfficialUnitPrice` 换算成人民币，并按
+  进一法保留两位小数提交给支付宝。
+- 支付宝官方异步通知会先识别订阅订单；如果命中订阅订单，则完成订阅并写入与
+  充值账单兼容的支付记录；如果不是订阅订单，再走普通额度充值完成逻辑。
+- 订阅完成写入的充值账单必须保留 `PaymentProvider=alipay_official`，并执行
+  支付方式和支付提供方一致性保护，避免不同支付网关订单串用。
+- classic 订阅购买弹窗会在官方支付宝完整配置时展示“支付宝”支付方式，不再依赖
+  易支付 `enable_online_topup` 开关。
+- classic 钱包页同时存在“额度充值”和“订阅套餐”时，默认进入“额度充值”，且
+  “额度充值”位于“订阅套餐”左侧。
+- 订阅套餐新增 `recommended` 字段。classic 后台“订阅管理”中可手动开关
+  “推荐”，用户侧订阅卡片只有在该字段为 `true` 时才显示“推荐”标签和高亮边框；
+  不再默认把第一个套餐标记为推荐。
+
+### 验证
+
+```powershell
+go test ./controller ./model ./service -count=1
+bun web/classic/src/components/topup/subscriptionPaymentMethods.test.mjs
+bun web/classic/src/components/topup/rechargeAmountDisplay.test.mjs
+bun web/classic/src/components/topup/subscriptionPlanDisplay.test.mjs
+bun web/classic/src/components/topup/rechargeTabs.test.mjs
+bun web/classic/src/components/topup/modals/topupHistoryUtils.test.mjs
+Set-Location web/classic; bun run build
+git diff --check
+```
+
+### 未来上游同步检查点
+
+每次同步上游 release 时：
+
+- 不要把官方支付宝订阅支付回退成易支付子渠道或支付宝当面付。
+- 如果上游新增订阅支付能力，需要比较订单字段、回调幂等、支付提供方保护和金额
+  换算规则，确保本地官方支付宝路径仍独立且可用。
+- 保留 classic 钱包页默认“额度充值”的 tab 顺序，以及订阅推荐由后台手动控制的
+  运营能力。
+- 如果上游新增订阅套餐展示字段，确认不会覆盖或忽略本地 `recommended` 字段。
+
 ## QuantumNous/new-api#3288 - 邀请充值返佣
 
 - 来源 PR：https://github.com/QuantumNous/new-api/pull/3288
