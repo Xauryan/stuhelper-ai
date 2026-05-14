@@ -35,6 +35,38 @@ type ReferralCommissionWithUser struct {
 	InviteeUsername string `json:"invitee_username"`
 }
 
+const (
+	AdminReferralRewardStatusAll      = ""
+	AdminReferralRewardStatusUnlocked = "unlocked"
+	AdminReferralRewardStatusPending  = "pending"
+)
+
+type AdminReferralQuery struct {
+	PageInfo     *common.PageInfo
+	Keyword      string
+	RewardStatus string
+}
+
+type AdminReferralRecord struct {
+	InviterId             int     `json:"inviter_id"`
+	InviterUsername       string  `json:"inviter_username"`
+	InviterDisplayName    string  `json:"inviter_display_name"`
+	InviteeId             int     `json:"invitee_id"`
+	InviteeUsername       string  `json:"invitee_username"`
+	InviteeDisplayName    string  `json:"invitee_display_name"`
+	InviteeEmail          string  `json:"invitee_email"`
+	InviteeCreatedAt      int64   `json:"invitee_created_at"`
+	InviteeRewardQuota    int     `json:"invitee_reward_quota"`
+	InviterRewardQuota    int     `json:"inviter_reward_quota"`
+	InviterRewardUnlocked bool    `json:"inviter_reward_unlocked"`
+	InviteeHasPaid        bool    `json:"invitee_has_paid"`
+	FirstPaymentTime      int64   `json:"first_payment_time"`
+	CommissionCount       int     `json:"commission_count"`
+	TotalCommissionQuota  int     `json:"total_commission_quota"`
+	TotalRechargeAmount   float64 `json:"total_recharge_amount"`
+	LastCommissionAt      int64   `json:"last_commission_at"`
+}
+
 type ReferralCommissionCreditResult struct {
 	Credited              bool
 	CommissionCredited    bool
@@ -52,10 +84,15 @@ func FinalizeUserInvitation(userId int, inviterId int) {
 		return
 	}
 
+	inviteeRewardQuota := 0
 	if common.QuotaForInvitee > 0 {
 		if err := IncreaseUserQuota(userId, common.QuotaForInvitee, true); err == nil {
+			inviteeRewardQuota = common.QuotaForInvitee
 			RecordLog(userId, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
 		}
+	}
+	if err := setInviteeRewardQuota(userId, inviteeRewardQuota); err != nil {
+		common.SysLog("failed to snapshot invitee reward quota: " + err.Error())
 	}
 
 	inviterQuota := 0
@@ -345,6 +382,15 @@ func setInviterRewardQuotaTx(tx *gorm.DB, userId int, quota int) error {
 		Update("inviter_reward_quota", quota).Error
 }
 
+func setInviteeRewardQuota(userId int, quota int) error {
+	if userId <= 0 {
+		return nil
+	}
+	return DB.Model(&User{}).
+		Where("id = ?", userId).
+		Update("invitee_reward_quota", quota).Error
+}
+
 func markInviterRewardUnlocked(userId int) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
 		return markInviterRewardUnlockedTx(tx, userId)
@@ -390,4 +436,210 @@ func GetUserReferralCommissions(inviterId int, pageInfo *common.PageInfo) ([]*Re
 		Offset(pageInfo.GetStartIdx()).
 		Find(&commissions).Error
 	return commissions, total, err
+}
+
+func GetAdminReferralRecords(query *AdminReferralQuery) ([]*AdminReferralRecord, int64, error) {
+	if query == nil {
+		query = &AdminReferralQuery{}
+	}
+	pageInfo := normalizeReferralPageInfo(query.PageInfo)
+	keyword := strings.TrimSpace(query.Keyword)
+	rewardStatus := strings.TrimSpace(query.RewardStatus)
+
+	baseQuery := DB.Table("users AS invitees").
+		Joins("JOIN users AS inviters ON inviters.id = invitees.inviter_id").
+		Where("invitees.inviter_id > 0")
+
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		if keywordId, err := decimal.NewFromString(keyword); err == nil && keywordId.IsInteger() {
+			baseQuery = baseQuery.Where(
+				"(invitees.id = ? OR inviters.id = ? OR invitees.username LIKE ? OR inviters.username LIKE ? OR invitees.email LIKE ? OR invitees.display_name LIKE ? OR inviters.display_name LIKE ?)",
+				int(keywordId.IntPart()), int(keywordId.IntPart()), like, like, like, like, like,
+			)
+		} else {
+			baseQuery = baseQuery.Where(
+				"(invitees.username LIKE ? OR inviters.username LIKE ? OR invitees.email LIKE ? OR invitees.display_name LIKE ? OR inviters.display_name LIKE ?)",
+				like, like, like, like, like,
+			)
+		}
+	}
+
+	switch rewardStatus {
+	case AdminReferralRewardStatusUnlocked:
+		baseQuery = baseQuery.Where("invitees.inviter_reward_unlocked = ?", true)
+	case AdminReferralRewardStatusPending:
+		baseQuery = baseQuery.Where("invitees.inviter_reward_unlocked = ? AND invitees.inviter_reward_quota > ?", false, 0)
+	}
+
+	var total int64
+	if err := baseQuery.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	selectColumns := strings.Join([]string{
+		"invitees.inviter_id",
+		"inviters.username AS inviter_username",
+		"inviters.display_name AS inviter_display_name",
+		"invitees.id AS invitee_id",
+		"invitees.username AS invitee_username",
+		"invitees.display_name AS invitee_display_name",
+		"invitees.email AS invitee_email",
+		"invitees.created_at AS invitee_created_at",
+		"invitees.invitee_reward_quota",
+		"invitees.inviter_reward_quota",
+		"invitees.inviter_reward_unlocked",
+	}, ", ")
+
+	records := make([]*AdminReferralRecord, 0)
+	if err := baseQuery.Select(selectColumns).
+		Order("invitees.id desc").
+		Limit(pageInfo.GetPageSize()).
+		Offset(pageInfo.GetStartIdx()).
+		Find(&records).Error; err != nil {
+		return nil, 0, err
+	}
+	if len(records) == 0 {
+		return records, total, nil
+	}
+
+	inviteeIds := make([]int, 0, len(records))
+	for _, record := range records {
+		inviteeIds = append(inviteeIds, record.InviteeId)
+	}
+	if err := fillAdminReferralPaymentState(records, inviteeIds); err != nil {
+		return nil, 0, err
+	}
+	if err := fillAdminReferralCommissionSummary(records, inviteeIds); err != nil {
+		return nil, 0, err
+	}
+	return records, total, nil
+}
+
+func normalizeReferralPageInfo(pageInfo *common.PageInfo) *common.PageInfo {
+	if pageInfo == nil {
+		pageInfo = &common.PageInfo{}
+	}
+	if pageInfo.Page < 1 {
+		pageInfo.Page = 1
+	}
+	if pageInfo.PageSize <= 0 || pageInfo.PageSize > 100 {
+		pageInfo.PageSize = common.ItemsPerPage
+	}
+	return pageInfo
+}
+
+type referralPaymentState struct {
+	UserId           int
+	FirstPaymentTime int64
+}
+
+func fillAdminReferralPaymentState(records []*AdminReferralRecord, inviteeIds []int) error {
+	stateByInviteeId := make(map[int]*referralPaymentState, len(inviteeIds))
+	var topUpStates []*referralPaymentState
+	if err := DB.Table("top_ups").
+		Select("user_id, MIN(complete_time) AS first_payment_time").
+		Where("user_id IN ? AND status IN ? AND complete_time > ?", inviteeIds, []string{
+			common.TopUpStatusSuccess,
+			common.TopUpStatusPartialRefunded,
+			common.TopUpStatusRefunded,
+		}, 0).
+		Group("user_id").
+		Find(&topUpStates).Error; err != nil {
+		return err
+	}
+	for _, state := range topUpStates {
+		if state == nil {
+			continue
+		}
+		stateByInviteeId[state.UserId] = state
+	}
+
+	var subscriptionStates []*referralPaymentState
+	if err := DB.Table("subscription_orders").
+		Select("user_id, MIN(complete_time) AS first_payment_time").
+		Where("user_id IN ? AND status = ? AND complete_time > ?", inviteeIds, common.TopUpStatusSuccess, 0).
+		Group("user_id").
+		Find(&subscriptionStates).Error; err != nil {
+		return err
+	}
+	for _, state := range subscriptionStates {
+		if state == nil {
+			continue
+		}
+		existing := stateByInviteeId[state.UserId]
+		if existing == nil || state.FirstPaymentTime < existing.FirstPaymentTime {
+			stateByInviteeId[state.UserId] = state
+		}
+	}
+
+	for _, record := range records {
+		state := stateByInviteeId[record.InviteeId]
+		if state == nil {
+			continue
+		}
+		record.InviteeHasPaid = true
+		record.FirstPaymentTime = state.FirstPaymentTime
+	}
+	return nil
+}
+
+type adminReferralCommissionSummary struct {
+	InviteeId            int
+	CommissionCount      int
+	TotalCommissionQuota int
+	TotalRechargeAmount  float64
+	LastCommissionAt     int64
+}
+
+func fillAdminReferralCommissionSummary(records []*AdminReferralRecord, inviteeIds []int) error {
+	summaryByInviteeId := make(map[int]*adminReferralCommissionSummary, len(records))
+	var summaries []*adminReferralCommissionSummary
+	if err := DB.Table("referral_commissions").
+		Select("invitee_id, COUNT(*) AS commission_count, SUM(commission_quota) AS total_commission_quota, SUM(recharge_amount) AS total_recharge_amount, MAX(created_at) AS last_commission_at").
+		Where("referral_commissions.invitee_id IN ?", inviteeIds).
+		Group("invitee_id").
+		Find(&summaries).Error; err != nil {
+		return err
+	}
+	for _, summary := range summaries {
+		if summary == nil {
+			continue
+		}
+		summaryByInviteeId[summary.InviteeId] = summary
+	}
+	for _, record := range records {
+		summary := summaryByInviteeId[record.InviteeId]
+		if summary == nil {
+			continue
+		}
+		record.CommissionCount = summary.CommissionCount
+		record.TotalCommissionQuota = summary.TotalCommissionQuota
+		record.TotalRechargeAmount = summary.TotalRechargeAmount
+		record.LastCommissionAt = summary.LastCommissionAt
+	}
+	return nil
+}
+
+func GetAdminReferralCommissions(inviteeId int, pageInfo *common.PageInfo) ([]*ReferralCommissionWithUser, int64, error) {
+	var total int64
+	commissions := make([]*ReferralCommissionWithUser, 0)
+	if inviteeId <= 0 {
+		return commissions, 0, nil
+	}
+	pageInfo = normalizeReferralPageInfo(pageInfo)
+	query := DB.Table("referral_commissions").
+		Select("referral_commissions.*, users.username AS invitee_username").
+		Joins("LEFT JOIN users ON users.id = referral_commissions.invitee_id").
+		Where("referral_commissions.invitee_id = ?", inviteeId)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := query.Order("referral_commissions.id desc").
+		Limit(pageInfo.GetPageSize()).
+		Offset(pageInfo.GetStartIdx()).
+		Find(&commissions).Error; err != nil {
+		return nil, 0, err
+	}
+	return commissions, total, nil
 }

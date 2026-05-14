@@ -154,9 +154,11 @@ git diff --check
   `inviter_reward_quota` 快照，不受后续全局配置调整影响。
 - `ReferralCommissionEnabled=true` 时，充值返佣与一次性邀请奖励独立叠加；
   返佣不会替代或关闭 `QuotaForInviter` / `QuotaForInvitee`。
-- `users` 表新增 `inviter_reward_quota` 和 `inviter_reward_unlocked`，用于延迟
-  邀请人奖励幂等；首次新增这两个字段时，已有邀请关系会标记为已处理，避免
-  老用户首充后被补发，后续启动不会清除新产生的待解锁奖励。
+- `users` 表新增 `invitee_reward_quota`、`inviter_reward_quota` 和
+  `inviter_reward_unlocked`，用于展示被邀请用户实际获得的邀请码奖励，以及延迟
+  邀请人奖励幂等；首次新增延迟奖励状态字段时，已有邀请关系会标记为已处理，
+  避免老用户首充后被补发，后续启动不会清除新产生的待解锁奖励。字段上线前的
+  历史邀请关系没有被邀请人奖励快照，管理页中可能显示为 0。
 - 返佣覆盖的支付完成路径包括 Stripe、Creem、Epay、Waffo、Waffo Pancake、
   支付宝官方、微信支付官方、管理员补单和订阅订单完成。
 - 返佣额度按 `recharge_amount * QuotaPerUnit * rate / 100` 计算，向下取整；
@@ -164,6 +166,11 @@ git diff --check
 - classic 运维设置页新增返佣全局开关、比例、最大次数和邀请人一次性奖励
   首充后到账开关；classic 用户编辑页新增单用户返佣比例覆盖；classic 充值页
   邀请卡展示分页返佣记录。
+- classic 管理员菜单新增“邀请管理”，通过 `GET /api/user/referrals` 分页展示所有
+  邀请关系、被邀请用户奖励、被邀请用户是否已首充或购买订阅、邀请人一次性奖励
+  解锁状态和返佣汇总。该接口仅管理员可访问，支持按邀请人/被邀请用户关键词
+  搜索，并支持筛选邀请人一次性奖励的已解锁/待首充状态；返佣明细在弹窗打开时
+  通过 `GET /api/user/referrals/:invitee_id/commissions` 按被邀请用户分页加载。
 
 ### 验证
 

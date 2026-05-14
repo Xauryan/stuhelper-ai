@@ -70,7 +70,9 @@ StuHelper AI 本地任务决定修改它们：
   编辑页为单个邀请人设置 `referral_commission_percent` 覆盖比例。支付完成后的
   邀请人奖励解锁和返佣必须随支付完成事务一起写入，返佣通过
   `source_type + source_id + invitee_id + payment_method` 幂等，避免重复 webhook
-  或订阅订单重复回调造成重复入账。
+  或订阅订单重复回调造成重复入账。classic 管理员菜单必须保留“邀请管理”，用于
+  分页审计所有邀请关系、被邀请用户奖励快照、被邀请用户首充/订阅状态、邀请人
+  一次性奖励解锁状态，以及每条邀请关系下的返佣记录。
 - 项目身份必须保持为 `StuHelper AI`；组织、作者、联系方式、包名、Docker、
   workflow 和元数据身份必须保持为 `Xauryan`。
 - 对外分享元数据必须保持 StuHelper AI 身份。classic 和 default 前端的页面

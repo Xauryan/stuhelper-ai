@@ -159,6 +159,7 @@ func TestInsertWithReferralCommissionEnabledStillCreditsOneTimeInviteRewards(t *
 
 	createdInvitee := getReferralUserForTest(t, invitee.Id)
 	assert.Equal(t, common.QuotaForNewUser+common.QuotaForInvitee, createdInvitee.Quota)
+	assert.Equal(t, common.QuotaForInvitee, createdInvitee.InviteeRewardQuota)
 	assert.True(t, createdInvitee.InviterRewardUnlocked)
 }
 
@@ -192,6 +193,7 @@ func TestInviterRewardAfterPaymentDelaysAndUnlocksOnce(t *testing.T) {
 
 	createdInvitee := getReferralUserForTest(t, invitee.Id)
 	assert.Equal(t, common.QuotaForNewUser+common.QuotaForInvitee, createdInvitee.Quota)
+	assert.Equal(t, common.QuotaForInvitee, createdInvitee.InviteeRewardQuota)
 	assert.False(t, createdInvitee.InviterRewardUnlocked)
 	inviter := getReferralUserForTest(t, 61)
 	assert.Equal(t, 1, inviter.AffCount)
@@ -342,6 +344,123 @@ func TestBackfillInviterRewardMigrationStateMarksPreExistingInviteRelations(t *t
 	invitee := getReferralUserForTest(t, 94)
 	assert.Equal(t, 0, invitee.InviterRewardQuota)
 	assert.True(t, invitee.InviterRewardUnlocked)
+}
+
+func TestGetAdminReferralRecordsIncludesRewardAndCommissionState(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	insertReferralUserForTest(t, 101, "admin-ref-inviter", 0, nil)
+	insertReferralUserForTest(t, 102, "admin-ref-invitee", 101, nil)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", 102).Updates(map[string]interface{}{
+		"invitee_reward_quota":    200,
+		"inviter_reward_quota":    300,
+		"inviter_reward_unlocked": true,
+	}).Error)
+
+	require.NoError(t, DB.Create(&TopUp{
+		Id:            701,
+		UserId:        102,
+		Amount:        1000,
+		Money:         10,
+		TradeNo:       "admin-ref-topup",
+		PaymentMethod: PaymentMethodStripe,
+		CreateTime:    1700,
+		CompleteTime:  1800,
+		Status:        common.TopUpStatusSuccess,
+	}).Error)
+	require.NoError(t, DB.Create(&SubscriptionOrder{
+		Id:            801,
+		UserId:        102,
+		PlanId:        1,
+		Money:         15,
+		TradeNo:       "admin-ref-sub",
+		PaymentMethod: PaymentProviderStripe,
+		Status:        common.TopUpStatusSuccess,
+		CreateTime:    1900,
+		CompleteTime:  2000,
+	}).Error)
+	require.NoError(t, DB.Create(&ReferralCommission{
+		Id:              901,
+		InviterId:       101,
+		InviteeId:       102,
+		SourceType:      ReferralCommissionSourceTopUp,
+		SourceId:        701,
+		PaymentMethod:   PaymentMethodStripe,
+		RechargeAmount:  10,
+		CommissionQuota: 1000,
+		CommissionRate:  10,
+		CreatedAt:       1800,
+	}).Error)
+	require.NoError(t, DB.Create(&ReferralCommission{
+		Id:              902,
+		InviterId:       101,
+		InviteeId:       102,
+		SourceType:      ReferralCommissionSourceSubscription,
+		SourceId:        801,
+		PaymentMethod:   PaymentProviderStripe,
+		RechargeAmount:  15,
+		CommissionQuota: 1500,
+		CommissionRate:  10,
+		CreatedAt:       2000,
+	}).Error)
+
+	records, total, err := GetAdminReferralRecords(&AdminReferralQuery{
+		PageInfo: &common.PageInfo{Page: 1, PageSize: 20},
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, records, 1)
+
+	record := records[0]
+	assert.Equal(t, 101, record.InviterId)
+	assert.Equal(t, "admin-ref-inviter", record.InviterUsername)
+	assert.Equal(t, 102, record.InviteeId)
+	assert.Equal(t, "admin-ref-invitee", record.InviteeUsername)
+	assert.Equal(t, 200, record.InviteeRewardQuota)
+	assert.Equal(t, 300, record.InviterRewardQuota)
+	assert.True(t, record.InviterRewardUnlocked)
+	assert.True(t, record.InviteeHasPaid)
+	assert.Equal(t, int64(1800), record.FirstPaymentTime)
+	assert.Equal(t, 2, record.CommissionCount)
+	assert.Equal(t, 2500, record.TotalCommissionQuota)
+	assert.InDelta(t, 25.0, record.TotalRechargeAmount, 0.0001)
+	assert.Equal(t, int64(2000), record.LastCommissionAt)
+
+	commissions, commissionTotal, err := GetAdminReferralCommissions(102, &common.PageInfo{Page: 1, PageSize: 20})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, commissionTotal)
+	require.Len(t, commissions, 2)
+	assert.Equal(t, ReferralCommissionSourceSubscription, commissions[0].SourceType)
+	assert.Equal(t, ReferralCommissionSourceTopUp, commissions[1].SourceType)
+}
+
+func TestGetAdminReferralRecordsFiltersByKeywordAndRewardStatus(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, false, 10, 0)
+
+	insertReferralUserForTest(t, 111, "filter-inviter", 0, nil)
+	insertReferralUserForTest(t, 112, "filter-paid", 111, nil)
+	insertReferralUserForTest(t, 113, "filter-pending", 111, nil)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", 112).Updates(map[string]interface{}{
+		"inviter_reward_quota":    300,
+		"inviter_reward_unlocked": true,
+	}).Error)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", 113).Updates(map[string]interface{}{
+		"inviter_reward_quota":    300,
+		"inviter_reward_unlocked": false,
+	}).Error)
+
+	records, total, err := GetAdminReferralRecords(&AdminReferralQuery{
+		PageInfo:     &common.PageInfo{Page: 1, PageSize: 20},
+		Keyword:      "pending",
+		RewardStatus: AdminReferralRewardStatusPending,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, records, 1)
+	assert.Equal(t, 113, records[0].InviteeId)
+	assert.False(t, records[0].InviterRewardUnlocked)
 }
 
 func TestCompleteSubscriptionOrderCreditsEachOrderOnce(t *testing.T) {

@@ -105,8 +105,10 @@ export default function SettingsSidebarModulesUser() {
         channel: isSidebarModuleAllowed('admin', 'channel'),
         models: isSidebarModuleAllowed('admin', 'models'),
         deployment: isSidebarModuleAllowed('admin', 'deployment'),
+        subscription: isSidebarModuleAllowed('admin', 'subscription'),
         redemption: isSidebarModuleAllowed('admin', 'redemption'),
         user: isSidebarModuleAllowed('admin', 'user'),
+        referral: isSidebarModuleAllowed('admin', 'referral'),
         setting: isSidebarModuleAllowed('admin', 'setting'),
       };
     }
@@ -345,11 +347,21 @@ export default function SettingsSidebarModulesUser() {
           description: t('模型部署管理'),
         },
         {
+          key: 'subscription',
+          title: t('订阅管理'),
+          description: t('订阅套餐管理'),
+        },
+        {
           key: 'redemption',
           title: t('兑换码管理'),
           description: t('兑换码生成管理'),
         },
         { key: 'user', title: t('用户管理'), description: t('用户账户管理') },
+        {
+          key: 'referral',
+          title: t('邀请管理'),
+          description: t('邀请关系和返佣记录'),
+        },
         {
           key: 'setting',
           title: t('系统设置'),

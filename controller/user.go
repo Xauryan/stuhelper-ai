@@ -263,6 +263,39 @@ func SearchUsers(c *gin.Context) {
 	return
 }
 
+func GetAdminReferralRecords(c *gin.Context) {
+	pageInfo := common.GetPageQuery(c)
+	records, total, err := model.GetAdminReferralRecords(&model.AdminReferralQuery{
+		PageInfo:     pageInfo,
+		Keyword:      c.Query("keyword"),
+		RewardStatus: c.Query("reward_status"),
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(records)
+	common.ApiSuccess(c, pageInfo)
+}
+
+func GetAdminReferralCommissions(c *gin.Context) {
+	inviteeId, err := strconv.Atoi(c.Param("invitee_id"))
+	if err != nil || inviteeId <= 0 {
+		common.ApiErrorMsg(c, "invalid invitee_id")
+		return
+	}
+	pageInfo := common.GetPageQuery(c)
+	commissions, total, err := model.GetAdminReferralCommissions(inviteeId, pageInfo)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(commissions)
+	common.ApiSuccess(c, pageInfo)
+}
+
 func GetUser(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -455,7 +488,8 @@ func calculateUserPermissions(userRole int) map[string]interface{} {
 		permissions["sidebar_settings"] = true
 		permissions["sidebar_modules"] = map[string]interface{}{
 			"admin": map[string]interface{}{
-				"setting": false, // 管理员不能访问系统设置
+				"referral": true,
+				"setting":  false, // 管理员不能访问系统设置
 			},
 		}
 	} else {
@@ -501,22 +535,28 @@ func generateDefaultSidebarConfig(userRole int) string {
 	if userRole == common.RoleAdminUser {
 		// 管理员可以访问管理员区域，但不能访问系统设置
 		defaultConfig["admin"] = map[string]interface{}{
-			"enabled":    true,
-			"channel":    true,
-			"models":     true,
-			"redemption": true,
-			"user":       true,
-			"setting":    false, // 管理员不能访问系统设置
+			"enabled":      true,
+			"channel":      true,
+			"models":       true,
+			"deployment":   true,
+			"subscription": true,
+			"redemption":   true,
+			"user":         true,
+			"referral":     true,
+			"setting":      false, // 管理员不能访问系统设置
 		}
 	} else if userRole == common.RoleRootUser {
 		// 超级管理员可以访问所有功能
 		defaultConfig["admin"] = map[string]interface{}{
-			"enabled":    true,
-			"channel":    true,
-			"models":     true,
-			"redemption": true,
-			"user":       true,
-			"setting":    true,
+			"enabled":      true,
+			"channel":      true,
+			"models":       true,
+			"deployment":   true,
+			"subscription": true,
+			"redemption":   true,
+			"user":         true,
+			"referral":     true,
+			"setting":      true,
 		}
 	}
 	// 普通用户不包含admin区域

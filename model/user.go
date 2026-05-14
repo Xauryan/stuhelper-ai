@@ -46,6 +46,7 @@ type User struct {
 	AffQuota                  int            `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
 	AffHistoryQuota           int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
 	InviterId                 int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	InviteeRewardQuota        int            `json:"invitee_reward_quota" gorm:"type:int;default:0;column:invitee_reward_quota"`
 	InviterRewardQuota        int            `json:"inviter_reward_quota" gorm:"type:int;default:0;column:inviter_reward_quota"`
 	InviterRewardUnlocked     bool           `json:"inviter_reward_unlocked" gorm:"default:false;column:inviter_reward_unlocked"`
 	ReferralCommissionPercent *float64       `json:"referral_commission_percent" gorm:"type:decimal(5,2);column:referral_commission_percent"`
@@ -134,22 +135,28 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 	if userRole == common.RoleAdminUser {
 		// 管理员可以访问管理员区域，但不能访问系统设置
 		defaultConfig["admin"] = map[string]interface{}{
-			"enabled":    true,
-			"channel":    true,
-			"models":     true,
-			"redemption": true,
-			"user":       true,
-			"setting":    false, // 管理员不能访问系统设置
+			"enabled":      true,
+			"channel":      true,
+			"models":       true,
+			"deployment":   true,
+			"subscription": true,
+			"redemption":   true,
+			"user":         true,
+			"referral":     true,
+			"setting":      false, // 管理员不能访问系统设置
 		}
 	} else if userRole == common.RoleRootUser {
 		// 超级管理员可以访问所有功能
 		defaultConfig["admin"] = map[string]interface{}{
-			"enabled":    true,
-			"channel":    true,
-			"models":     true,
-			"redemption": true,
-			"user":       true,
-			"setting":    true,
+			"enabled":      true,
+			"channel":      true,
+			"models":       true,
+			"deployment":   true,
+			"subscription": true,
+			"redemption":   true,
+			"user":         true,
+			"referral":     true,
+			"setting":      true,
 		}
 	}
 	// 普通用户不包含admin区域

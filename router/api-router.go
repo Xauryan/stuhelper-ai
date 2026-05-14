@@ -138,6 +138,8 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/topup/alipay-official/refund", controller.AdminRefundAlipayOfficialTopUp)
 				adminRoute.POST("/topup/alipay-official/query", controller.AdminQueryAlipayOfficialTopUp)
 				adminRoute.POST("/topup/alipay-official/close", controller.AdminCloseAlipayOfficialTopUp)
+				adminRoute.GET("/referrals", controller.GetAdminReferralRecords)
+				adminRoute.GET("/referrals/:invitee_id/commissions", controller.GetAdminReferralCommissions)
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
