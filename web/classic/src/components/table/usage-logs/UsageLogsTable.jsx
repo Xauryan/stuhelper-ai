@@ -85,7 +85,20 @@ const LogsTable = (logsData) => {
   }, [compactMode, visibleColumnsList]);
 
   const expandRowRender = (record, index) => {
-    return <Descriptions data={expandData[record.key]} />;
+    return (
+      <div
+        style={{
+          fontSize: 15,
+          lineHeight: 1.8,
+        }}
+      >
+        <Descriptions
+          data={expandData[record.key]}
+          valueStyle={{ fontSize: 15, lineHeight: 1.8 }}
+          itemKeyStyle={{ fontSize: 15, lineHeight: 1.8 }}
+        />
+      </div>
+    );
   };
 
   return (

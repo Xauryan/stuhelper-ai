@@ -164,6 +164,25 @@ func TestParseAlipayOfficialOpenAPIResponseRequiresSuccessNode(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestParseAlipayOfficialOpenAPIResponseDetectsTradeNotFound(t *testing.T) {
+	response, err := parseAlipayOfficialOpenAPIResponse(
+		[]byte(`{"alipay_trade_query_response":{"code":"40004","msg":"Business Failed","sub_code":"ACQ.TRADE_NOT_EXIST","sub_msg":"交易不存在"},"sign":"ignored"}`),
+		"alipay_trade_query_response",
+	)
+
+	require.Error(t, err)
+	require.NotNil(t, response)
+	require.True(t, IsAlipayOfficialTradeNotFound(err))
+
+	response, err = parseAlipayOfficialOpenAPIResponse(
+		[]byte(`{"error_response":{"code":"40004","msg":"Business Failed","sub_msg":"交易不存在"},"sign":"ignored"}`),
+		"alipay_trade_query_response",
+	)
+	require.Error(t, err)
+	require.Nil(t, response)
+	require.True(t, IsAlipayOfficialTradeNotFound(err))
+}
+
 func TestVerifyAlipayOfficialOpenAPIResponseSignatureUsesRawResponseNode(t *testing.T) {
 	privateKey, publicKey := generateOfficialPaymentTestKey(t)
 	rawResponse := `{"code":"10000","msg":"Success","fund_change":"Y","refund_fee":"0.50"}`

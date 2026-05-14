@@ -155,6 +155,39 @@ func TestRechargeOfficialPayment_CreditsQuotaAndMarksSuccess(t *testing.T) {
 	assert.Equal(t, 1000010, getUserQuotaForPaymentGuardTest(t, 103))
 }
 
+func TestRecordOfficialPaymentRefundLogUsesRefundTypeAndAuditFields(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 185, 0)
+
+	RecordOfficialPaymentRefundLog(
+		185,
+		"管理员发起支付宝官方退款成功，订单号：ALIPAY_TEST，退款金额：0.50，退回额度：$0.500000",
+		"203.0.113.8",
+		PaymentMethodAlipayOfficial,
+		PaymentProviderAlipayOfficial,
+	)
+
+	var log Log
+	require.NoError(t, LOG_DB.Where("user_id = ? AND type = ?", 185, LogTypeRefund).First(&log).Error)
+	assert.Equal(t, "203.0.113.8", log.Ip)
+	assert.Equal(t, "", log.TokenName)
+	assert.Equal(t, "", log.ModelName)
+	assert.Equal(t, 0, log.ChannelId)
+	assert.Equal(t, 0, log.PromptTokens)
+	assert.Equal(t, 0, log.CompletionTokens)
+	assert.Equal(t, 0, log.Quota)
+
+	var other map[string]interface{}
+	require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
+	adminInfo, ok := other["admin_info"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "203.0.113.8", adminInfo["caller_ip"])
+	assert.Equal(t, PaymentMethodAlipayOfficial, adminInfo["payment_method"])
+	assert.Equal(t, PaymentProviderAlipayOfficial, adminInfo["callback_payment_method"])
+	assert.NotEmpty(t, adminInfo["version"])
+}
+
 func TestRechargeOfficialPaymentTreatsRefundedOrdersAsAlreadyCompleted(t *testing.T) {
 	truncateTables(t)
 

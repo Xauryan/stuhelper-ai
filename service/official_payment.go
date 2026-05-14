@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +25,8 @@ import (
 
 	"github.com/Xauryan/stuhelper-ai/common"
 )
+
+var ErrAlipayOfficialTradeNotFound = errors.New("alipay trade not found")
 
 const (
 	AlipayOfficialPagePayMethod      = "alipay.trade.page.pay"
@@ -79,6 +82,39 @@ type AlipayOfficialOpenAPIResponse struct {
 	RefundFee    string `json:"refund_fee"`
 	RefundAmount string `json:"refund_amount"`
 	RefundStatus string `json:"refund_status"`
+}
+
+type AlipayOfficialError struct {
+	Code     string
+	Msg      string
+	SubCode  string
+	SubMsg   string
+	Response *AlipayOfficialOpenAPIResponse
+}
+
+func (e *AlipayOfficialError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return fmt.Sprintf("Alipay %s failed: %s", e.Code, firstNonEmpty(e.SubMsg, e.Msg))
+}
+
+func (e *AlipayOfficialError) Unwrap() error {
+	if e == nil || !isAlipayTradeNotFoundPayload(e.SubCode, e.SubMsg) {
+		return nil
+	}
+	return ErrAlipayOfficialTradeNotFound
+}
+
+func IsAlipayOfficialTradeNotFound(err error) bool {
+	return errors.Is(err, ErrAlipayOfficialTradeNotFound)
+}
+
+func isAlipayTradeNotFoundPayload(subCode string, subMsg string) bool {
+	if strings.EqualFold(strings.TrimSpace(subCode), "ACQ.TRADE_NOT_EXIST") {
+		return true
+	}
+	return strings.Contains(strings.TrimSpace(subMsg), "交易不存在")
 }
 
 type WechatPayOfficialClient struct {
@@ -350,7 +386,13 @@ func parseAlipayOfficialOpenAPIResponse(body []byte, responseKey string) (*Alipa
 		if rawError, hasError := envelope["error_response"]; hasError {
 			var apiError AlipayOfficialOpenAPIResponse
 			_ = common.Unmarshal(rawError, &apiError)
-			return nil, fmt.Errorf("Alipay error %s: %s", apiError.Code, firstNonEmpty(apiError.SubMsg, apiError.Msg))
+			return nil, &AlipayOfficialError{
+				Code:     apiError.Code,
+				Msg:      apiError.Msg,
+				SubCode:  apiError.SubCode,
+				SubMsg:   apiError.SubMsg,
+				Response: &apiError,
+			}
 		}
 		return nil, fmt.Errorf("missing Alipay response node %s", responseKey)
 	}
@@ -359,7 +401,13 @@ func parseAlipayOfficialOpenAPIResponse(body []byte, responseKey string) (*Alipa
 		return nil, fmt.Errorf("decode Alipay %s: %w", responseKey, err)
 	}
 	if response.Code != "10000" {
-		return &response, fmt.Errorf("Alipay %s failed: %s", response.Code, firstNonEmpty(response.SubMsg, response.Msg))
+		return &response, &AlipayOfficialError{
+			Code:     response.Code,
+			Msg:      response.Msg,
+			SubCode:  response.SubCode,
+			SubMsg:   response.SubMsg,
+			Response: &response,
+		}
 	}
 	return &response, nil
 }
