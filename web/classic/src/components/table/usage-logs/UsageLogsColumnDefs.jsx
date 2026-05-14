@@ -37,11 +37,7 @@ import {
 } from '../../../helpers';
 import { IconHelpCircle } from '@douyinfe/semi-icons';
 import { CircleAlert, Route, Sparkles } from 'lucide-react';
-import {
-  getRefundLogDetailText,
-  isModelBillingLog,
-  shouldShowLogIp,
-} from './usageLogDisplayRules.mjs';
+import { isModelBillingLog, shouldShowLogIp } from './usageLogDisplayRules.mjs';
 
 const colors = [
   'amber',
@@ -424,13 +420,6 @@ function renderCompactDetailSummary(summarySegments) {
 
 function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
   const other = getLogOther(record.other);
-
-  const refundDetailText = getRefundLogDetailText(record, t('退款'));
-  if (refundDetailText) {
-    return {
-      segments: [{ text: refundDetailText, tone: 'primary' }],
-    };
-  }
 
   if (other == null || record.type !== 2) {
     return null;

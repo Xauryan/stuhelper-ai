@@ -42,6 +42,7 @@ import {
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
 import ParamOverrideEntry from '../../components/table/usage-logs/components/ParamOverrideEntry';
+import { getBusinessLogExpandedDetailText } from '../../components/table/usage-logs/usageLogDisplayRules.mjs';
 
 export const useLogsData = () => {
   const { t } = useTranslation();
@@ -515,6 +516,13 @@ export const useLogsData = () => {
         }
       }
       if (logs[i].type === 6) {
+        const businessDetailText = getBusinessLogExpandedDetailText(logs[i]);
+        if (businessDetailText) {
+          expandDataLocal.push({
+            key: t('日志详情'),
+            value: businessDetailText,
+          });
+        }
         if (other?.task_id) {
           expandDataLocal.push({
             key: t('任务ID'),

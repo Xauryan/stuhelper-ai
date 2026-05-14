@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  getRefundLogDetailText,
+  getBusinessLogExpandedDetailText,
   isModelBillingLog,
   shouldShowLogIp,
 } from './usageLogDisplayRules.mjs';
@@ -13,14 +13,15 @@ assert.equal(shouldShowLogIp({ type: 6, ip: '203.0.113.8' }, false), false);
 assert.equal(shouldShowLogIp({ type: 6, ip: '' }, true), false);
 
 assert.equal(
-  getRefundLogDetailText(
-    { type: 6, content: '管理员发起支付宝官方退款成功' },
-    '退款',
-  ),
+  getBusinessLogExpandedDetailText({
+    type: 6,
+    content: '管理员发起支付宝官方退款成功',
+  }),
   '管理员发起支付宝官方退款成功',
 );
+assert.equal(getBusinessLogExpandedDetailText({ type: 6, content: '' }), null);
 assert.equal(
-  getRefundLogDetailText({ type: 2, content: 'consume' }, '退款'),
+  getBusinessLogExpandedDetailText({ type: 2, content: 'consume' }),
   null,
 );
 
