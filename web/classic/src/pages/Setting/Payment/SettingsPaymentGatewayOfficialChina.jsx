@@ -27,7 +27,7 @@ import {
   toBoolean,
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, TriangleAlert } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import {
   buildOfficialChinaPaymentOptions,
   hasSubmittedOrStoredOfficialChinaPaymentValue,
@@ -292,15 +292,6 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
             }
             style={{ marginBottom: 12 }}
           />
-          <Banner
-            type='warning'
-            icon={<TriangleAlert size={16} />}
-            description={t(
-              '必须使用企业主体开通的官方产品能力；这不是易支付，也不是支付宝当面付。',
-            )}
-            style={{ marginBottom: 16 }}
-          />
-
           <Tabs type='card' defaultActiveKey='alipay'>
             <Tabs.TabPane tab={t('支付宝官方')} itemKey='alipay'>
               <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}>
@@ -453,7 +444,7 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
               </Row>
             </Tabs.TabPane>
 
-            <Tabs.TabPane tab={t('微信支付官方')} itemKey='wechat'>
+            <Tabs.TabPane tab={t('微信')} itemKey='wechat'>
               <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.Switch
