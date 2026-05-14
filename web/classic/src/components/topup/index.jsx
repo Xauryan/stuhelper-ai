@@ -133,6 +133,13 @@ const TopUp = () => {
   const getPayMethodConfig = (payment) =>
     confirmPayMethods.find((method) => method.type === payment);
 
+  const getPaymentUnitPrice = (payment) => {
+    const configuredUnitPrice = Number(getPayMethodConfig(payment)?.unit_price);
+    return Number.isFinite(configuredUnitPrice) && configuredUnitPrice > 0
+      ? configuredUnitPrice
+      : priceRatio;
+  };
+
   const getPaymentMinTopUp = (payment) => {
     const configuredMinTopUp = Number(getPayMethodConfig(payment)?.min_topup);
     return Number.isFinite(configuredMinTopUp) && configuredMinTopUp > 0
@@ -755,6 +762,11 @@ const TopUp = () => {
               method.min_topup = Number.isFinite(normalizedMinTopup)
                 ? normalizedMinTopup
                 : 0;
+              const normalizedUnitPrice = Number(method.unit_price);
+              method.unit_price =
+                Number.isFinite(normalizedUnitPrice) && normalizedUnitPrice > 0
+                  ? normalizedUnitPrice
+                  : undefined;
 
               // Stripe 的最小充值从后端字段回填
               if (
@@ -864,7 +876,12 @@ const TopUp = () => {
         if (data.amount_options && data.amount_options.length > 0) {
           const customPresets = data.amount_options.map((amount) => ({
             value: amount,
-            discount: data.discount[amount] || 1.0,
+            ...(Object.prototype.hasOwnProperty.call(
+              data.discount || {},
+              amount,
+            )
+              ? { discount: data.discount[amount] }
+              : {}),
           }));
           setPresetAmounts(customPresets);
         }
@@ -1178,6 +1195,7 @@ const TopUp = () => {
           openTopUpLink={openTopUpLink}
           userState={userState}
           renderQuota={renderQuota}
+          getPaymentUnitPrice={getPaymentUnitPrice}
           statusLoading={statusLoading}
           topupInfo={topupInfo}
           onOpenHistory={handleOpenHistory}

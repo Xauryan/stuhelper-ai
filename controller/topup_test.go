@@ -62,6 +62,60 @@ func TestGetTopUpInfoDoesNotExposeEpayMethodsWhenEpayDisabled(t *testing.T) {
 	require.Empty(t, payload.Data.PayMethods)
 }
 
+func TestGetTopUpInfoIncludesOfficialUnitPrice(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalAlipayEnabled := setting.AlipayOfficialEnabled
+	originalAlipayAppID := setting.AlipayOfficialAppID
+	originalAlipayPrivateKey := setting.AlipayOfficialPrivateKey
+	originalAlipayPublicKey := setting.AlipayOfficialAlipayPublicKey
+	originalAlipayUnitPrice := setting.AlipayOfficialUnitPrice
+	originalEpayPayAddress := operation_setting.PayAddress
+	originalEpayID := operation_setting.EpayId
+	originalEpayKey := operation_setting.EpayKey
+	originalPayMethods := operation_setting.PayMethods
+	t.Cleanup(func() {
+		setting.AlipayOfficialEnabled = originalAlipayEnabled
+		setting.AlipayOfficialAppID = originalAlipayAppID
+		setting.AlipayOfficialPrivateKey = originalAlipayPrivateKey
+		setting.AlipayOfficialAlipayPublicKey = originalAlipayPublicKey
+		setting.AlipayOfficialUnitPrice = originalAlipayUnitPrice
+		operation_setting.PayAddress = originalEpayPayAddress
+		operation_setting.EpayId = originalEpayID
+		operation_setting.EpayKey = originalEpayKey
+		operation_setting.PayMethods = originalPayMethods
+	})
+
+	setting.AlipayOfficialEnabled = true
+	setting.AlipayOfficialAppID = "app-id"
+	setting.AlipayOfficialPrivateKey = "private-key"
+	setting.AlipayOfficialAlipayPublicKey = "alipay-public-key"
+	setting.AlipayOfficialUnitPrice = 1.006
+	operation_setting.PayAddress = ""
+	operation_setting.EpayId = ""
+	operation_setting.EpayKey = ""
+	operation_setting.PayMethods = []map[string]string{}
+
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/user/topup/info", nil)
+
+	GetTopUpInfo(ctx)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var payload struct {
+		Success bool `json:"success"`
+		Data    struct {
+			PayMethods []map[string]string `json:"pay_methods"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	require.Len(t, payload.Data.PayMethods, 1)
+	require.Equal(t, model.PaymentMethodAlipayOfficial, payload.Data.PayMethods[0]["type"])
+	require.Equal(t, "1.006", payload.Data.PayMethods[0]["unit_price"])
+}
+
 func TestBuildOfficialTradeNoUsesAlipaySafeCharacters(t *testing.T) {
 	tradeNo := buildOfficialTradeNo("ALIPAY", 42)
 
