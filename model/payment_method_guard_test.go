@@ -155,6 +155,294 @@ func TestRechargeOfficialPayment_CreditsQuotaAndMarksSuccess(t *testing.T) {
 	assert.Equal(t, 1000010, getUserQuotaForPaymentGuardTest(t, 103))
 }
 
+func TestRechargeOfficialPaymentTreatsRefundedOrdersAsAlreadyCompleted(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 105, 100)
+	topUp := &TopUp{
+		UserId:          105,
+		Amount:          2,
+		Money:           9.99,
+		TradeNo:         "official-refunded-notify",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusPartialRefunded,
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+
+	err := RechargeOfficialPayment("official-refunded-notify", PaymentProviderAlipayOfficial, PaymentMethodAlipayOfficial, "127.0.0.1", 9.99)
+	require.NoError(t, err)
+	assert.Equal(t, 100, getUserQuotaForPaymentGuardTest(t, 105))
+}
+
+func TestCreateOfficialPaymentRefundRejectsOverRefundAndDeductsPartialQuota(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 100
+
+	insertUserForPaymentGuardTest(t, 170, 1000)
+	topUp := &TopUp{
+		UserId:          170,
+		Amount:          10,
+		Money:           1.00,
+		TradeNo:         "official-refund-partial",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CompleteTime:    time.Now().Unix(),
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+
+	refund, err := CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+		TradeNo:         topUp.TradeNo,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RefundAmount:    0.40,
+		Reason:          "partial refund",
+		OutRequestNo:    "official-refund-partial-rf-1",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, refund)
+	assert.Equal(t, TopUpRefundStatusPending, refund.Status)
+	assert.Equal(t, int64(400), refund.RefundQuota)
+	assert.Equal(t, 600, getUserQuotaForPaymentGuardTest(t, 170))
+
+	err = MarkTopUpRefundSuccess("official-refund-partial-rf-1", "202605142200000000", `{"fund_change":"Y"}`)
+	require.NoError(t, err)
+
+	updated := GetTopUpByTradeNo(topUp.TradeNo)
+	require.NotNil(t, updated)
+	assert.Equal(t, common.TopUpStatusPartialRefunded, updated.Status)
+	assert.Equal(t, 0.40, updated.RefundedMoney)
+	assert.Equal(t, int64(400), updated.RefundedQuota)
+
+	_, err = CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+		TradeNo:         topUp.TradeNo,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RefundAmount:    0.61,
+		Reason:          "too much",
+		OutRequestNo:    "official-refund-partial-rf-2",
+	})
+	require.Error(t, err)
+	assert.Equal(t, 600, getUserQuotaForPaymentGuardTest(t, 170))
+}
+
+func TestCreateOfficialPaymentRefundFullRefundDeductsRemainingQuota(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 100
+
+	insertUserForPaymentGuardTest(t, 171, 1000)
+	topUp := &TopUp{
+		UserId:          171,
+		Amount:          10,
+		Money:           1.00,
+		TradeNo:         "official-refund-full",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusPartialRefunded,
+		RefundedMoney:   0.40,
+		RefundedQuota:   400,
+		CompleteTime:    time.Now().Unix(),
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+
+	refund, err := CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+		TradeNo:         topUp.TradeNo,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RefundAmount:    0.60,
+		Reason:          "full refund remaining",
+		OutRequestNo:    "official-refund-full-rf-1",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, refund)
+	assert.Equal(t, int64(600), refund.RefundQuota)
+	assert.Equal(t, 400, getUserQuotaForPaymentGuardTest(t, 171))
+
+	err = MarkTopUpRefundSuccess("official-refund-full-rf-1", "202605142200000001", `{"fund_change":"Y"}`)
+	require.NoError(t, err)
+
+	updated := GetTopUpByTradeNo(topUp.TradeNo)
+	require.NotNil(t, updated)
+	assert.Equal(t, common.TopUpStatusRefunded, updated.Status)
+	assert.Equal(t, 1.00, updated.RefundedMoney)
+	assert.Equal(t, int64(1000), updated.RefundedQuota)
+}
+
+func TestCreateOfficialPaymentRefundReversesReferralCommission(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 100
+
+	inviter := &User{Id: 172, Username: "refund-inviter", Status: common.UserStatusEnabled, AffCode: "refund-inviter-aff", AffQuota: 100, AffHistoryQuota: 100}
+	invitee := &User{Id: 173, Username: "refund-invitee", Status: common.UserStatusEnabled, AffCode: "refund-invitee-aff", InviterId: 172, Quota: 1000}
+	require.NoError(t, DB.Create(inviter).Error)
+	require.NoError(t, DB.Create(invitee).Error)
+	topUp := &TopUp{
+		UserId:          173,
+		Amount:          10,
+		Money:           1.00,
+		TradeNo:         "official-refund-commission",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CompleteTime:    time.Now().Unix(),
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+	require.NoError(t, DB.Create(&ReferralCommission{
+		InviterId:       172,
+		InviteeId:       173,
+		SourceType:      ReferralCommissionSourceTopUp,
+		SourceId:        topUp.Id,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RechargeAmount:  1.00,
+		CommissionQuota: 10,
+		CommissionRate:  10,
+	}).Error)
+
+	_, err := CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+		TradeNo:         topUp.TradeNo,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RefundAmount:    0.40,
+		Reason:          "commission refund",
+		OutRequestNo:    "official-refund-commission-rf-1",
+	})
+	require.NoError(t, err)
+
+	var updatedInviter User
+	require.NoError(t, DB.First(&updatedInviter, 172).Error)
+	assert.Equal(t, 96, updatedInviter.AffQuota)
+	assert.Equal(t, 96, updatedInviter.AffHistoryQuota)
+}
+
+func TestMarkTopUpRefundFailedRestoresQuotaAndReferralCommission(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 100
+
+	inviter := &User{Id: 174, Username: "refund-rollback-inviter", Status: common.UserStatusEnabled, AffCode: "refund-rollback-inviter-aff", AffQuota: 100, AffHistoryQuota: 100}
+	invitee := &User{Id: 175, Username: "refund-rollback-invitee", Status: common.UserStatusEnabled, AffCode: "refund-rollback-invitee-aff", InviterId: 174, Quota: 1000}
+	require.NoError(t, DB.Create(inviter).Error)
+	require.NoError(t, DB.Create(invitee).Error)
+	topUp := &TopUp{
+		UserId:          175,
+		Amount:          10,
+		Money:           1.00,
+		TradeNo:         "official-refund-rollback",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CompleteTime:    time.Now().Unix(),
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+	require.NoError(t, DB.Create(&ReferralCommission{
+		InviterId:       174,
+		InviteeId:       175,
+		SourceType:      ReferralCommissionSourceTopUp,
+		SourceId:        topUp.Id,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RechargeAmount:  1.00,
+		CommissionQuota: 10,
+		CommissionRate:  10,
+	}).Error)
+
+	_, err := CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+		TradeNo:         topUp.TradeNo,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RefundAmount:    0.40,
+		Reason:          "rollback",
+		OutRequestNo:    "official-refund-rollback-rf-1",
+	})
+	require.NoError(t, err)
+	require.NoError(t, MarkTopUpRefundFailed("official-refund-rollback-rf-1", "alipay failed"))
+
+	updated := GetTopUpByTradeNo(topUp.TradeNo)
+	require.NotNil(t, updated)
+	assert.Equal(t, common.TopUpStatusSuccess, updated.Status)
+	assert.Equal(t, 0.0, updated.RefundedMoney)
+	assert.Equal(t, int64(0), updated.RefundedQuota)
+	assert.Equal(t, 1000, getUserQuotaForPaymentGuardTest(t, 175))
+
+	var updatedInviter User
+	require.NoError(t, DB.First(&updatedInviter, 174).Error)
+	assert.Equal(t, 100, updatedInviter.AffQuota)
+	assert.Equal(t, 100, updatedInviter.AffHistoryQuota)
+}
+
+func TestSearchAllTopUpsMatchesUserIdUsernameAndTradeNo(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, DB.Create(&User{Id: 180, Username: "alice-topup", Status: common.UserStatusEnabled, AffCode: "alice-topup-aff"}).Error)
+	require.NoError(t, DB.Create(&User{Id: 181, Username: "bob-topup", Status: common.UserStatusEnabled, AffCode: "bob-topup-aff"}).Error)
+	require.NoError(t, DB.Create(&[]TopUp{
+		{
+			UserId:          180,
+			Amount:          1,
+			Money:           1,
+			TradeNo:         "ALIPAY_SEARCH_A",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusPending,
+			CreateTime:      time.Now().Unix(),
+		},
+		{
+			UserId:          181,
+			Amount:          1,
+			Money:           1,
+			TradeNo:         "ALIPAY_SEARCH_B",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusPending,
+			CreateTime:      time.Now().Unix(),
+		},
+	}).Error)
+
+	rows, total, err := SearchAllTopUps("alice", &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "alice-topup", rows[0].Username)
+
+	rows, total, err = SearchAllTopUps("181", &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "bob-topup", rows[0].Username)
+
+	rows, total, err = SearchAllTopUps("SEARCH_A", &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "ALIPAY_SEARCH_A", rows[0].TradeNo)
+}
+
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {
 	testCases := []struct {
 		name                    string

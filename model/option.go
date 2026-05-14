@@ -132,6 +132,7 @@ func InitOptionMap() {
 	common.OptionMap["AlipayOfficialReturnURL"] = setting.AlipayOfficialReturnURL
 	common.OptionMap["AlipayOfficialUnitPrice"] = strconv.FormatFloat(setting.AlipayOfficialUnitPrice, 'f', -1, 64)
 	common.OptionMap["AlipayOfficialMinTopUp"] = strconv.Itoa(setting.AlipayOfficialMinTopUp)
+	common.OptionMap["AlipayOfficialOrderTimeoutMin"] = strconv.Itoa(setting.AlipayOfficialOrderTimeoutMin)
 	common.OptionMap["WechatPayOfficialEnabled"] = strconv.FormatBool(setting.WechatPayOfficialEnabled)
 	common.OptionMap["WechatPayOfficialAppID"] = setting.WechatPayOfficialAppID
 	common.OptionMap["WechatPayOfficialMchID"] = setting.WechatPayOfficialMchID
@@ -510,6 +511,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.AlipayOfficialUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "AlipayOfficialMinTopUp":
 		setting.AlipayOfficialMinTopUp, _ = strconv.Atoi(value)
+	case "AlipayOfficialOrderTimeoutMin":
+		setting.AlipayOfficialOrderTimeoutMin, _ = strconv.Atoi(value)
 	case "WechatPayOfficialEnabled":
 		setting.WechatPayOfficialEnabled = value == "true"
 	case "WechatPayOfficialAppID":

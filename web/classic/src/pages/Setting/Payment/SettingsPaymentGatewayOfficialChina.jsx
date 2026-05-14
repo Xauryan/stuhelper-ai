@@ -46,6 +46,7 @@ const defaultInputs = {
   AlipayOfficialReturnURL: '',
   AlipayOfficialUnitPrice: 1.0,
   AlipayOfficialMinTopUp: 1,
+  AlipayOfficialOrderTimeoutMin: 10,
 
   WechatPayOfficialEnabled: false,
   WechatPayOfficialAppID: '',
@@ -76,8 +77,7 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
       AlipayOfficialSandbox: toBoolean(props.options.AlipayOfficialSandbox),
       AlipayOfficialAppID: props.options.AlipayOfficialAppID || '',
       AlipayOfficialAppCertSN: props.options.AlipayOfficialAppCertSN || '',
-      AlipayOfficialRootCertSN:
-        props.options.AlipayOfficialRootCertSN || '',
+      AlipayOfficialRootCertSN: props.options.AlipayOfficialRootCertSN || '',
       AlipayOfficialAlipayCertSN:
         props.options.AlipayOfficialAlipayCertSN || '',
       AlipayOfficialNotifyURL: props.options.AlipayOfficialNotifyURL || '',
@@ -90,6 +90,10 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         props.options.AlipayOfficialMinTopUp !== undefined
           ? parseFloat(props.options.AlipayOfficialMinTopUp)
           : 1,
+      AlipayOfficialOrderTimeoutMin:
+        props.options.AlipayOfficialOrderTimeoutMin !== undefined
+          ? parseInt(props.options.AlipayOfficialOrderTimeoutMin, 10)
+          : 10,
 
       WechatPayOfficialEnabled: toBoolean(
         props.options.WechatPayOfficialEnabled,
@@ -166,6 +170,13 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         showError(t('最低充值美元数量必须大于 0'));
         return;
       }
+      if (Number(values.AlipayOfficialOrderTimeoutMin) < 1) {
+        showError(t('订单超时时间必须大于 0'));
+        return;
+      }
+      values.AlipayOfficialOrderTimeoutMin = Math.floor(
+        Number(values.AlipayOfficialOrderTimeoutMin) || 10,
+      );
     }
 
     if (values.WechatPayOfficialEnabled) {
@@ -177,9 +188,7 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         showError(t('请输入微信支付商户号'));
         return;
       }
-      if (
-        !String(values.WechatPayOfficialCertificateSerial || '').trim()
-      ) {
+      if (!String(values.WechatPayOfficialCertificateSerial || '').trim()) {
         showError(t('请输入微信支付商户证书序列号'));
         return;
       }
@@ -292,9 +301,7 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
 
           <Tabs type='card' defaultActiveKey='alipay'>
             <Tabs.TabPane tab={t('支付宝官方')} itemKey='alipay'>
-              <Row
-                gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
-              >
+              <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.Switch
                     field='AlipayOfficialEnabled'
@@ -413,13 +420,20 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                     min={1}
                   />
                 </Col>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.InputNumber
+                    field='AlipayOfficialOrderTimeoutMin'
+                    label={t('订单超时时间（分钟）')}
+                    min={1}
+                    precision={0}
+                    extraText={t('默认 10 分钟，超时后自动关闭支付宝订单')}
+                  />
+                </Col>
               </Row>
             </Tabs.TabPane>
 
             <Tabs.TabPane tab={t('微信支付官方')} itemKey='wechat'>
-              <Row
-                gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
-              >
+              <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.Switch
                     field='WechatPayOfficialEnabled'

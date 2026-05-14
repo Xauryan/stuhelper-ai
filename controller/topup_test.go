@@ -167,4 +167,5 @@ func TestGetTopUpInfoStillExposesOfficialMethodsWhenEpayDisabled(t *testing.T) {
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
 	require.Len(t, payload.Data.PayMethods, 1)
 	require.Equal(t, model.PaymentMethodAlipayOfficial, payload.Data.PayMethods[0]["type"])
+	require.Equal(t, "支付宝", payload.Data.PayMethods[0]["name"])
 }

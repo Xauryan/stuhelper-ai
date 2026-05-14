@@ -3,6 +3,8 @@ package model
 import (
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/logger"
@@ -14,8 +16,11 @@ import (
 type TopUp struct {
 	Id              int     `json:"id"`
 	UserId          int     `json:"user_id" gorm:"index"`
+	Username        string  `json:"username" gorm:"-"`
 	Amount          int64   `json:"amount"`
 	Money           float64 `json:"money"`
+	RefundedMoney   float64 `json:"refunded_money" gorm:"default:0"`
+	RefundedQuota   int64   `json:"refunded_quota" gorm:"default:0"`
 	TradeNo         string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
 	PaymentMethod   string  `json:"payment_method" gorm:"type:varchar(50)"`
 	PaymentProvider string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
@@ -49,6 +54,39 @@ var (
 	ErrTopUpStatusInvalid    = errors.New("topup status invalid")
 )
 
+const (
+	TopUpRefundStatusPending = "pending"
+	TopUpRefundStatusSuccess = "success"
+	TopUpRefundStatusFailed  = "failed"
+)
+
+type TopUpRefund struct {
+	Id              int     `json:"id"`
+	TopUpId         int     `json:"topup_id" gorm:"index"`
+	UserId          int     `json:"user_id" gorm:"index"`
+	TradeNo         string  `json:"trade_no" gorm:"type:varchar(255);index"`
+	OutRequestNo    string  `json:"out_request_no" gorm:"unique;type:varchar(255);index"`
+	AlipayTradeNo   string  `json:"alipay_trade_no" gorm:"type:varchar(255);default:''"`
+	PaymentMethod   string  `json:"payment_method" gorm:"type:varchar(50)"`
+	PaymentProvider string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
+	RefundAmount    float64 `json:"refund_amount"`
+	RefundQuota     int64   `json:"refund_quota"`
+	Reason          string  `json:"reason" gorm:"type:varchar(255);default:''"`
+	Status          string  `json:"status" gorm:"type:varchar(32);index"`
+	RawResponse     string  `json:"raw_response" gorm:"type:text"`
+	CreateTime      int64   `json:"create_time"`
+	CompleteTime    int64   `json:"complete_time"`
+}
+
+type OfficialPaymentRefundCreateParams struct {
+	TradeNo         string
+	PaymentProvider string
+	PaymentMethod   string
+	RefundAmount    float64
+	Reason          string
+	OutRequestNo    string
+}
+
 func (topUp *TopUp) Insert() error {
 	var err error
 	err = DB.Create(topUp).Error
@@ -79,6 +117,252 @@ func GetTopUpByTradeNo(tradeNo string) *TopUp {
 		return nil
 	}
 	return topUp
+}
+
+func GetTopUpRefundByOutRequestNo(outRequestNo string) *TopUpRefund {
+	var refund *TopUpRefund
+	if err := DB.Where("out_request_no = ?", outRequestNo).First(&refund).Error; err != nil {
+		return nil
+	}
+	return refund
+}
+
+func GetTopUpRefundsByTradeNo(tradeNo string) ([]*TopUpRefund, error) {
+	var refunds []*TopUpRefund
+	if err := DB.Where("trade_no = ?", tradeNo).Order("id asc").Find(&refunds).Error; err != nil {
+		return nil, err
+	}
+	return refunds, nil
+}
+
+func ListPendingTopUpsBefore(paymentProvider string, createBefore int64, limit int) ([]*TopUp, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	var topUps []*TopUp
+	err := DB.
+		Where("payment_provider = ? AND status = ? AND create_time <= ?", paymentProvider, common.TopUpStatusPending, createBefore).
+		Order("id asc").
+		Limit(limit).
+		Find(&topUps).Error
+	return topUps, err
+}
+
+func CreateOfficialPaymentRefund(params OfficialPaymentRefundCreateParams) (*TopUpRefund, error) {
+	if strings.TrimSpace(params.TradeNo) == "" {
+		return nil, errors.New("未提供订单号")
+	}
+	if strings.TrimSpace(params.OutRequestNo) == "" {
+		return nil, errors.New("未提供退款请求号")
+	}
+	refundAmount := decimal.NewFromFloat(params.RefundAmount).Round(2)
+	if !refundAmount.IsPositive() {
+		return nil, errors.New("退款金额必须大于 0")
+	}
+
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	var refund *TopUpRefund
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		topUp := &TopUp{}
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", params.TradeNo).First(topUp).Error; err != nil {
+			return ErrTopUpNotFound
+		}
+		if params.PaymentProvider != "" && topUp.PaymentProvider != params.PaymentProvider {
+			return ErrPaymentMethodMismatch
+		}
+		if params.PaymentMethod != "" && topUp.PaymentMethod != params.PaymentMethod {
+			return ErrPaymentMethodMismatch
+		}
+		if topUp.Status != common.TopUpStatusSuccess &&
+			topUp.Status != common.TopUpStatusPartialRefunded {
+			return ErrTopUpStatusInvalid
+		}
+
+		orderMoney := decimal.NewFromFloat(topUp.Money).Round(2)
+		refundedMoney := decimal.NewFromFloat(topUp.RefundedMoney).Round(2)
+		remainingMoney := orderMoney.Sub(refundedMoney)
+		if remainingMoney.LessThan(refundAmount) {
+			return errors.New("退款金额超过可退金额")
+		}
+
+		totalQuota := topUpCreditedQuota(*topUp)
+		refundQuota := calculateOfficialRefundQuota(totalQuota, topUp.RefundedQuota, orderMoney, refundAmount, remainingMoney)
+		if refundQuota <= 0 {
+			return errors.New("退款额度无效")
+		}
+
+		refund = &TopUpRefund{
+			TopUpId:         topUp.Id,
+			UserId:          topUp.UserId,
+			TradeNo:         topUp.TradeNo,
+			OutRequestNo:    strings.TrimSpace(params.OutRequestNo),
+			PaymentMethod:   topUp.PaymentMethod,
+			PaymentProvider: topUp.PaymentProvider,
+			RefundAmount:    refundAmount.InexactFloat64(),
+			RefundQuota:     refundQuota,
+			Reason:          strings.TrimSpace(params.Reason),
+			Status:          TopUpRefundStatusPending,
+			CreateTime:      common.GetTimestamp(),
+		}
+		if err := tx.Create(refund).Error; err != nil {
+			return err
+		}
+
+		newRefundedMoney := refundedMoney.Add(refundAmount)
+		topUp.RefundedMoney = newRefundedMoney.InexactFloat64()
+		topUp.RefundedQuota += refundQuota
+		topUp.Status = common.TopUpStatusPartialRefunded
+		if !newRefundedMoney.LessThan(orderMoney) {
+			topUp.Status = common.TopUpStatusRefunded
+		}
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota - ?", refundQuota)).Error; err != nil {
+			return err
+		}
+		return reverseTopUpReferralCommissionForRefundTx(tx, topUp.Id, refundAmount, orderMoney)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return refund, nil
+}
+
+func MarkTopUpRefundSuccess(outRequestNo string, alipayTradeNo string, rawResponse string) error {
+	if strings.TrimSpace(outRequestNo) == "" {
+		return errors.New("未提供退款请求号")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		refund := &TopUpRefund{}
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("out_request_no = ?", outRequestNo).First(refund).Error; err != nil {
+			return err
+		}
+		if refund.Status == TopUpRefundStatusSuccess {
+			return nil
+		}
+		if refund.Status != TopUpRefundStatusPending {
+			return ErrTopUpStatusInvalid
+		}
+		refund.Status = TopUpRefundStatusSuccess
+		refund.AlipayTradeNo = strings.TrimSpace(alipayTradeNo)
+		refund.RawResponse = rawResponse
+		refund.CompleteTime = common.GetTimestamp()
+		return tx.Save(refund).Error
+	})
+}
+
+func MarkTopUpRefundFailed(outRequestNo string, rawResponse string) error {
+	if strings.TrimSpace(outRequestNo) == "" {
+		return errors.New("未提供退款请求号")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		refund := &TopUpRefund{}
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("out_request_no = ?", outRequestNo).First(refund).Error; err != nil {
+			return err
+		}
+		if refund.Status != TopUpRefundStatusPending {
+			return nil
+		}
+		topUp := &TopUp{}
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", refund.TopUpId).First(topUp).Error; err != nil {
+			return err
+		}
+		if err := reverseTopUpReferralCommissionForRefundTx(tx, refund.TopUpId, decimal.NewFromFloat(refund.RefundAmount).Neg(), decimal.NewFromFloat(topUp.Money).Round(2)); err != nil {
+			return err
+		}
+		refund.Status = TopUpRefundStatusFailed
+		refund.RawResponse = rawResponse
+		refund.CompleteTime = common.GetTimestamp()
+		if err := tx.Save(refund).Error; err != nil {
+			return err
+		}
+
+		topUp.RefundedMoney = decimal.NewFromFloat(topUp.RefundedMoney).Sub(decimal.NewFromFloat(refund.RefundAmount)).Round(2).InexactFloat64()
+		if topUp.RefundedMoney < 0 {
+			topUp.RefundedMoney = 0
+		}
+		topUp.RefundedQuota -= refund.RefundQuota
+		if topUp.RefundedQuota < 0 {
+			topUp.RefundedQuota = 0
+		}
+		if topUp.RefundedQuota == 0 && topUp.RefundedMoney == 0 {
+			topUp.Status = common.TopUpStatusSuccess
+		} else {
+			topUp.Status = common.TopUpStatusPartialRefunded
+		}
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+		return tx.Model(&User{}).Where("id = ?", refund.UserId).Update("quota", gorm.Expr("quota + ?", refund.RefundQuota)).Error
+	})
+}
+
+func calculateOfficialRefundQuota(totalQuota int64, alreadyRefundedQuota int64, orderMoney decimal.Decimal, refundAmount decimal.Decimal, remainingMoney decimal.Decimal) int64 {
+	remainingQuota := totalQuota - alreadyRefundedQuota
+	if remainingQuota <= 0 {
+		return 0
+	}
+	if !refundAmount.LessThan(remainingMoney) {
+		return remainingQuota
+	}
+	if orderMoney.IsZero() || orderMoney.IsNegative() {
+		return 0
+	}
+	refundQuota := decimal.NewFromInt(totalQuota).Mul(refundAmount).Div(orderMoney).Round(0).IntPart()
+	if refundQuota <= 0 {
+		refundQuota = 1
+	}
+	if refundQuota > remainingQuota {
+		return remainingQuota
+	}
+	return refundQuota
+}
+
+func reverseTopUpReferralCommissionForRefundTx(tx *gorm.DB, topUpId int, refundAmount decimal.Decimal, orderMoney decimal.Decimal) error {
+	if tx == nil || topUpId <= 0 || refundAmount.IsZero() || !orderMoney.IsPositive() {
+		return nil
+	}
+	var commissions []ReferralCommission
+	if err := tx.Where("source_type = ? AND source_id = ?", ReferralCommissionSourceTopUp, topUpId).Find(&commissions).Error; err != nil {
+		return err
+	}
+	for _, commission := range commissions {
+		if commission.InviterId <= 0 || commission.CommissionQuota <= 0 {
+			continue
+		}
+		absoluteRefundAmount := refundAmount.Abs()
+		reverseQuota := decimal.NewFromInt(int64(commission.CommissionQuota)).
+			Mul(absoluteRefundAmount).
+			Div(orderMoney).
+			Round(0).
+			IntPart()
+		if reverseQuota <= 0 {
+			reverseQuota = 1
+		}
+		if reverseQuota > int64(commission.CommissionQuota) {
+			reverseQuota = int64(commission.CommissionQuota)
+		}
+		expr := gorm.Expr("aff_quota - ?", reverseQuota)
+		historyExpr := gorm.Expr("aff_history - ?", reverseQuota)
+		if refundAmount.IsNegative() {
+			expr = gorm.Expr("aff_quota + ?", reverseQuota)
+			historyExpr = gorm.Expr("aff_history + ?", reverseQuota)
+		}
+		if err := tx.Model(&User{}).
+			Where("id = ?", commission.InviterId).
+			Updates(map[string]interface{}{
+				"aff_quota":   expr,
+				"aff_history": historyExpr,
+			}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, targetStatus string) error {
@@ -239,6 +523,88 @@ func topUpQueryCutoff() int64 {
 	return common.GetTimestamp() - topUpQueryWindowSeconds
 }
 
+func fillTopUpUsernames(topUps []*TopUp) {
+	if len(topUps) == 0 {
+		return
+	}
+	userIds := make([]int, 0, len(topUps))
+	for _, topUp := range topUps {
+		if topUp != nil && topUp.UserId > 0 {
+			userIds = append(userIds, topUp.UserId)
+		}
+	}
+	userIds = uniqueIntSlice(userIds)
+	if len(userIds) == 0 {
+		return
+	}
+	var users []User
+	if err := DB.Select("id", "username").Where("id IN ?", userIds).Find(&users).Error; err != nil {
+		return
+	}
+	usernameById := make(map[int]string, len(users))
+	for _, user := range users {
+		usernameById[user.Id] = user.Username
+	}
+	for _, topUp := range topUps {
+		if topUp != nil {
+			topUp.Username = usernameById[topUp.UserId]
+		}
+	}
+}
+
+func parseTopUpUserIDKeyword(keyword string) (int, bool) {
+	value, err := strconv.Atoi(strings.TrimSpace(keyword))
+	if err != nil || value <= 0 {
+		return 0, false
+	}
+	return value, true
+}
+
+func findUserIDsByUsernamePattern(tx *gorm.DB, pattern string) ([]int, error) {
+	var users []User
+	if err := tx.Select("id").Where("username LIKE ? ESCAPE '!'", pattern).Limit(searchTopUpCountHardLimit).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	userIds := make([]int, 0, len(users))
+	for _, user := range users {
+		userIds = append(userIds, user.Id)
+	}
+	return userIds, nil
+}
+
+func buildTopUpContainsLikePattern(keyword string) (string, error) {
+	pattern, err := sanitizeLikePattern(keyword)
+	if err != nil {
+		return "", err
+	}
+	if strings.Count(keyword, "%") == 0 {
+		pattern = "%" + pattern + "%"
+	}
+	return pattern, nil
+}
+
+func uniqueIntSlice(values []int) []int {
+	if len(values) == 0 {
+		return []int{-1}
+	}
+	seen := make(map[int]struct{}, len(values))
+	unique := make([]int, 0, len(values))
+	for _, value := range values {
+		if value <= 0 {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		unique = append(unique, value)
+	}
+	if len(unique) == 0 {
+		return []int{-1}
+	}
+	return unique
+}
+
 func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
 	// Start transaction
 	tx := DB.Begin()
@@ -271,6 +637,7 @@ func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, tota
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
 	}
+	fillTopUpUsernames(topups)
 
 	return topups, total, nil
 }
@@ -300,6 +667,7 @@ func GetAllTopUps(pageInfo *common.PageInfo) (topups []*TopUp, total int64, err 
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
 	}
+	fillTopUpUsernames(topups)
 
 	return topups, total, nil
 }
@@ -322,7 +690,7 @@ func SearchUserTopUps(userId int, keyword string, pageInfo *common.PageInfo) (to
 
 	query := tx.Model(&TopUp{}).Where("user_id = ? AND create_time >= ?", userId, topUpQueryCutoff())
 	if keyword != "" {
-		pattern, perr := sanitizeLikePattern(keyword)
+		pattern, perr := buildTopUpContainsLikePattern(keyword)
 		if perr != nil {
 			tx.Rollback()
 			return nil, 0, perr
@@ -345,10 +713,11 @@ func SearchUserTopUps(userId int, keyword string, pageInfo *common.PageInfo) (to
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
 	}
+	fillTopUpUsernames(topups)
 	return topups, total, nil
 }
 
-// SearchAllTopUps 按订单号搜索全平台充值记录（管理员使用，不限制时间窗口）
+// SearchAllTopUps 按用户 ID、用户名或订单号搜索全平台充值记录（管理员使用，不限制时间窗口）
 func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
@@ -362,12 +731,21 @@ func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp
 
 	query := tx.Model(&TopUp{})
 	if keyword != "" {
-		pattern, perr := sanitizeLikePattern(keyword)
+		pattern, perr := buildTopUpContainsLikePattern(keyword)
 		if perr != nil {
 			tx.Rollback()
 			return nil, 0, perr
 		}
-		query = query.Where("trade_no LIKE ? ESCAPE '!'", pattern)
+		userIdKeyword, hasUserIdKeyword := parseTopUpUserIDKeyword(keyword)
+		matchedUserIds, matchErr := findUserIDsByUsernamePattern(tx, pattern)
+		if matchErr != nil {
+			tx.Rollback()
+			return nil, 0, matchErr
+		}
+		if hasUserIdKeyword {
+			matchedUserIds = append(matchedUserIds, userIdKeyword)
+		}
+		query = query.Where("trade_no LIKE ? ESCAPE '!' OR user_id IN ?", pattern, uniqueIntSlice(matchedUserIds))
 	}
 
 	if err = query.Limit(searchTopUpCountHardLimit).Count(&total).Error; err != nil {
@@ -385,6 +763,7 @@ func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
 	}
+	fillTopUpUsernames(topups)
 	return topups, total, nil
 }
 
@@ -720,7 +1099,9 @@ func RechargeOfficialPayment(tradeNo string, expectedPaymentProvider string, act
 			return ErrPaymentMethodMismatch
 		}
 
-		if topUp.Status == common.TopUpStatusSuccess {
+		if topUp.Status == common.TopUpStatusSuccess ||
+			topUp.Status == common.TopUpStatusPartialRefunded ||
+			topUp.Status == common.TopUpStatusRefunded {
 			return nil
 		}
 
