@@ -4,8 +4,26 @@ export const getRemainingRefundMoney = (record) => {
   return Math.max(0, Math.round((money - refundedMoney) * 100) / 100);
 };
 
+export const isSubscriptionTopup = (record) => {
+  if (!record) {
+    return false;
+  }
+  if (Number(record.amount || 0) !== 0) {
+    return false;
+  }
+  const tradeNo = String(record.trade_no || '').toUpperCase();
+  return (
+    tradeNo.startsWith('SUB') ||
+    tradeNo.startsWith('ALIPAYSUB') ||
+    tradeNo.startsWith('WXSUB')
+  );
+};
+
 export const isAlipayOfficialRefundable = (record) => {
   if (!record) {
+    return false;
+  }
+  if (isSubscriptionTopup(record)) {
     return false;
   }
   const isAlipayOfficial =
@@ -21,18 +39,3 @@ export const isAlipayOfficialRefundable = (record) => {
 };
 
 export const formatCurrency = (value) => Number(value || 0).toFixed(2);
-
-export const isSubscriptionTopup = (record) => {
-  if (!record) {
-    return false;
-  }
-  if (Number(record.amount || 0) !== 0) {
-    return false;
-  }
-  const tradeNo = String(record.trade_no || '').toUpperCase();
-  return (
-    tradeNo.startsWith('SUB') ||
-    tradeNo.startsWith('ALIPAYSUB') ||
-    tradeNo.startsWith('WXSUB')
-  );
-};

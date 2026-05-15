@@ -872,31 +872,91 @@ func TestCompleteSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T
 	assert.Zero(t, countUserSubscriptionsForPaymentGuardTest(t, 202))
 
 	topUp := GetTopUpByTradeNo("sub-guard-order")
-	assert.Nil(t, topUp)
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
+	assert.Equal(t, PaymentProviderStripe, topUp.PaymentProvider)
+	assert.Equal(t, int64(0), topUp.Amount)
 }
 
-func TestCompleteSubscriptionOrder_PersistsPaymentProviderToTopUp(t *testing.T) {
+func TestSubscriptionOrderInsertCreatesPendingTopUpForBillQuery(t *testing.T) {
 	truncateTables(t)
 
 	insertUserForPaymentGuardTest(t, 203, 0)
 	plan := insertSubscriptionPlanForPaymentGuardTest(t, 302)
 	insertSubscriptionOrderForPaymentGuardTest(t, "sub-official-provider", 203, plan.Id, PaymentProviderAlipayOfficial)
 
-	err := CompleteSubscriptionOrder("sub-official-provider", `{"provider":"alipay_official"}`, PaymentProviderAlipayOfficial, PaymentMethodAlipayOfficial)
+	topUp := GetTopUpByTradeNo("sub-official-provider")
+	require.NotNil(t, topUp)
+	assert.Equal(t, 203, topUp.UserId)
+	assert.Equal(t, int64(0), topUp.Amount)
+	assert.InDelta(t, 9.99, topUp.Money, 0.0001)
+	assert.Equal(t, PaymentProviderAlipayOfficial, topUp.PaymentProvider)
+	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
+	assert.Zero(t, topUp.CompleteTime)
+}
+
+func TestCompleteSubscriptionOrder_PersistsPaymentProviderToTopUp(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 204, 0)
+	plan := insertSubscriptionPlanForPaymentGuardTest(t, 303)
+	insertSubscriptionOrderForPaymentGuardTest(t, "sub-official-provider-success", 204, plan.Id, PaymentProviderAlipayOfficial)
+
+	err := CompleteSubscriptionOrder("sub-official-provider-success", `{"provider":"alipay_official"}`, PaymentProviderAlipayOfficial, PaymentMethodAlipayOfficial)
 	require.NoError(t, err)
 
-	topUp := GetTopUpByTradeNo("sub-official-provider")
+	topUp := GetTopUpByTradeNo("sub-official-provider-success")
 	require.NotNil(t, topUp)
 	assert.Equal(t, PaymentMethodAlipayOfficial, topUp.PaymentMethod)
 	assert.Equal(t, PaymentProviderAlipayOfficial, topUp.PaymentProvider)
+	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
+	assert.NotZero(t, topUp.CompleteTime)
+}
+
+func TestCompleteSubscriptionOrderAllowsEpayActualPaymentMethod(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 206, 0)
+	plan := insertSubscriptionPlanForPaymentGuardTest(t, 306)
+	insertSubscriptionOrderForPaymentGuardTest(t, "sub-epay-actual-method", 206, plan.Id, PaymentProviderEpay)
+
+	err := CompleteSubscriptionOrder("sub-epay-actual-method", `{"type":"alipay"}`, PaymentProviderEpay, "alipay")
+	require.NoError(t, err)
+
+	topUp := GetTopUpByTradeNo("sub-epay-actual-method")
+	require.NotNil(t, topUp)
+	assert.Equal(t, "alipay", topUp.PaymentMethod)
+	assert.Equal(t, PaymentProviderEpay, topUp.PaymentProvider)
+	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
+}
+
+func TestExpireSubscriptionOrderSyncsPendingTopUpStatus(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 205, 0)
+	plan := insertSubscriptionPlanForPaymentGuardTest(t, 304)
+	insertSubscriptionOrderForPaymentGuardTest(t, "sub-expire-sync", 205, plan.Id, PaymentProviderAlipayOfficial)
+
+	err := ExpireSubscriptionOrder("sub-expire-sync", PaymentProviderAlipayOfficial)
+	require.NoError(t, err)
+
+	order := GetSubscriptionOrderByTradeNo("sub-expire-sync")
+	require.NotNil(t, order)
+	assert.Equal(t, common.TopUpStatusExpired, order.Status)
+
+	topUp := GetTopUpByTradeNo("sub-expire-sync")
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusExpired, topUp.Status)
+	assert.Equal(t, PaymentProviderAlipayOfficial, topUp.PaymentProvider)
+	assert.NotZero(t, topUp.CompleteTime)
 }
 
 func TestExpireSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) {
 	truncateTables(t)
 
-	insertUserForPaymentGuardTest(t, 303, 0)
+	insertUserForPaymentGuardTest(t, 305, 0)
 	plan := insertSubscriptionPlanForPaymentGuardTest(t, 401)
-	insertSubscriptionOrderForPaymentGuardTest(t, "sub-expire-guard", 303, plan.Id, PaymentProviderStripe)
+	insertSubscriptionOrderForPaymentGuardTest(t, "sub-expire-guard", 305, plan.Id, PaymentProviderStripe)
 
 	err := ExpireSubscriptionOrder("sub-expire-guard", PaymentProviderCreem)
 	require.ErrorIs(t, err, ErrPaymentMethodMismatch)
@@ -904,4 +964,8 @@ func TestExpireSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) 
 	order := GetSubscriptionOrderByTradeNo("sub-expire-guard")
 	require.NotNil(t, order)
 	assert.Equal(t, common.TopUpStatusPending, order.Status)
+
+	topUp := GetTopUpByTradeNo("sub-expire-guard")
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
 }

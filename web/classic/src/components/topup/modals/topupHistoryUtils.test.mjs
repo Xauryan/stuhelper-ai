@@ -51,6 +51,18 @@ assert.equal(
   false,
 );
 assert.equal(
+  isAlipayOfficialRefundable({
+    trade_no: 'ALIPAYSUB_1_1778750000_ABCDEF',
+    amount: 0,
+    payment_provider: 'alipay_official',
+    payment_method: 'alipay_official',
+    status: 'success',
+    money: 9.99,
+    refunded_money: 0,
+  }),
+  false,
+);
+assert.equal(
   isSubscriptionTopup({
     trade_no: 'SUB_1_1778750000',
     amount: 0,
