@@ -527,6 +527,7 @@ type AdminRefundTopUpRequest struct {
 	TradeNo      string  `json:"trade_no"`
 	RefundAmount float64 `json:"refund_amount"`
 	Reason       string  `json:"reason"`
+	FullRefund   bool    `json:"full_refund"`
 }
 
 // AdminCompleteTopUp 管理员补单接口

@@ -12,6 +12,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func sanitizeAuditRedemptions(c *gin.Context, redemptions []*model.Redemption) {
+	if c.GetInt("role") >= common.RoleAdminUser {
+		return
+	}
+	for _, redemption := range redemptions {
+		if redemption != nil {
+			redemption.Key = ""
+		}
+	}
+}
+
 func GetAllRedemptions(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	redemptions, total, err := model.GetAllRedemptions(pageInfo.GetStartIdx(), pageInfo.GetPageSize())
@@ -19,6 +30,7 @@ func GetAllRedemptions(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	sanitizeAuditRedemptions(c, redemptions)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(redemptions)
 	common.ApiSuccess(c, pageInfo)
@@ -33,6 +45,7 @@ func SearchRedemptions(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	sanitizeAuditRedemptions(c, redemptions)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(redemptions)
 	common.ApiSuccess(c, pageInfo)

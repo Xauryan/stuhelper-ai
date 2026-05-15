@@ -125,7 +125,7 @@ function RankingTable({ rows, loading }) {
       columns={columns}
       dataSource={rows}
       loading={loading}
-      rowKey={(row) => `${row.user_id}-${row.rank}`}
+      rowKey={(row) => `${row.rank}-${row.display}-${row.total_quota}`}
       hidePagination
       pagination={false}
       empty={

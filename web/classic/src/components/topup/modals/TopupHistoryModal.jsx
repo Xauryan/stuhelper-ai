@@ -42,7 +42,7 @@ import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import {
   formatCurrency,
   getRemainingRefundMoney,
-  isAlipayOfficialRefundable,
+  isOfficialRefundable,
   isSubscriptionTopup,
 } from './topupHistoryUtils.mjs';
 const { Text } = Typography;
@@ -69,7 +69,11 @@ const PAYMENT_METHOD_MAP = {
   wxpay_official: '微信',
 };
 
+const isOfficialTopupRefundable = (record) =>
+  isOfficialRefundable(record) && !record.refund_request_id;
+
 const TopupHistoryModal = ({ visible, onCancel, t }) => {
+  const userIsAdmin = useMemo(() => isAdmin(), []);
   const [loading, setLoading] = useState(false);
   const [topups, setTopups] = useState([]);
   const [total, setTotal] = useState(0);
@@ -81,6 +85,9 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
   const [refundAmount, setRefundAmount] = useState(0);
   const [refundReason, setRefundReason] = useState('');
   const [refundLoading, setRefundLoading] = useState(false);
+  const [refundPreview, setRefundPreview] = useState(null);
+  const [refundMode, setRefundMode] = useState('direct');
+  const [refundFull, setRefundFull] = useState(false);
   const isMobile = useIsMobile();
 
   const loadTopups = async (currentPage, currentPageSize) => {
@@ -152,11 +159,29 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     });
   };
 
-  const openRefundModal = (record) => {
-    const remaining = getRemainingRefundMoney(record);
+  const openRefundModal = async (record) => {
+    let preview = null;
+    let remaining = getRemainingRefundMoney(record);
+    try {
+      const res = await API.post('/api/user/topup/official/refund/preview', {
+        trade_no: record.trade_no,
+      });
+      const { success, data } = res.data;
+      if (success && data) {
+        preview = data;
+        remaining = Number(data.max_refund_amount || remaining);
+      }
+    } catch (e) {
+      // The admin can still fall back to the local remaining amount.
+    }
+    setRefundPreview(preview);
     setRefundRecord(record);
     setRefundAmount(remaining);
     setRefundReason('');
+    setRefundMode(
+      record.refund_request_id && userIsAdmin ? 'approve' : 'direct',
+    );
+    setRefundFull(false);
     setRefundVisible(true);
   };
 
@@ -164,26 +189,56 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     if (!refundRecord) {
       return;
     }
-    const remaining = getRemainingRefundMoney(refundRecord);
+    const maxAmount = refundFull
+      ? getRemainingRefundMoney(refundRecord)
+      : (refundPreview?.max_refund_amount ??
+        getRemainingRefundMoney(refundRecord));
     const normalizedAmount = Math.round(Number(refundAmount || 0) * 100) / 100;
     if (!normalizedAmount || normalizedAmount <= 0) {
       Toast.error({ content: t('请输入退款金额') });
       return;
     }
-    if (normalizedAmount > remaining) {
+    if (normalizedAmount > maxAmount) {
       Toast.error({ content: t('退款金额不能超过可退金额') });
       return;
     }
     setRefundLoading(true);
     try {
-      const res = await API.post('/api/user/topup/alipay-official/refund', {
-        trade_no: refundRecord.trade_no,
-        refund_amount: normalizedAmount,
-        reason: refundReason,
-      });
+      let res;
+      if (refundMode === 'approve') {
+        res = await API.post(
+          '/api/user/topup/official/refund-request/approve',
+          {
+            request_id: refundRecord.refund_request_id,
+            refund_amount: normalizedAmount,
+            reason: refundReason,
+            full_refund: refundFull,
+          },
+        );
+      } else {
+        const isWechatOfficial =
+          refundRecord.payment_provider === 'wxpay_official' ||
+          refundRecord.payment_method === 'wxpay_official';
+        const endpoint = userIsAdmin
+          ? isWechatOfficial
+            ? '/api/user/topup/wechat-pay-official/refund'
+            : '/api/user/topup/alipay-official/refund'
+          : '/api/user/topup/official/refund/apply';
+        res = await API.post(endpoint, {
+          trade_no: refundRecord.trade_no,
+          refund_amount: normalizedAmount,
+          reason: refundReason,
+          full_refund: refundFull,
+        });
+      }
       const { success, message } = res.data;
       if (success) {
-        Toast.success({ content: t('退款成功') });
+        Toast.success({
+          content:
+            userIsAdmin || refundMode === 'approve'
+              ? t('退款成功')
+              : t('退款申请已提交'),
+        });
         setRefundVisible(false);
         await loadTopups(page, pageSize);
       } else {
@@ -196,6 +251,42 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     }
   };
 
+  const handleRejectRefundRequest = (record) => {
+    let rejectReason = '';
+    Modal.confirm({
+      title: t('拒绝退款申请'),
+      content: (
+        <Input
+          placeholder={t('拒绝原因，可留空')}
+          onChange={(value) => {
+            rejectReason = value;
+          }}
+          showClear
+        />
+      ),
+      onOk: async () => {
+        try {
+          const res = await API.post(
+            '/api/user/topup/official/refund-request/reject',
+            {
+              request_id: record.refund_request_id,
+              reason: rejectReason,
+            },
+          );
+          const { success, message } = res.data;
+          if (success) {
+            Toast.success({ content: t('已拒绝退款申请') });
+            await loadTopups(page, pageSize);
+          } else {
+            Toast.error({ content: message || t('操作失败') });
+          }
+        } catch (e) {
+          Toast.error({ content: t('操作失败') });
+        }
+      },
+    });
+  };
+
   const handleQueryAlipayOfficial = async (tradeNo) => {
     try {
       const res = await API.post('/api/user/topup/alipay-official/query', {
@@ -206,6 +297,27 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         Toast.success({
           content: data?.trade_status
             ? `${t('查询成功')}：${data.trade_status}`
+            : t('查询成功'),
+        });
+        await loadTopups(page, pageSize);
+      } else {
+        Toast.error({ content: message || t('查询失败') });
+      }
+    } catch (e) {
+      Toast.error({ content: t('查询失败') });
+    }
+  };
+
+  const handleQueryWechatPayOfficial = async (tradeNo) => {
+    try {
+      const res = await API.post('/api/user/topup/wechat-pay-official/query', {
+        trade_no: tradeNo,
+      });
+      const { success, message, data } = res.data;
+      if (success) {
+        Toast.success({
+          content: data?.trade_state
+            ? `${t('查询成功')}：${data.trade_state}`
             : t('查询成功'),
         });
         await loadTopups(page, pageSize);
@@ -240,6 +352,32 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     });
   };
 
+  const confirmCloseWechatPayOfficial = (tradeNo) => {
+    Modal.confirm({
+      title: t('关闭订单'),
+      content: t('确认关闭该微信待支付订单？'),
+      onOk: async () => {
+        try {
+          const res = await API.post(
+            '/api/user/topup/wechat-pay-official/close',
+            {
+              trade_no: tradeNo,
+            },
+          );
+          const { success, message } = res.data;
+          if (success) {
+            Toast.success({ content: t('订单已关闭') });
+            await loadTopups(page, pageSize);
+          } else {
+            Toast.error({ content: message || t('关闭订单失败') });
+          }
+        } catch (e) {
+          Toast.error({ content: t('关闭订单失败') });
+        }
+      },
+    });
+  };
+
   // 渲染状态徽章
   const renderStatusBadge = (status) => {
     const config = STATUS_CONFIG[status] || { type: 'primary', key: status };
@@ -256,9 +394,6 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     const displayName = PAYMENT_METHOD_MAP[pm];
     return <Text>{displayName ? t(displayName) : pm || '-'}</Text>;
   };
-
-  // 检查是否为管理员
-  const userIsAdmin = useMemo(() => isAdmin(), []);
 
   const columns = useMemo(() => {
     const baseColumns = [
@@ -335,71 +470,130 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
       },
     ];
 
-    // 管理员才显示操作列
-    if (userIsAdmin) {
-      baseColumns.push({
-        title: t('操作'),
-        key: 'action',
-        render: (_, record) => {
-          const actions = [];
-          if (record.status === 'pending') {
+    baseColumns.push({
+      title: t('操作'),
+      key: 'action',
+      render: (_, record) => {
+        const actions = [];
+        const subscriptionTopup = isSubscriptionTopup(record);
+        if (userIsAdmin && record.status === 'pending' && !subscriptionTopup) {
+          actions.push(
+            <Button
+              key='complete'
+              size='small'
+              type='primary'
+              theme='outline'
+              onClick={() => confirmAdminComplete(record.trade_no)}
+            >
+              {t('补单')}
+            </Button>,
+          );
+        }
+        if (
+          userIsAdmin &&
+          record.status === 'pending' &&
+          record.payment_provider === 'alipay_official' &&
+          !subscriptionTopup
+        ) {
+          actions.push(
+            <Button
+              key='query'
+              size='small'
+              theme='outline'
+              onClick={() => handleQueryAlipayOfficial(record.trade_no)}
+            >
+              {t('查询')}
+            </Button>,
+            <Button
+              key='close'
+              size='small'
+              type='danger'
+              theme='outline'
+              onClick={() => confirmCloseAlipayOfficial(record.trade_no)}
+            >
+              {t('关闭')}
+            </Button>,
+          );
+        }
+        if (
+          userIsAdmin &&
+          record.status === 'pending' &&
+          record.payment_provider === 'wxpay_official' &&
+          !subscriptionTopup
+        ) {
+          actions.push(
+            <Button
+              key='wx-query'
+              size='small'
+              theme='outline'
+              onClick={() => handleQueryWechatPayOfficial(record.trade_no)}
+            >
+              {t('查询')}
+            </Button>,
+            <Button
+              key='wx-close'
+              size='small'
+              type='danger'
+              theme='outline'
+              onClick={() => confirmCloseWechatPayOfficial(record.trade_no)}
+            >
+              {t('关闭')}
+            </Button>,
+          );
+        }
+        if (
+          isOfficialTopupRefundable(record) &&
+          record.refund_request_status !== 'pending'
+        ) {
+          actions.push(
+            <Button
+              key='refund'
+              size='small'
+              type='warning'
+              theme='outline'
+              onClick={() => openRefundModal(record)}
+            >
+              {userIsAdmin ? t('退款') : t('申请退款')}
+            </Button>,
+          );
+        }
+        if (record.refund_request_status === 'pending') {
+          if (userIsAdmin) {
             actions.push(
               <Button
-                key='complete'
+                key='refund-approve'
                 size='small'
-                type='primary'
-                theme='outline'
-                onClick={() => confirmAdminComplete(record.trade_no)}
+                type='warning'
+                theme='solid'
+                onClick={() => openRefundModal(record)}
               >
-                {t('补单')}
-              </Button>,
-            );
-          }
-          if (
-            record.status === 'pending' &&
-            record.payment_provider === 'alipay_official'
-          ) {
-            actions.push(
-              <Button
-                key='query'
-                size='small'
-                theme='outline'
-                onClick={() => handleQueryAlipayOfficial(record.trade_no)}
-              >
-                {t('查询')}
+                {t('审批退款')}
               </Button>,
               <Button
-                key='close'
+                key='refund-reject'
                 size='small'
                 type='danger'
                 theme='outline'
-                onClick={() => confirmCloseAlipayOfficial(record.trade_no)}
+                onClick={() => handleRejectRefundRequest(record)}
               >
-                {t('关闭')}
+                {t('拒绝')}
               </Button>,
             );
-          }
-          if (isAlipayOfficialRefundable(record)) {
+          } else {
             actions.push(
-              <Button
-                key='refund'
-                size='small'
-                type='warning'
-                theme='outline'
-                onClick={() => openRefundModal(record)}
-              >
-                {t('退款')}
-              </Button>,
+              <Tag key='refund-pending' color='orange' shape='circle'>
+                {t('退款审核中')}
+              </Tag>,
             );
           }
-          return actions.length > 0 ? (
-            <Space spacing={6} wrap>
-              {actions}
-            </Space>
-          ) : null;
-        },
-      });
-    }
+        }
+        return actions.length > 0 ? (
+          <Space spacing={6} wrap>
+            {actions}
+          </Space>
+        ) : null;
+      },
+    });
 
     baseColumns.push({
       title: t('创建时间'),
@@ -414,8 +608,11 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     userIsAdmin,
     confirmAdminComplete,
     handleQueryAlipayOfficial,
+    handleQueryWechatPayOfficial,
     confirmCloseAlipayOfficial,
+    confirmCloseWechatPayOfficial,
     openRefundModal,
+    handleRejectRefundRequest,
   ]);
 
   return (
@@ -464,12 +661,18 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         scroll={{ x: 'max-content' }}
       />
       <Modal
-        title={t('支付宝退款')}
+        title={
+          refundMode === 'approve'
+            ? t('审批退款')
+            : userIsAdmin
+              ? t('官方支付退款')
+              : t('申请退款')
+        }
         visible={refundVisible}
         onCancel={() => setRefundVisible(false)}
         onOk={handleRefund}
         confirmLoading={refundLoading}
-        okText={t('确认退款')}
+        okText={refundMode === 'approve' ? t('审批通过并退款') : t('确认退款')}
         cancelText={t('取消')}
       >
         <div className='space-y-3'>
@@ -483,14 +686,57 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
             <Text type='tertiary'>{t('剩余可退金额')}</Text>
             <div>
               <Text type='danger'>
-                ¥{formatCurrency(getRemainingRefundMoney(refundRecord))}
+                ¥
+                {formatCurrency(
+                  refundPreview?.max_refund_amount ??
+                    getRemainingRefundMoney(refundRecord),
+                )}
               </Text>
             </div>
           </div>
+          {refundPreview?.is_subscription ? (
+            <div>
+              <Text type='tertiary'>{t('订阅未使用部分')}</Text>
+              <div>
+                <Text>
+                  {Math.round(
+                    Math.max(
+                      0,
+                      1 - Number(refundPreview.subscription_used_ratio || 0),
+                    ) * 100,
+                  )}
+                  %
+                </Text>
+              </div>
+            </div>
+          ) : null}
+          {refundRecord?.refund_request_id ? (
+            <>
+              <div>
+                <Text type='tertiary'>{t('申请退款金额')}</Text>
+                <div>
+                  <Text type='warning'>
+                    ¥{formatCurrency(refundRecord.refund_request_amount)}
+                  </Text>
+                </div>
+              </div>
+              <div>
+                <Text type='tertiary'>{t('申请原因')}</Text>
+                <div>
+                  <Text>{refundRecord.refund_request_reason || '-'}</Text>
+                </div>
+              </div>
+            </>
+          ) : null}
           <InputNumber
             prefix='¥'
             min={0.01}
-            max={getRemainingRefundMoney(refundRecord)}
+            max={
+              refundFull
+                ? getRemainingRefundMoney(refundRecord)
+                : (refundPreview?.max_refund_amount ??
+                  getRemainingRefundMoney(refundRecord))
+            }
             step={0.01}
             precision={2}
             value={refundAmount}
@@ -498,10 +744,28 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
             placeholder={t('退款金额')}
             style={{ width: '100%' }}
           />
+          {userIsAdmin ? (
+            <label className='flex items-center gap-2 text-sm'>
+              <input
+                type='checkbox'
+                checked={refundFull}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setRefundFull(checked);
+                  if (checked) {
+                    setRefundAmount(getRemainingRefundMoney(refundRecord));
+                  } else if (refundPreview?.max_refund_amount) {
+                    setRefundAmount(refundPreview.max_refund_amount);
+                  }
+                }}
+              />
+              <span>{t('全额退款')}</span>
+            </label>
+          ) : null}
           <Input
             value={refundReason}
             onChange={setRefundReason}
-            placeholder={t('退款原因，可留空')}
+            placeholder={userIsAdmin ? t('退款原因，可留空') : t('退款原因')}
             showClear
           />
         </div>

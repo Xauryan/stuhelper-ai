@@ -26,6 +26,7 @@ import {
 } from '@douyinfe/semi-illustrations';
 import { getRedemptionsColumns, isExpired } from './RedemptionsColumnDefs';
 import DeleteRedemptionModal from './modals/DeleteRedemptionModal';
+import { isAuditOnlyAdmin } from '../../../helpers';
 
 const RedemptionsTable = (redemptionsData) => {
   const {
@@ -49,6 +50,7 @@ const RedemptionsTable = (redemptionsData) => {
   // Modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingRecord, setDeletingRecord] = useState(null);
+  const canWrite = !isAuditOnlyAdmin();
 
   // Handle show delete modal
   const showDeleteRedemptionModal = (record) => {
@@ -68,6 +70,7 @@ const RedemptionsTable = (redemptionsData) => {
       redemptions,
       activePage,
       showDeleteRedemptionModal,
+      canWrite,
     });
   }, [
     t,
@@ -79,6 +82,7 @@ const RedemptionsTable = (redemptionsData) => {
     redemptions,
     activePage,
     showDeleteRedemptionModal,
+    canWrite,
   ]);
 
   // Handle compact mode by removing fixed positioning
@@ -111,7 +115,7 @@ const RedemptionsTable = (redemptionsData) => {
         }}
         hidePagination={true}
         loading={loading}
-        rowSelection={rowSelection}
+        rowSelection={canWrite ? rowSelection : undefined}
         onRow={handleRow}
         empty={
           <Empty

@@ -20,8 +20,13 @@ For commercial licensing, please contact support@xauryan.com
 import React from 'react';
 import { Tabs, TabPane, Tag, Button, Dropdown, Modal } from '@douyinfe/semi-ui';
 import { IconEdit, IconDelete } from '@douyinfe/semi-icons';
-import { getLobeHubIcon, showError, showSuccess } from '../../../helpers';
-import { API } from '../../../helpers';
+import {
+  API,
+  getLobeHubIcon,
+  isAuditOnlyAdmin,
+  showError,
+  showSuccess,
+} from '../../../helpers';
 
 const ModelsTabs = ({
   activeVendorKey,
@@ -38,6 +43,8 @@ const ModelsTabs = ({
   loadVendors,
   t,
 }) => {
+  const canWrite = !isAuditOnlyAdmin();
+
   const handleTabChange = (key) => {
     setActiveVendorKey(key);
     setActivePage(1);
@@ -80,13 +87,15 @@ const ModelsTabs = ({
       onChange={handleTabChange}
       className='mb-2'
       tabBarExtraContent={
-        <Button
-          type='primary'
-          size='small'
-          onClick={() => setShowAddVendor(true)}
-        >
-          {t('新增供应商')}
-        </Button>
+        canWrite ? (
+          <Button
+            type='primary'
+            size='small'
+            onClick={() => setShowAddVendor(true)}
+          >
+            {t('新增供应商')}
+          </Button>
+        ) : null
       }
     >
       <TabPane
@@ -121,51 +130,53 @@ const ModelsTabs = ({
                 >
                   {count}
                 </Tag>
-                <Dropdown
-                  trigger='click'
-                  position='bottomRight'
-                  render={
-                    <Dropdown.Menu>
-                      <Dropdown.Item
-                        icon={<IconEdit />}
-                        onClick={(e) => handleEditVendor(vendor, e)}
-                      >
-                        {t('编辑')}
-                      </Dropdown.Item>
-                      <Dropdown.Item
-                        type='danger'
-                        icon={<IconDelete />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          Modal.confirm({
-                            title: t('确认删除'),
-                            content: t(
-                              '确定要删除供应商 "{{name}}" 吗？此操作不可撤销。',
-                              { name: vendor.name },
-                            ),
-                            onOk: () => handleDeleteVendor(vendor, e),
-                            okText: t('删除'),
-                            cancelText: t('取消'),
-                            type: 'warning',
-                            okType: 'danger',
-                          });
-                        }}
-                      >
-                        {t('删除')}
-                      </Dropdown.Item>
-                    </Dropdown.Menu>
-                  }
-                  onClickOutSide={(e) => e.stopPropagation()}
-                >
-                  <Button
-                    size='small'
-                    type='tertiary'
-                    theme='outline'
-                    onClick={(e) => e.stopPropagation()}
+                {canWrite && (
+                  <Dropdown
+                    trigger='click'
+                    position='bottomRight'
+                    render={
+                      <Dropdown.Menu>
+                        <Dropdown.Item
+                          icon={<IconEdit />}
+                          onClick={(e) => handleEditVendor(vendor, e)}
+                        >
+                          {t('编辑')}
+                        </Dropdown.Item>
+                        <Dropdown.Item
+                          type='danger'
+                          icon={<IconDelete />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            Modal.confirm({
+                              title: t('确认删除'),
+                              content: t(
+                                '确定要删除供应商 "{{name}}" 吗？此操作不可撤销。',
+                                { name: vendor.name },
+                              ),
+                              onOk: () => handleDeleteVendor(vendor, e),
+                              okText: t('删除'),
+                              cancelText: t('取消'),
+                              type: 'warning',
+                              okType: 'danger',
+                            });
+                          }}
+                        >
+                          {t('删除')}
+                        </Dropdown.Item>
+                      </Dropdown.Menu>
+                    }
+                    onClickOutSide={(e) => e.stopPropagation()}
                   >
-                    {t('操作')}
-                  </Button>
-                </Dropdown>
+                    <Button
+                      size='small'
+                      type='tertiary'
+                      theme='outline'
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {t('操作')}
+                    </Button>
+                  </Dropdown>
+                )}
               </span>
             }
           />

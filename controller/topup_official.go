@@ -33,9 +33,42 @@ var (
 	alipayOfficialExpireTaskRunning sync.Mutex
 )
 
+var newWechatPayOfficialClient = defaultWechatPayOfficialClient
+
 type OfficialPayRequest struct {
 	Amount int64  `json:"amount"`
 	Scene  string `json:"scene"`
+}
+
+type OfficialWechatPayStatusRequest struct {
+	TradeNo string `json:"trade_no"`
+}
+
+type OfficialRefundPreviewRequest struct {
+	TradeNo string `json:"trade_no"`
+}
+
+type OfficialRefundApplyRequest struct {
+	TradeNo      string  `json:"trade_no"`
+	RefundAmount float64 `json:"refund_amount"`
+	Reason       string  `json:"reason"`
+}
+
+type AdminRefundRequestActionRequest struct {
+	RequestId    int     `json:"request_id"`
+	RefundAmount float64 `json:"refund_amount"`
+	Reason       string  `json:"reason"`
+	FullRefund   bool    `json:"full_refund"`
+}
+
+type AdminRejectRefundRequestRequest struct {
+	RequestId int    `json:"request_id"`
+	Reason    string `json:"reason"`
+}
+
+type wechatPayOfficialPrepayResponse struct {
+	Result *service.WechatPayOfficialPrepayResult
+	Scene  string
 }
 
 func RequestAlipayOfficialAmount(c *gin.Context) {
@@ -214,7 +247,7 @@ func RequestWechatPayOfficialPay(c *gin.Context) {
 		PrivateKey:        setting.WechatPayOfficialPrivateKey,
 		PlatformPublicKey: setting.WechatPayOfficialPlatformPublicKey,
 	}
-	result, err := client.Prepay(c.Request.Context(), service.WechatPayOfficialPrepayParams{
+	prepay, err := prepayWechatPayOfficialWithNativeFallback(c.Request.Context(), client, service.WechatPayOfficialPrepayParams{
 		Description: fmt.Sprintf("StuHelper AI 充值 %d", req.Amount),
 		OutTradeNo:  tradeNo,
 		NotifyURL:   notifyURL,
@@ -232,19 +265,155 @@ func RequestWechatPayOfficialPay(c *gin.Context) {
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f scene=%s", id, tradeNo, req.Amount, payMoney, scene))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f scene=%s", id, tradeNo, req.Amount, payMoney, prepay.Scene))
 	data := gin.H{
 		"order_id": tradeNo,
-		"scene":    scene,
+		"scene":    prepay.Scene,
 	}
-	if scene == officialPaymentSceneH5 {
+	if prepay.Scene == officialPaymentSceneH5 {
 		data["payment_type"] = "redirect"
-		data["payment_url"] = result.H5URL
+		data["payment_url"] = prepay.Result.H5URL
 	} else {
 		data["payment_type"] = "qrcode"
-		data["code_url"] = result.CodeURL
+		data["code_url"] = prepay.Result.CodeURL
+		if scene == officialPaymentSceneH5 {
+			data["fallback"] = "native"
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": data})
+}
+
+func QueryWechatPayOfficialTopUpStatus(c *gin.Context) {
+	if !isWechatPayOfficialTopUpEnabled() {
+		common.ApiErrorMsg(c, "微信支付官方支付未启用或配置不完整")
+		return
+	}
+	var req OfficialWechatPayStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	tradeNo := strings.TrimSpace(req.TradeNo)
+	topUp := model.GetTopUpByTradeNo(tradeNo)
+	if topUp == nil {
+		common.ApiError(c, model.ErrTopUpNotFound)
+		return
+	}
+	if topUp.UserId != c.GetInt("id") || topUp.PaymentProvider != model.PaymentProviderWechatPayOfficial {
+		common.ApiError(c, model.ErrPaymentMethodMismatch)
+		return
+	}
+	if topUp.Status == common.TopUpStatusSuccess {
+		common.ApiSuccess(c, gin.H{
+			"trade_no": tradeNo,
+			"status":   common.TopUpStatusSuccess,
+		})
+		return
+	}
+	if topUp.Status != common.TopUpStatusPending {
+		common.ApiSuccess(c, gin.H{
+			"trade_no": tradeNo,
+			"status":   topUp.Status,
+		})
+		return
+	}
+
+	client := &service.WechatPayOfficialClient{
+		AppID:             setting.WechatPayOfficialAppID,
+		MchID:             setting.WechatPayOfficialMchID,
+		CertificateSerial: setting.WechatPayOfficialCertificateSerial,
+		APIv3Key:          setting.WechatPayOfficialAPIv3Key,
+		PrivateKey:        setting.WechatPayOfficialPrivateKey,
+		PlatformPublicKey: setting.WechatPayOfficialPlatformPublicKey,
+		HTTPClient:        wechatPayOfficialQueryHTTPClient,
+	}
+	transaction, err := client.QueryTransactionByOutTradeNo(c.Request.Context(), tradeNo)
+	if err != nil {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("微信支付官方 查询订单失败 user_id=%d trade_no=%s error=%q", topUp.UserId, tradeNo, err.Error()))
+		common.ApiSuccess(c, gin.H{
+			"trade_no": tradeNo,
+			"status":   topUp.Status,
+		})
+		return
+	}
+	if transaction.OutTradeNo != tradeNo {
+		common.ApiErrorMsg(c, "微信支付返回订单号不一致")
+		return
+	}
+	if err := validateWechatPayOfficialTransactionContext(*transaction); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if transaction.TradeState == "SUCCESS" {
+		if err := reconcileWechatPayOfficialTransaction(c.Request.Context(), *transaction, c.ClientIP()); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		common.ApiSuccess(c, gin.H{
+			"trade_no":     tradeNo,
+			"status":       common.TopUpStatusSuccess,
+			"wechat_state": transaction.TradeState,
+		})
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"trade_no":     tradeNo,
+		"status":       topUp.Status,
+		"wechat_state": transaction.TradeState,
+	})
+}
+
+func GetOfficialPaymentRefundPreview(c *gin.Context) {
+	var req OfficialRefundPreviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	tradeNo := strings.TrimSpace(req.TradeNo)
+	topUp := model.GetTopUpByTradeNo(tradeNo)
+	if topUp == nil {
+		common.ApiError(c, model.ErrTopUpNotFound)
+		return
+	}
+	if topUp.UserId != c.GetInt("id") && c.GetInt("role") < common.RoleAdminUser {
+		common.ApiError(c, model.ErrPaymentMethodMismatch)
+		return
+	}
+	preview, err := model.CalculateOfficialPaymentRefundPreview(tradeNo)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if pending := model.GetPendingTopUpRefundRequestByTradeNo(tradeNo); pending != nil {
+		preview.ExistingPendingRequest = pending.Id
+	}
+	common.ApiSuccess(c, preview)
+}
+
+func ApplyOfficialPaymentRefund(c *gin.Context) {
+	var req OfficialRefundApplyRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		common.ApiErrorMsg(c, "请填写退款原因")
+		return
+	}
+	request, preview, err := model.CreateTopUpRefundRequest(c.GetInt("id"), req.TradeNo, req.RefundAmount, req.Reason)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.RecordLog(
+		request.UserId,
+		model.LogTypeRefund,
+		fmt.Sprintf("用户提交退款申请，订单号：%s，申请金额：%.2f，原因：%s", request.TradeNo, request.RequestedAmount, strings.TrimSpace(req.Reason)),
+	)
+	common.ApiSuccess(c, gin.H{
+		"request": request,
+		"preview": preview,
+	})
 }
 
 func AdminRefundAlipayOfficialTopUp(c *gin.Context) {
@@ -263,76 +432,260 @@ func AdminRefundAlipayOfficialTopUp(c *gin.Context) {
 		common.ApiErrorMsg(c, "退款金额必须大于 0")
 		return
 	}
+	result, err := executeOfficialPaymentRefund(c.Request.Context(), tradeNo, refundAmount.InexactFloat64(), req.Reason, c.ClientIP(), model.PaymentProviderAlipayOfficial, model.PaymentMethodAlipayOfficial, req.FullRefund)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
+}
+
+func AdminRefundWechatPayOfficialTopUp(c *gin.Context) {
+	if !isWechatPayOfficialTopUpEnabled() {
+		common.ApiErrorMsg(c, "微信支付官方支付未启用或配置不完整")
+		return
+	}
+	var req AdminRefundTopUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	result, err := executeOfficialPaymentRefund(c.Request.Context(), strings.TrimSpace(req.TradeNo), req.RefundAmount, req.Reason, c.ClientIP(), model.PaymentProviderWechatPayOfficial, model.PaymentMethodWechatPayOfficial, req.FullRefund)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
+}
+
+func executeOfficialPaymentRefund(ctx context.Context, tradeNo string, refundAmountInput float64, reason string, callerIP string, paymentProvider string, paymentMethod string, allowFullRefund bool) (gin.H, error) {
+	tradeNo = strings.TrimSpace(tradeNo)
+	refundAmount := decimal.NewFromFloat(refundAmountInput).Round(2)
+	if tradeNo == "" {
+		return nil, errors.New("未提供订单号")
+	}
+	if !refundAmount.IsPositive() {
+		return nil, errors.New("退款金额必须大于 0")
+	}
 
 	LockOrder(tradeNo)
 	defer UnlockOrder(tradeNo)
 
 	refund, err := model.CreateOfficialPaymentRefund(model.OfficialPaymentRefundCreateParams{
 		TradeNo:         tradeNo,
-		PaymentProvider: model.PaymentProviderAlipayOfficial,
-		PaymentMethod:   model.PaymentMethodAlipayOfficial,
+		PaymentProvider: paymentProvider,
+		PaymentMethod:   paymentMethod,
 		RefundAmount:    refundAmount.InexactFloat64(),
-		Reason:          req.Reason,
+		Reason:          reason,
 		OutRequestNo:    buildOfficialRefundRequestNo(tradeNo),
+		AllowFullRefund: allowFullRefund,
 	})
 	if err != nil {
-		common.ApiError(c, err)
-		return
+		return nil, err
 	}
 
-	client := newAlipayOfficialClient()
-	response, err := client.Refund(c.Request.Context(), map[string]any{
-		"out_trade_no":   refund.TradeNo,
-		"refund_amount":  decimal.NewFromFloat(refund.RefundAmount).StringFixed(2),
-		"refund_reason":  normalizeAlipayRefundReason(req.Reason),
-		"out_request_no": refund.OutRequestNo,
-		"query_options":  []string{"deposit_back_info"},
-	})
-	rawResponse := common.GetJsonString(response)
-	if err != nil {
-		rollbackErr := model.MarkTopUpRefundFailed(refund.OutRequestNo, err.Error())
-		if rollbackErr != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方退款失败后回滚本地退款失败 trade_no=%s out_request_no=%s error=%q rollback_error=%q", refund.TradeNo, refund.OutRequestNo, err.Error(), rollbackErr.Error()))
-		}
-		common.ApiError(c, err)
-		return
-	}
-	if response.FundChange != "Y" {
-		queryResponse, queryErr := client.RefundQuery(c.Request.Context(), map[string]any{
-			"out_trade_no":   refund.TradeNo,
-			"out_request_no": refund.OutRequestNo,
-			"query_options":  []string{"deposit_back_info"},
-		})
-		queryRefundConfirmed := queryResponse != nil && queryResponse.RefundStatus == "REFUND_SUCCESS"
-		if queryErr != nil || !queryRefundConfirmed {
-			reason := fmt.Sprintf("支付宝退款未确认 fund_change=%s", response.FundChange)
-			if queryErr != nil {
-				reason = queryErr.Error()
-			}
-			rollbackErr := model.MarkTopUpRefundFailed(refund.OutRequestNo, reason)
+	isSubscriptionRefund := model.GetSubscriptionOrderByTradeNo(tradeNo) != nil
+	topUp := model.GetTopUpByTradeNo(tradeNo)
+	var providerTradeNo string
+	var rawResponse string
+	switch paymentProvider {
+	case model.PaymentProviderAlipayOfficial:
+		response, err := requestAlipayOfficialRefund(ctx, refund, reason)
+		if err != nil {
+			rollbackErr := model.MarkTopUpRefundFailed(refund.OutRequestNo, err.Error())
 			if rollbackErr != nil {
-				logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方退款未确认后回滚本地退款失败 trade_no=%s out_request_no=%s reason=%q rollback_error=%q", refund.TradeNo, refund.OutRequestNo, reason, rollbackErr.Error()))
+				logger.LogError(ctx, fmt.Sprintf("支付宝官方退款失败后回滚本地退款失败 trade_no=%s out_request_no=%s error=%q rollback_error=%q", refund.TradeNo, refund.OutRequestNo, err.Error(), rollbackErr.Error()))
 			}
-			common.ApiErrorMsg(c, "支付宝退款结果未确认，请稍后重试或查询退款状态")
-			return
+			return nil, err
 		}
-		rawResponse = common.GetJsonString(queryResponse)
-		if strings.TrimSpace(response.TradeNo) == "" {
-			response.TradeNo = queryResponse.TradeNo
+		providerTradeNo = response.TradeNo
+		rawResponse = common.GetJsonString(response)
+		if err := model.MarkTopUpRefundSuccess(refund.OutRequestNo, providerTradeNo, rawResponse); err != nil {
+			return nil, err
 		}
-	}
-	if err := model.MarkTopUpRefundSuccess(refund.OutRequestNo, response.TradeNo, rawResponse); err != nil {
-		common.ApiError(c, err)
-		return
+		if isSubscriptionRefund {
+			if err := syncOfficialSubscriptionRefundAfterSuccess(tradeNo, paymentProvider, refund.RefundAmount, allowFullRefund); err != nil {
+				return nil, err
+			}
+		}
+	case model.PaymentProviderWechatPayOfficial:
+		response, err := requestWechatPayOfficialRefund(ctx, refund, topUp, reason)
+		if err != nil {
+			rollbackErr := model.MarkTopUpRefundFailed(refund.OutRequestNo, err.Error())
+			if rollbackErr != nil {
+				logger.LogError(ctx, fmt.Sprintf("微信支付官方退款失败后回滚本地退款失败 trade_no=%s out_request_no=%s error=%q rollback_error=%q", refund.TradeNo, refund.OutRequestNo, err.Error(), rollbackErr.Error()))
+			}
+			return nil, err
+		}
+		providerTradeNo = response.RefundID
+		rawResponse = common.GetJsonString(response)
+		if response.EffectiveStatus() == "SUCCESS" {
+			if err := model.MarkTopUpRefundSuccess(refund.OutRequestNo, providerTradeNo, rawResponse); err != nil {
+				return nil, err
+			}
+			if isSubscriptionRefund {
+				if err := syncOfficialSubscriptionRefundAfterSuccess(tradeNo, paymentProvider, refund.RefundAmount, allowFullRefund); err != nil {
+					return nil, err
+				}
+			}
+		}
+	default:
+		rollbackErr := model.MarkTopUpRefundFailed(refund.OutRequestNo, "unsupported payment provider")
+		if rollbackErr != nil {
+			logger.LogError(ctx, fmt.Sprintf("官方退款不支持的支付提供方回滚失败 trade_no=%s out_request_no=%s provider=%s rollback_error=%q", refund.TradeNo, refund.OutRequestNo, paymentProvider, rollbackErr.Error()))
+		}
+		return nil, errors.New("不支持的官方支付方式")
 	}
 	model.RecordOfficialPaymentRefundLog(
 		refund.UserId,
-		fmt.Sprintf("管理员发起支付宝官方退款成功，订单号：%s，退款金额：%.2f，退回额度：%s", refund.TradeNo, refund.RefundAmount, logger.FormatQuota(int(refund.RefundQuota))),
-		c.ClientIP(),
+		fmt.Sprintf("管理员发起官方退款成功，订单号：%s，退款金额：%.2f，退回额度：%s", refund.TradeNo, refund.RefundAmount, logger.FormatQuota(int(refund.RefundQuota))),
+		callerIP,
 		refund.PaymentMethod,
 		refund.PaymentProvider,
 	)
-	common.ApiSuccess(c, gin.H{"out_request_no": refund.OutRequestNo})
+	return gin.H{
+		"out_request_no": refund.OutRequestNo,
+		"refund_amount":  refund.RefundAmount,
+		"refund_quota":   refund.RefundQuota,
+		"provider":       refund.PaymentProvider,
+	}, nil
+}
+
+func syncOfficialSubscriptionRefundAfterSuccess(tradeNo string, paymentProvider string, refundAmount float64, allowFullRefund bool) error {
+	if model.GetSubscriptionOrderByTradeNo(tradeNo) == nil {
+		return nil
+	}
+	reloadedTopUp := model.GetTopUpByTradeNo(tradeNo)
+	fullRefund := allowFullRefund ||
+		(reloadedTopUp != nil && decimal.NewFromFloat(reloadedTopUp.RefundedMoney).Round(2).GreaterThanOrEqual(decimal.NewFromFloat(reloadedTopUp.Money).Round(2)))
+	return model.RefundSubscriptionOrder(tradeNo, paymentProvider, refundAmount, fullRefund)
+}
+
+func syncOfficialSubscriptionRefundAfterFailure(tradeNo string, paymentProvider string) error {
+	if model.GetSubscriptionOrderByTradeNo(tradeNo) == nil {
+		return nil
+	}
+	return model.SyncSubscriptionOrderRefundState(tradeNo, paymentProvider, false)
+}
+
+func requestAlipayOfficialRefund(ctx context.Context, refund *model.TopUpRefund, reason string) (*service.AlipayOfficialOpenAPIResponse, error) {
+	client := newAlipayOfficialClient()
+	response, err := client.Refund(ctx, map[string]any{
+		"out_trade_no":   refund.TradeNo,
+		"refund_amount":  decimal.NewFromFloat(refund.RefundAmount).StringFixed(2),
+		"refund_reason":  normalizeAlipayRefundReason(reason),
+		"out_request_no": refund.OutRequestNo,
+		"query_options":  []string{"deposit_back_info"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := validateAlipayOfficialRefundResponse(response, refund); err != nil {
+		return nil, err
+	}
+	if response.FundChange == "Y" {
+		return response, nil
+	}
+	queryResponse, queryErr := queryAlipayOfficialRefund(ctx, client, refund.TradeNo, refund.OutRequestNo)
+	queryRefundConfirmed := queryResponse != nil && queryResponse.RefundStatus == "REFUND_SUCCESS"
+	var validateErr error
+	if queryErr == nil && queryRefundConfirmed {
+		validateErr = validateAlipayOfficialRefundResponse(queryResponse, refund)
+	}
+	if queryErr != nil || !queryRefundConfirmed || validateErr != nil {
+		if queryErr != nil {
+			return nil, queryErr
+		}
+		if validateErr != nil {
+			return nil, validateErr
+		}
+		return nil, fmt.Errorf("支付宝退款未确认 fund_change=%s", response.FundChange)
+	}
+	if strings.TrimSpace(response.TradeNo) == "" {
+		response.TradeNo = queryResponse.TradeNo
+	}
+	return queryResponse, nil
+}
+
+func requestWechatPayOfficialRefund(ctx context.Context, refund *model.TopUpRefund, topUp *model.TopUp, reason string) (*service.WechatPayOfficialRefundResponse, error) {
+	if topUp == nil {
+		return nil, model.ErrTopUpNotFound
+	}
+	client := newWechatPayOfficialClient()
+	callbackAddr := service.GetCallbackAddress()
+	notifyURL := callbackAddr + "/api/wechat-pay/official/notify"
+	if strings.TrimSpace(setting.WechatPayOfficialNotifyURL) != "" {
+		notifyURL = strings.TrimSpace(setting.WechatPayOfficialNotifyURL)
+	}
+	response, err := client.Refund(ctx, service.WechatPayOfficialRefundParams{
+		OutTradeNo:  refund.TradeNo,
+		OutRefundNo: refund.OutRequestNo,
+		Reason:      normalizeWechatPayOfficialRefundReason(reason),
+		NotifyURL:   notifyURL,
+		RefundFen:   yuanToFen(refund.RefundAmount),
+		TotalFen:    yuanToFen(topUp.Money),
+	})
+	if err != nil {
+		return nil, err
+	}
+	status := response.EffectiveStatus()
+	if status == "SUCCESS" || status == "PROCESSING" {
+		return response, nil
+	}
+	queryResponse, queryErr := client.QueryRefundByOutRefundNo(ctx, refund.OutRequestNo)
+	if queryErr != nil {
+		return nil, queryErr
+	}
+	if queryResponse.EffectiveStatus() != "SUCCESS" && queryResponse.EffectiveStatus() != "PROCESSING" {
+		return nil, fmt.Errorf("微信退款未确认 status=%s", queryResponse.EffectiveStatus())
+	}
+	return queryResponse, nil
+}
+
+func AdminApproveOfficialPaymentRefundRequest(c *gin.Context) {
+	var req AdminRefundRequestActionRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.RequestId <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	refundRequest := model.GetTopUpRefundRequestById(req.RequestId)
+	if refundRequest == nil {
+		common.ApiErrorMsg(c, "退款申请不存在")
+		return
+	}
+	if refundRequest.Status != model.TopUpRefundRequestStatusPending {
+		common.ApiError(c, model.ErrTopUpStatusInvalid)
+		return
+	}
+	amount := req.RefundAmount
+	if amount <= 0 {
+		amount = refundRequest.RequestedAmount
+	}
+	result, err := executeOfficialPaymentRefund(c.Request.Context(), refundRequest.TradeNo, amount, firstNonEmptyString(req.Reason, refundRequest.Reason), c.ClientIP(), refundRequest.PaymentProvider, refundRequest.PaymentMethod, req.FullRefund)
+	if err != nil {
+		_ = model.MarkTopUpRefundRequestFailed(refundRequest.Id, c.GetInt("id"), err.Error())
+		common.ApiError(c, err)
+		return
+	}
+	outRequestNo, _ := result["out_request_no"].(string)
+	if err := model.MarkTopUpRefundRequestApproved(refundRequest.Id, c.GetInt("id"), outRequestNo, req.Reason); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
+}
+
+func AdminRejectOfficialPaymentRefundRequest(c *gin.Context) {
+	var req AdminRejectRefundRequestRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.RequestId <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	if err := model.MarkTopUpRefundRequestRejected(req.RequestId, c.GetInt("id"), req.Reason); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
 }
 
 func AdminQueryAlipayOfficialTopUp(c *gin.Context) {
@@ -347,9 +700,7 @@ func AdminQueryAlipayOfficialTopUp(c *gin.Context) {
 	}
 	tradeNo := strings.TrimSpace(req.TradeNo)
 	client := newAlipayOfficialClient()
-	response, err := client.TradeQuery(c.Request.Context(), map[string]any{
-		"out_trade_no": tradeNo,
-	})
+	response, err := queryAlipayOfficialTrade(c.Request.Context(), client, tradeNo)
 	if err != nil {
 		if service.IsAlipayOfficialTradeNotFound(err) {
 			topUp := model.GetTopUpByTradeNo(tradeNo)
@@ -381,12 +732,47 @@ func AdminQueryAlipayOfficialTopUp(c *gin.Context) {
 		}
 		LockOrder(tradeNo)
 		defer UnlockOrder(tradeNo)
-		if err := model.RechargeOfficialPayment(tradeNo, model.PaymentProviderAlipayOfficial, model.PaymentMethodAlipayOfficial, c.ClientIP(), paidMoney.InexactFloat64()); err != nil {
+		payload := map[string]string{
+			"out_trade_no":  tradeNo,
+			"trade_no":      response.TradeNo,
+			"trade_status":  response.TradeStatus,
+			"total_amount":  response.TotalAmount,
+			"alipay_source": "query",
+		}
+		if err := reconcileAlipayOfficialPaidOrder(tradeNo, payload, paidMoney, c.ClientIP()); err != nil {
 			common.ApiError(c, err)
 			return
 		}
 	}
 	common.ApiSuccess(c, response)
+}
+
+func AdminQueryWechatPayOfficialTopUp(c *gin.Context) {
+	if !isWechatPayOfficialTopUpEnabled() {
+		common.ApiErrorMsg(c, "微信支付官方支付未启用或配置不完整")
+		return
+	}
+	var req AdminTopUpTradeRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	tradeNo := strings.TrimSpace(req.TradeNo)
+	client := newWechatPayOfficialClient()
+	transaction, err := client.QueryTransactionByOutTradeNo(c.Request.Context(), tradeNo)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if transaction.OutTradeNo != tradeNo {
+		common.ApiErrorMsg(c, "微信支付返回订单号不一致")
+		return
+	}
+	if err := reconcileWechatPayOfficialTransaction(c.Request.Context(), *transaction, c.ClientIP()); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, transaction)
 }
 
 func AdminCloseAlipayOfficialTopUp(c *gin.Context) {
@@ -429,9 +815,89 @@ func AdminCloseAlipayOfficialTopUp(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if err := model.UpdatePendingTopUpStatus(tradeNo, model.PaymentProviderAlipayOfficial, common.TopUpStatusExpired); err != nil {
+	if err := expireAlipayOfficialPendingOrder(tradeNo); err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	common.ApiSuccess(c, response)
+}
+
+func AdminCloseWechatPayOfficialTopUp(c *gin.Context) {
+	if !isWechatPayOfficialTopUpEnabled() {
+		common.ApiErrorMsg(c, "微信支付官方支付未启用或配置不完整")
+		return
+	}
+	var req AdminTopUpTradeRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	tradeNo := strings.TrimSpace(req.TradeNo)
+	LockOrder(tradeNo)
+	defer UnlockOrder(tradeNo)
+
+	topUp := model.GetTopUpByTradeNo(tradeNo)
+	if topUp == nil {
+		common.ApiError(c, model.ErrTopUpNotFound)
+		return
+	}
+	if topUp.PaymentProvider != model.PaymentProviderWechatPayOfficial {
+		common.ApiError(c, model.ErrPaymentMethodMismatch)
+		return
+	}
+	if topUp.Status != common.TopUpStatusPending {
+		common.ApiError(c, model.ErrTopUpStatusInvalid)
+		return
+	}
+	client := newWechatPayOfficialClient()
+	if err := client.CloseTransactionByOutTradeNo(c.Request.Context(), tradeNo); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := expireWechatPayOfficialPendingOrder(tradeNo); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"trade_no": tradeNo, "status": common.TopUpStatusExpired})
+}
+
+func AdminQueryWechatPayOfficialRefund(c *gin.Context) {
+	if !isWechatPayOfficialTopUpEnabled() {
+		common.ApiErrorMsg(c, "微信支付官方支付未启用或配置不完整")
+		return
+	}
+	var req struct {
+		OutRequestNo string `json:"out_request_no"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.OutRequestNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	client := newWechatPayOfficialClient()
+	response, err := client.QueryRefundByOutRefundNo(c.Request.Context(), strings.TrimSpace(req.OutRequestNo))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	switch response.EffectiveStatus() {
+	case "SUCCESS":
+		if err := model.MarkTopUpRefundSuccess(response.OutRefundNo, response.RefundID, common.GetJsonString(response)); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if err := syncOfficialSubscriptionRefundAfterSuccess(response.OutTradeNo, model.PaymentProviderWechatPayOfficial, float64(response.Amount.Refund)/100, false); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	case "REFUNDCLOSE", "ABNORMAL":
+		if err := model.MarkTopUpRefundFailed(response.OutRefundNo, common.GetJsonString(response)); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if err := syncOfficialSubscriptionRefundAfterFailure(response.OutTradeNo, model.PaymentProviderWechatPayOfficial); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	common.ApiSuccess(c, response)
 }
@@ -484,7 +950,7 @@ func ExpireAlipayOfficialPendingTopUps(ctx context.Context) error {
 			UnlockOrder(topUp.TradeNo)
 			continue
 		}
-		if err := model.UpdatePendingTopUpStatus(topUp.TradeNo, model.PaymentProviderAlipayOfficial, common.TopUpStatusExpired); err != nil &&
+		if err := expireAlipayOfficialPendingOrder(topUp.TradeNo); err != nil &&
 			!errors.Is(err, model.ErrTopUpStatusInvalid) {
 			logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单本地状态更新失败 trade_no=%s response=%q error=%q", topUp.TradeNo, common.GetJsonString(response), err.Error()))
 		}
@@ -494,9 +960,7 @@ func ExpireAlipayOfficialPendingTopUps(ctx context.Context) error {
 }
 
 func reconcileAlipayOfficialTopUpAfterCloseFailure(ctx context.Context, client *service.AlipayOfficialClient, tradeNo string) (bool, error) {
-	response, err := client.TradeQuery(ctx, map[string]any{
-		"out_trade_no": tradeNo,
-	})
+	response, err := queryAlipayOfficialTrade(ctx, client, tradeNo)
 	if err != nil {
 		return false, err
 	}
@@ -506,12 +970,19 @@ func reconcileAlipayOfficialTopUpAfterCloseFailure(ctx context.Context, client *
 		if err != nil {
 			return false, err
 		}
-		if err := model.RechargeOfficialPayment(tradeNo, model.PaymentProviderAlipayOfficial, model.PaymentMethodAlipayOfficial, "", paidMoney.InexactFloat64()); err != nil {
+		payload := map[string]string{
+			"out_trade_no":  tradeNo,
+			"trade_no":      response.TradeNo,
+			"trade_status":  response.TradeStatus,
+			"total_amount":  response.TotalAmount,
+			"alipay_source": "close_reconcile",
+		}
+		if err := reconcileAlipayOfficialPaidOrder(tradeNo, payload, paidMoney, ""); err != nil {
 			return false, err
 		}
 		return true, nil
 	case "TRADE_CLOSED":
-		if err := model.UpdatePendingTopUpStatus(tradeNo, model.PaymentProviderAlipayOfficial, common.TopUpStatusExpired); err != nil &&
+		if err := expireAlipayOfficialPendingOrder(tradeNo); err != nil &&
 			!errors.Is(err, model.ErrTopUpStatusInvalid) {
 			return false, err
 		}
@@ -569,6 +1040,11 @@ func AlipayOfficialNotify(c *gin.Context) {
 		c.String(http.StatusOK, "fail")
 		return
 	}
+	if err := validateAlipayOfficialNotifyContext(params); err != nil {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("支付宝官方支付 webhook 应用上下文不匹配 path=%q client_ip=%s trade_no=%s error=%q", c.Request.RequestURI, c.ClientIP(), params["out_trade_no"], err.Error()))
+		c.String(http.StatusOK, "fail")
+		return
+	}
 
 	if params["msg_method"] == "alipay.trade.refund.depositback.completed" {
 		if err := handleAlipayOfficialRefundDepositbackCompleted(c, params); err != nil {
@@ -596,27 +1072,123 @@ func AlipayOfficialNotify(c *gin.Context) {
 
 	LockOrder(tradeNo)
 	defer UnlockOrder(tradeNo)
-	if err := completeAlipayOfficialSubscriptionOrderIfPresent(tradeNo, params, paidMoney); err != nil {
-		if !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方支付 订阅处理失败 trade_no=%s client_ip=%s error=%q", tradeNo, c.ClientIP(), err.Error()))
-			c.String(http.StatusOK, "fail")
-			return
-		}
-	} else {
-		logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方支付 订阅成功 trade_no=%s client_ip=%s", tradeNo, c.ClientIP()))
-		c.String(http.StatusOK, "success")
+	if err := reconcileAlipayOfficialPaidOrder(tradeNo, params, paidMoney, c.ClientIP()); err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方支付 订单处理失败 trade_no=%s client_ip=%s error=%q", tradeNo, c.ClientIP(), err.Error()))
+		c.String(http.StatusOK, "fail")
 		return
 	}
-	if err := model.RechargeOfficialPayment(tradeNo, model.PaymentProviderAlipayOfficial, model.PaymentMethodAlipayOfficial, c.ClientIP(), paidMoney.InexactFloat64()); err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方支付 充值处理失败 trade_no=%s client_ip=%s error=%q", tradeNo, c.ClientIP(), err.Error()))
-		c.String(http.StatusOK, "fail")
+	if model.GetSubscriptionOrderByTradeNo(tradeNo) != nil {
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方支付 订阅成功 trade_no=%s client_ip=%s", tradeNo, c.ClientIP()))
+		c.String(http.StatusOK, "success")
 		return
 	}
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方支付 充值成功 trade_no=%s client_ip=%s", tradeNo, c.ClientIP()))
 	c.String(http.StatusOK, "success")
 }
 
-func completeAlipayOfficialSubscriptionOrderIfPresent(tradeNo string, params map[string]string, paidMoney decimal.Decimal) error {
+func queryAlipayOfficialTrade(ctx context.Context, client *service.AlipayOfficialClient, tradeNo string) (*service.AlipayOfficialOpenAPIResponse, error) {
+	response, err := client.TradeQuery(ctx, map[string]any{
+		"out_trade_no": tradeNo,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(response.OutTradeNo) != "" && response.OutTradeNo != tradeNo {
+		return nil, fmt.Errorf("支付宝返回 out_trade_no 不一致: expected=%s actual=%s", tradeNo, response.OutTradeNo)
+	}
+	return response, nil
+}
+
+func queryAlipayOfficialRefund(ctx context.Context, client *service.AlipayOfficialClient, tradeNo string, outRequestNo string) (*service.AlipayOfficialOpenAPIResponse, error) {
+	response, err := client.RefundQuery(ctx, map[string]any{
+		"out_trade_no":   tradeNo,
+		"out_request_no": outRequestNo,
+		"query_options":  []string{"deposit_back_info"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(response.OutTradeNo) != "" && response.OutTradeNo != tradeNo {
+		return nil, fmt.Errorf("支付宝退款查询返回 out_trade_no 不一致: expected=%s actual=%s", tradeNo, response.OutTradeNo)
+	}
+	if strings.TrimSpace(response.OutRequestNo) != "" && response.OutRequestNo != outRequestNo {
+		return nil, fmt.Errorf("支付宝退款查询返回 out_request_no 不一致: expected=%s actual=%s", outRequestNo, response.OutRequestNo)
+	}
+	return response, nil
+}
+
+func validateAlipayOfficialNotifyContext(params map[string]string) error {
+	if params == nil {
+		return fmt.Errorf("missing alipay notify params")
+	}
+	appID := strings.TrimSpace(params["app_id"])
+	if appID != "" && strings.TrimSpace(setting.AlipayOfficialAppID) != "" && appID != setting.AlipayOfficialAppID {
+		return fmt.Errorf("支付宝通知 app_id 不一致: expected=%s actual=%s", setting.AlipayOfficialAppID, appID)
+	}
+	return nil
+}
+
+func validateAlipayOfficialRefundResponse(response *service.AlipayOfficialOpenAPIResponse, refund *model.TopUpRefund) error {
+	if response == nil || refund == nil {
+		return fmt.Errorf("支付宝退款响应为空")
+	}
+	if strings.TrimSpace(response.OutTradeNo) != "" && response.OutTradeNo != refund.TradeNo {
+		return fmt.Errorf("支付宝退款响应 out_trade_no 不一致: expected=%s actual=%s", refund.TradeNo, response.OutTradeNo)
+	}
+	if strings.TrimSpace(response.OutRequestNo) != "" && response.OutRequestNo != refund.OutRequestNo {
+		return fmt.Errorf("支付宝退款响应 out_request_no 不一致: expected=%s actual=%s", refund.OutRequestNo, response.OutRequestNo)
+	}
+	refundAmountText := strings.TrimSpace(response.RefundFee)
+	if refundAmountText == "" {
+		refundAmountText = strings.TrimSpace(response.RefundAmount)
+	}
+	if refundAmountText != "" {
+		responseAmount, err := decimal.NewFromString(refundAmountText)
+		if err != nil {
+			return fmt.Errorf("支付宝退款响应金额解析失败: %w", err)
+		}
+		expectedAmount := decimal.NewFromFloat(refund.RefundAmount).Round(2)
+		if !responseAmount.Round(2).Equal(expectedAmount) {
+			return fmt.Errorf("支付宝退款响应金额不一致: expected=%s actual=%s", expectedAmount.StringFixed(2), responseAmount.Round(2).StringFixed(2))
+		}
+	}
+	return nil
+}
+
+func reconcileAlipayOfficialPaidOrder(tradeNo string, payload any, paidMoney decimal.Decimal, callerIp string) error {
+	if err := completeAlipayOfficialSubscriptionOrderIfPresent(tradeNo, payload, paidMoney); err != nil {
+		if !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
+			return err
+		}
+		return model.RechargeOfficialPayment(tradeNo, model.PaymentProviderAlipayOfficial, model.PaymentMethodAlipayOfficial, callerIp, paidMoney.InexactFloat64())
+	}
+	return nil
+}
+
+func reconcileWechatPayOfficialTransaction(ctx context.Context, transaction service.WechatPayOfficialTransaction, callerIp string) error {
+	if transaction.TradeState != "SUCCESS" {
+		return nil
+	}
+	if err := validateWechatPayOfficialTransactionContext(transaction); err != nil {
+		return err
+	}
+	LockOrder(transaction.OutTradeNo)
+	defer UnlockOrder(transaction.OutTradeNo)
+	if err := completeWechatPayOfficialSubscriptionOrderIfPresent(service.WechatPayOfficialNotifyEnvelope{EventType: "TRANSACTION.SUCCESS"}, transaction); err != nil {
+		if !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
+			return err
+		}
+		if err := model.RechargeOfficialPayment(transaction.OutTradeNo, model.PaymentProviderWechatPayOfficial, model.PaymentMethodWechatPayOfficial, callerIp, float64(transaction.Amount.Total)/100); err != nil {
+			return err
+		}
+		logger.LogInfo(ctx, fmt.Sprintf("微信支付官方 查询补齐充值成功 trade_no=%s transaction_id=%s", transaction.OutTradeNo, transaction.TransactionID))
+		return nil
+	}
+	logger.LogInfo(ctx, fmt.Sprintf("微信支付官方 查询补齐订阅成功 trade_no=%s transaction_id=%s", transaction.OutTradeNo, transaction.TransactionID))
+	return nil
+}
+
+func completeAlipayOfficialSubscriptionOrderIfPresent(tradeNo string, payload any, paidMoney decimal.Decimal) error {
 	order := model.GetSubscriptionOrderByTradeNo(tradeNo)
 	if order == nil {
 		return model.ErrSubscriptionOrderNotFound
@@ -629,7 +1201,21 @@ func completeAlipayOfficialSubscriptionOrderIfPresent(tradeNo string, params map
 	if !expectedMoney.Equal(actualMoney) {
 		return errors.New("支付金额与订阅订单金额不一致")
 	}
-	return model.CompleteSubscriptionOrder(tradeNo, common.GetJsonString(params), model.PaymentProviderAlipayOfficial, model.PaymentMethodAlipayOfficial)
+	return model.CompleteSubscriptionOrder(tradeNo, common.GetJsonString(payload), model.PaymentProviderAlipayOfficial, model.PaymentMethodAlipayOfficial)
+}
+
+func expireAlipayOfficialPendingOrder(tradeNo string) error {
+	if model.GetSubscriptionOrderByTradeNo(tradeNo) != nil {
+		return model.ExpireSubscriptionOrder(tradeNo, model.PaymentProviderAlipayOfficial)
+	}
+	return model.UpdatePendingTopUpStatus(tradeNo, model.PaymentProviderAlipayOfficial, common.TopUpStatusExpired)
+}
+
+func expireWechatPayOfficialPendingOrder(tradeNo string) error {
+	if model.GetSubscriptionOrderByTradeNo(tradeNo) != nil {
+		return model.ExpireSubscriptionOrder(tradeNo, model.PaymentProviderWechatPayOfficial)
+	}
+	return model.UpdatePendingTopUpStatus(tradeNo, model.PaymentProviderWechatPayOfficial, common.TopUpStatusExpired)
 }
 
 func handleAlipayOfficialRefundDepositbackCompleted(c *gin.Context, params map[string]string) error {
@@ -648,13 +1234,48 @@ func handleAlipayOfficialRefundDepositbackCompleted(c *gin.Context, params map[s
 		return fmt.Errorf("decode refund depositback biz_content: %w", err)
 	}
 	if payload.DbackStatus == "S" {
-		return model.MarkTopUpRefundSuccess(payload.OutRequestNo, payload.TradeNo, bizContent)
+		if err := model.MarkTopUpRefundSuccess(payload.OutRequestNo, payload.TradeNo, bizContent); err != nil {
+			return err
+		}
+		refundAmount, _ := decimal.NewFromString(payload.DbackAmount)
+		return syncOfficialSubscriptionRefundAfterSuccess(payload.OutTradeNo, model.PaymentProviderAlipayOfficial, refundAmount.InexactFloat64(), false)
 	}
 	if payload.DbackStatus == "F" {
-		return model.MarkTopUpRefundFailed(payload.OutRequestNo, bizContent)
+		if err := model.MarkTopUpRefundFailed(payload.OutRequestNo, bizContent); err != nil {
+			return err
+		}
+		return syncOfficialSubscriptionRefundAfterFailure(payload.OutTradeNo, model.PaymentProviderAlipayOfficial)
 	}
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方退款冲退通知忽略未知状态 out_request_no=%s status=%s", payload.OutRequestNo, payload.DbackStatus))
 	return nil
+}
+
+func handleWechatPayOfficialRefundNotify(c *gin.Context, body []byte) error {
+	envelope, refund, err := service.DecodeWechatPayOfficialRefundNotify(body, setting.WechatPayOfficialAPIv3Key)
+	if err != nil {
+		return err
+	}
+	if envelope.Resource.OriginalType != "refund" {
+		return nil
+	}
+	if strings.TrimSpace(setting.WechatPayOfficialMchID) != "" && strings.TrimSpace(refund.OutRefundNo) == "" {
+		return fmt.Errorf("missing out_refund_no")
+	}
+	switch refund.EffectiveStatus() {
+	case "SUCCESS":
+		if err := model.MarkTopUpRefundSuccess(refund.OutRefundNo, refund.RefundID, common.GetJsonString(refund)); err != nil {
+			return err
+		}
+		return syncOfficialSubscriptionRefundAfterSuccess(refund.OutTradeNo, model.PaymentProviderWechatPayOfficial, float64(refund.Amount.Refund)/100, false)
+	case "REFUNDCLOSE", "ABNORMAL":
+		if err := model.MarkTopUpRefundFailed(refund.OutRefundNo, common.GetJsonString(refund)); err != nil {
+			return err
+		}
+		return syncOfficialSubscriptionRefundAfterFailure(refund.OutTradeNo, model.PaymentProviderWechatPayOfficial)
+	default:
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方退款通知忽略状态 out_refund_no=%s status=%s", refund.OutRefundNo, refund.EffectiveStatus()))
+		return nil
+	}
 }
 
 func WechatPayOfficialNotify(c *gin.Context) {
@@ -690,8 +1311,22 @@ func WechatPayOfficialNotify(c *gin.Context) {
 		return
 	}
 	if envelope.EventType != "TRANSACTION.SUCCESS" || transaction.TradeState != "SUCCESS" {
+		if envelope.Resource.OriginalType == "refund" {
+			if err := handleWechatPayOfficialRefundNotify(c, body); err != nil {
+				logger.LogError(c.Request.Context(), fmt.Sprintf("微信支付官方退款通知处理失败 error=%q", err.Error()))
+				c.JSON(http.StatusInternalServerError, gin.H{"code": "FAIL", "message": "retry"})
+				return
+			}
+			c.Status(http.StatusNoContent)
+			return
+		}
 		logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方 webhook 忽略非成功状态 trade_no=%s event=%s state=%s client_ip=%s", transaction.OutTradeNo, envelope.EventType, transaction.TradeState, c.ClientIP()))
 		c.Status(http.StatusNoContent)
+		return
+	}
+	if err := validateWechatPayOfficialTransactionContext(*transaction); err != nil {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("微信支付官方 webhook 商户上下文不匹配 trade_no=%s client_ip=%s error=%q", transaction.OutTradeNo, c.ClientIP(), err.Error()))
+		c.JSON(http.StatusBadRequest, gin.H{"code": "FAIL", "message": "merchant context mismatch"})
 		return
 	}
 
@@ -718,6 +1353,9 @@ func WechatPayOfficialNotify(c *gin.Context) {
 }
 
 func completeWechatPayOfficialSubscriptionOrderIfPresent(envelope service.WechatPayOfficialNotifyEnvelope, transaction service.WechatPayOfficialTransaction) error {
+	if err := validateWechatPayOfficialTransactionContext(transaction); err != nil {
+		return err
+	}
 	order := model.GetSubscriptionOrderByTradeNo(transaction.OutTradeNo)
 	if order == nil {
 		return model.ErrSubscriptionOrderNotFound
@@ -737,6 +1375,39 @@ func completeWechatPayOfficialSubscriptionOrderIfPresent(envelope service.Wechat
 		Transaction: transaction,
 	}
 	return model.CompleteSubscriptionOrder(transaction.OutTradeNo, common.GetJsonString(payload), model.PaymentProviderWechatPayOfficial, model.PaymentMethodWechatPayOfficial)
+}
+
+func validateWechatPayOfficialTransactionContext(transaction service.WechatPayOfficialTransaction) error {
+	if strings.TrimSpace(setting.WechatPayOfficialAppID) != "" && transaction.AppID != setting.WechatPayOfficialAppID {
+		return fmt.Errorf("微信支付回调 appid 不一致: expected=%s actual=%s", setting.WechatPayOfficialAppID, transaction.AppID)
+	}
+	if strings.TrimSpace(setting.WechatPayOfficialMchID) != "" && transaction.MchID != setting.WechatPayOfficialMchID {
+		return fmt.Errorf("微信支付回调 mchid 不一致: expected=%s actual=%s", setting.WechatPayOfficialMchID, transaction.MchID)
+	}
+	return nil
+}
+
+func prepayWechatPayOfficialWithNativeFallback(ctx context.Context, client *service.WechatPayOfficialClient, params service.WechatPayOfficialPrepayParams) (*wechatPayOfficialPrepayResponse, error) {
+	result, err := client.Prepay(ctx, params)
+	if err == nil {
+		return &wechatPayOfficialPrepayResponse{
+			Result: result,
+			Scene:  params.TradeType,
+		}, nil
+	}
+	if params.TradeType != officialPaymentSceneH5 || !service.IsWechatPayOfficialH5Unavailable(err) {
+		return nil, err
+	}
+	nativeParams := params
+	nativeParams.TradeType = officialPaymentScenePC
+	nativeResult, nativeErr := client.Prepay(ctx, nativeParams)
+	if nativeErr != nil {
+		return nil, fmt.Errorf("wechat h5 prepay failed and native fallback failed: h5_error=%w; native_error=%v", err, nativeErr)
+	}
+	return &wechatPayOfficialPrepayResponse{
+		Result: nativeResult,
+		Scene:  officialPaymentScenePC,
+	}, nil
 }
 
 func getOfficialPayMoney(amount int64, group string, unitPrice float64) float64 {
@@ -817,6 +1488,27 @@ func normalizeAlipayRefundReason(reason string) string {
 	return strings.TrimSpace(reason)
 }
 
+func normalizeWechatPayOfficialRefundReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "管理员退款"
+	}
+	runes := []rune(reason)
+	if len(runes) <= 80 {
+		return reason
+	}
+	return string(runes[:80])
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func newAlipayOfficialClient() *service.AlipayOfficialClient {
 	return &service.AlipayOfficialClient{
 		AppID:            setting.AlipayOfficialAppID,
@@ -827,6 +1519,17 @@ func newAlipayOfficialClient() *service.AlipayOfficialClient {
 		AlipayCertSN:     setting.AlipayOfficialAlipayCertSN,
 		AlipayPublicKey:  setting.AlipayOfficialAlipayPublicKey,
 		Sandbox:          setting.AlipayOfficialSandbox,
+	}
+}
+
+func defaultWechatPayOfficialClient() *service.WechatPayOfficialClient {
+	return &service.WechatPayOfficialClient{
+		AppID:             setting.WechatPayOfficialAppID,
+		MchID:             setting.WechatPayOfficialMchID,
+		CertificateSerial: setting.WechatPayOfficialCertificateSerial,
+		APIv3Key:          setting.WechatPayOfficialAPIv3Key,
+		PrivateKey:        setting.WechatPayOfficialPrivateKey,
+		PlatformPublicKey: setting.WechatPayOfficialPlatformPublicKey,
 	}
 }
 

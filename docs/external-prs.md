@@ -10,7 +10,8 @@
   - 微信支付 API v3 Native 支付 / H5 支付 / 支付成功通知文档。
   - `docs/official-cn-payments.md` 中记录的官方支付宝和微信支付接入约束。
 - 本地导入日期：2026-05-14
-- 更新日期：2026-05-15，补齐微信支付官方订阅购买。
+- 更新日期：2026-05-15，补齐微信支付官方订阅购买；继续补齐微信支付官方查询、
+  关闭、退款、退款查询，以及用户退款申请/管理员审批。
 - 导入方式：按本地官方支付架构手工实现；没有套用支付宝当面付或易支付实现。
 - 本地涉及文件：
   - `controller/subscription_payment_alipay_official.go`
@@ -25,6 +26,8 @@
   - `web/classic/src/components/topup/RechargeCard.jsx`
   - `web/classic/src/components/topup/SubscriptionPlansCard.jsx`
   - `web/classic/src/components/topup/modals/SubscriptionPurchaseModal.jsx`
+  - `web/classic/src/components/topup/modals/TopupHistoryModal.jsx`
+  - `web/classic/src/components/topup/modals/topupHistoryUtils.mjs`
   - `web/classic/src/components/topup/rechargeTabs.js`
   - `web/classic/src/components/topup/subscriptionPaymentMethods.js`
   - `web/classic/src/components/topup/subscriptionPlanDisplay.js`
@@ -48,7 +51,13 @@
   `alipay.trade.wap.pay`，电脑端使用 `alipay.trade.page.pay`。
 - 微信支付官方订阅订单复用微信支付 API v3，电脑端使用
   `/v3/pay/transactions/native` 并展示扫码二维码，移动端使用
-  `/v3/pay/transactions/h5` 并跳转 `h5_url`。
+  `/v3/pay/transactions/h5` 并跳转 `h5_url`；如果微信返回 H5 无权限或产品
+  不可用，则降级为 Native `code_url` 二维码，其他签名、证书、参数错误仍按
+  失败处理。
+- classic 钱包页和订阅购买页展示微信 Native 二维码后会轮询本地充值账单状态，
+  等待微信支付成功通知完成入账后自动关闭弹窗并刷新用户额度或订阅状态；轮询
+  使用 `POST /api/user/wechat-pay/official/status`，后端可按微信订单查询结果
+  主动补齐成功入账。
 - 订阅价格按套餐美元金额乘以对应官方支付单价换算成人民币，并按进一法保留两位
   小数提交给支付平台；支付宝使用 `AlipayOfficialUnitPrice`，微信支付官方使用
   `WechatPayOfficialUnitPrice`。
@@ -77,6 +86,25 @@
 - 订阅套餐新增 `recommended` 字段。classic 后台“订阅管理”中可手动开关
   “推荐”，用户侧订阅卡片只有在该字段为 `true` 时才显示“推荐”标签和高亮边框；
   不再默认把第一个套餐标记为推荐。
+- 微信支付官方额度充值和订阅账单补齐管理员查询、关闭、退款和退款查询：
+  查询使用 `GET /v3/pay/transactions/out-trade-no/{out_trade_no}?mchid=...`，
+  关闭使用
+  `POST /v3/pay/transactions/out-trade-no/{out_trade_no}/close`，退款使用
+  `POST /v3/refund/domestic/refunds`，退款查询使用
+  `GET /v3/refund/domestic/refunds/{out_refund_no}`。只有微信侧关闭 2xx 后才把
+  本地待支付订单标记为已超时。
+- 微信退款返回 `PROCESSING` 时本地退款记录保持 `pending`，等待退款查询或
+  微信退款通知确认；`SUCCESS` 才同步本地退款成功和订阅订单状态，
+  `REFUNDCLOSE`、`CLOSED` / `REFUND.CLOSED`、`ABNORMAL` / `REFUND.ABNORMAL`
+  会回滚本地预留。
+- 用户可在自己的 classic 充值账单中对官方支付宝/微信支付成功或部分退款订单
+  提交退款申请，申请时必须填写原因。后端按“未使用部分”计算当前最多可退金额：
+  额度充值按当前用户余额和该订单剩余额度取较小值折算人民币，订阅按已过时间和
+  已用额度中更严格的比例计算未使用金额。管理员可审批通过后调用官方退款 API，
+  也可拒绝申请；管理员直接退款仍可选择全额退款。
+- 订阅退款不会扣用户钱包余额。部分退款只同步订阅订单为 `partial_refunded`；
+  全额退款会取消订阅实例、按分组规则回退用户分组，并按 `subscription` 来源和
+  订阅订单 ID 冲回返佣。额度充值退款仍按 `topup` 来源冲回返佣。
 
 ### 验证
 
@@ -88,6 +116,8 @@ bun web/classic/src/components/topup/rechargeAmountDisplay.test.mjs
 bun web/classic/src/components/topup/subscriptionPlanDisplay.test.mjs
 bun web/classic/src/components/topup/rechargeTabs.test.mjs
 bun web/classic/src/components/topup/modals/topupHistoryUtils.test.mjs
+go test ./service -run "WechatPayOfficial.*(Query|Close|Refund)|DecodeWechatPayOfficial" -count=1
+go test ./controller -run "WechatPayOfficial|AlipayOfficialRefund|AlipayOfficialQuery|AlipayOfficialClose" -count=1
 Set-Location web/classic; bun run build
 git diff --check
 ```
@@ -103,6 +133,11 @@ git diff --check
 - 保留 classic 钱包页默认“额度充值”的 tab 顺序，以及订阅推荐由后台手动控制的
   运营能力。
 - 如果上游新增订阅套餐展示字段，确认不会覆盖或忽略本地 `recommended` 字段。
+- 不要把微信退款 `PROCESSING` 当成最终成功；只能在退款查询或通知确认
+  `SUCCESS` 后同步订阅退款状态。退款查询/通知确认 `CLOSED`、`REFUND.CLOSED`
+  或 `ABNORMAL` 时，要回滚本地预留和订阅退款状态。
+- 保留用户退款申请和管理员审批的两段式流程，普通用户不能直接触发官方支付
+  退款 API。
 
 ## QuantumNous/new-api#3288 - 邀请充值返佣
 

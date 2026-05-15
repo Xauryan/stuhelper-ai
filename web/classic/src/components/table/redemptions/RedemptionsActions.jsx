@@ -19,6 +19,7 @@ For commercial licensing, please contact support@xauryan.com
 
 import React from 'react';
 import { Button } from '@douyinfe/semi-ui';
+import { isAuditOnlyAdmin } from '../../../helpers';
 
 const RedemptionsActions = ({
   selectedKeys,
@@ -28,6 +29,10 @@ const RedemptionsActions = ({
   batchDeleteRedemptions,
   t,
 }) => {
+  if (isAuditOnlyAdmin()) {
+    return null;
+  }
+
   // Add new redemption code
   const handleAddRedemption = () => {
     setEditingRedemption({

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -24,6 +23,30 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func sanitizeAuditUsers(c *gin.Context, users []*model.User) {
+	if c.GetInt("role") >= common.RoleAdminUser {
+		return
+	}
+	for _, user := range users {
+		if user == nil {
+			continue
+		}
+		user.Email = ""
+		user.GitHubId = ""
+		user.DiscordId = ""
+		user.OidcId = ""
+		user.WeChatId = ""
+		user.TelegramId = ""
+		user.LinuxDOId = ""
+		user.VerificationCode = ""
+		user.AccessToken = nil
+		user.Setting = ""
+		user.Remark = ""
+		user.StripeCustomer = ""
+		user.ReferralCommissionPercent = nil
+	}
+}
+
 type LoginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -35,7 +58,7 @@ func Login(c *gin.Context) {
 		return
 	}
 	var loginRequest LoginRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&loginRequest)
+	err := common.DecodeJson(c.Request.Body, &loginRequest)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -144,7 +167,7 @@ func Register(c *gin.Context) {
 		return
 	}
 	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	err := common.DecodeJson(c.Request.Body, &user)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -239,6 +262,7 @@ func GetAllUsers(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	sanitizeAuditUsers(c, users)
 
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(users)
@@ -256,6 +280,7 @@ func SearchUsers(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	sanitizeAuditUsers(c, users)
 
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(users)
@@ -492,6 +517,19 @@ func calculateUserPermissions(userRole int) map[string]interface{} {
 				"setting":  false, // 管理员不能访问系统设置
 			},
 		}
+	} else if userRole == common.RoleAuditAdminUser {
+		permissions["sidebar_settings"] = false
+		permissions["sidebar_modules"] = map[string]interface{}{
+			"admin": map[string]interface{}{
+				"channel":      true,
+				"models":       true,
+				"subscription": true,
+				"redemption":   true,
+				"user":         true,
+				"referral":     false,
+				"setting":      false,
+			},
+		}
 	} else {
 		// 普通用户只能设置个人功能，不包含管理员区域
 		permissions["sidebar_settings"] = true
@@ -545,6 +583,18 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"referral":     true,
 			"setting":      false, // 管理员不能访问系统设置
 		}
+	} else if userRole == common.RoleAuditAdminUser {
+		defaultConfig["admin"] = map[string]interface{}{
+			"enabled":      true,
+			"channel":      true,
+			"models":       true,
+			"deployment":   false,
+			"subscription": true,
+			"redemption":   true,
+			"user":         true,
+			"referral":     false,
+			"setting":      false,
+		}
 	} else if userRole == common.RoleRootUser {
 		// 超级管理员可以访问所有功能
 		defaultConfig["admin"] = map[string]interface{}{
@@ -562,7 +612,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 	// 普通用户不包含admin区域
 
 	// 转换为JSON字符串
-	configBytes, err := json.Marshal(defaultConfig)
+	configBytes, err := common.Marshal(defaultConfig)
 	if err != nil {
 		common.SysLog("生成默认边栏配置失败: " + err.Error())
 		return ""
@@ -600,7 +650,7 @@ func GetUserModels(c *gin.Context) {
 
 func UpdateUser(c *gin.Context) {
 	var updatedUser model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&updatedUser)
+	err := common.DecodeJson(c.Request.Body, &updatedUser)
 	if err != nil || updatedUser.Id == 0 {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -681,7 +731,7 @@ func AdminClearUserBinding(c *gin.Context) {
 
 func UpdateSelf(c *gin.Context) {
 	var requestData map[string]interface{}
-	err := json.NewDecoder(c.Request.Body).Decode(&requestData)
+	err := common.DecodeJson(c.Request.Body, &requestData)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -745,12 +795,12 @@ func UpdateSelf(c *gin.Context) {
 
 	// 原有的用户信息更新逻辑
 	var user model.User
-	requestDataBytes, err := json.Marshal(requestData)
+	requestDataBytes, err := common.Marshal(requestData)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
-	err = json.Unmarshal(requestDataBytes, &user)
+	err = common.Unmarshal(requestDataBytes, &user)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -860,7 +910,7 @@ func DeleteSelf(c *gin.Context) {
 
 func CreateUser(c *gin.Context) {
 	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	err := common.DecodeJson(c.Request.Body, &user)
 	user.Username = strings.TrimSpace(user.Username)
 	if err != nil || user.Username == "" || user.Password == "" {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
@@ -872,6 +922,13 @@ func CreateUser(c *gin.Context) {
 	}
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
+	}
+	if user.Role == common.RoleGuestUser {
+		user.Role = common.RoleCommonUser
+	}
+	if !common.IsValidateRole(user.Role) {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
 	}
 	myRole := c.GetInt("role")
 	if user.Role >= myRole {
@@ -904,10 +961,20 @@ type ManageRequest struct {
 	Mode   string `json:"mode"`
 }
 
+func setUserDefaultSidebarForRole(user *model.User) {
+	defaultSidebarConfig := generateDefaultSidebarConfig(user.Role)
+	if defaultSidebarConfig == "" {
+		return
+	}
+	currentSetting := user.GetSetting()
+	currentSetting.SidebarModules = defaultSidebarConfig
+	user.SetSetting(currentSetting)
+}
+
 // ManageUser Only admin user can do this
 func ManageUser(c *gin.Context) {
 	var req ManageRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&req)
+	err := common.DecodeJson(c.Request.Body, &req)
 
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
@@ -927,6 +994,7 @@ func ManageUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
 		return
 	}
+	roleChanged := false
 	switch req.Action {
 	case "disable":
 		user.Status = common.UserStatusDisabled
@@ -963,6 +1031,25 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 		user.Role = common.RoleAdminUser
+		roleChanged = true
+	case "promote_audit":
+		if user.Role >= common.RoleAuditAdminUser {
+			common.ApiErrorMsg(c, "user is already audit admin or higher")
+			return
+		}
+		user.Role = common.RoleAuditAdminUser
+		roleChanged = true
+	case "demote_audit":
+		if user.Role == common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserCannotDemoteRootUser)
+			return
+		}
+		if user.Role == common.RoleAuditAdminUser {
+			common.ApiErrorMsg(c, "user is already audit admin")
+			return
+		}
+		user.Role = common.RoleAuditAdminUser
+		roleChanged = true
 	case "demote":
 		if user.Role == common.RoleRootUser {
 			common.ApiErrorI18n(c, i18n.MsgUserCannotDemoteRootUser)
@@ -973,6 +1060,7 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 		user.Role = common.RoleCommonUser
+		roleChanged = true
 	case "add_quota":
 		adminName := c.GetString("username")
 		adminId := c.GetInt("id")
@@ -1020,6 +1108,13 @@ func ManageUser(c *gin.Context) {
 			"message": "",
 		})
 		return
+	default:
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	if roleChanged {
+		setUserDefaultSidebarForRole(&user)
 	}
 
 	if err := user.Update(false); err != nil {
@@ -1030,7 +1125,7 @@ func ManageUser(c *gin.Context) {
 	// 避免在 Redis TTL 过期前仍使用旧状态（尤其是禁用后仍可发起请求的问题）。
 	// InvalidateUserCache 会让下一次 GetUserCache 从数据库重新加载，
 	// InvalidateUserTokensCache 则确保令牌侧的缓存也同步刷新。
-	if req.Action == "disable" || req.Action == "promote" || req.Action == "demote" {
+	if req.Action == "disable" || roleChanged {
 		if err := model.InvalidateUserCache(user.Id); err != nil {
 			common.SysLog(fmt.Sprintf("failed to invalidate user cache for user %d: %s", user.Id, err.Error()))
 		}

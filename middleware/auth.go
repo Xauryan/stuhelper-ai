@@ -156,12 +156,40 @@ func authHelper(c *gin.Context, minRole int) {
 	c.Next()
 }
 
+func abortInsufficientPrivilege(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"success": false,
+		"message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege),
+	})
+	c.Abort()
+}
+
+func requireRole(c *gin.Context, minRole int) bool {
+	if c.GetInt("role") < minRole {
+		abortInsufficientPrivilege(c)
+		return false
+	}
+	return true
+}
+
 func TryUserAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		session := sessions.Default(c)
 		id := session.Get("id")
 		if id != nil {
-			c.Set("id", id)
+			if status, ok := session.Get("status").(int); ok && status == common.UserStatusEnabled {
+				c.Set("id", id)
+				if username := session.Get("username"); username != nil {
+					c.Set("username", username)
+				}
+				if role := session.Get("role"); role != nil {
+					c.Set("role", role)
+				}
+				if group := session.Get("group"); group != nil {
+					c.Set("group", group)
+					c.Set("user_group", group)
+				}
+			}
 		}
 		c.Next()
 	}
@@ -176,6 +204,30 @@ func UserAuth() func(c *gin.Context) {
 func AdminAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		authHelper(c, common.RoleAdminUser)
+	}
+}
+
+func AuditAdminAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		authHelper(c, common.RoleAuditAdminUser)
+	}
+}
+
+func RequireAuditOrAdminRole() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		if !requireRole(c, common.RoleAuditAdminUser) {
+			return
+		}
+		c.Next()
+	}
+}
+
+func RequireAdminRole() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		if !requireRole(c, common.RoleAdminUser) {
+			return
+		}
+		c.Next()
 	}
 }
 

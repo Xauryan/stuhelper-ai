@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -97,6 +98,10 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		Status:          common.TopUpStatusPending,
 	}
 	if err := order.Insert(); err != nil {
+		if errors.Is(err, model.ErrSubscriptionPurchaseLimit) {
+			common.ApiErrorMsg(c, err.Error())
+			return
+		}
 		common.ApiErrorMsg(c, "创建订单失败")
 		return
 	}

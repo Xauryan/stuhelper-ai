@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   getRemainingRefundMoney,
   isAlipayOfficialRefundable,
+  isOfficialRefundable,
   isSubscriptionTopup,
 } from './topupHistoryUtils.mjs';
 
@@ -58,6 +59,50 @@ assert.equal(
     payment_method: 'alipay_official',
     status: 'success',
     money: 9.99,
+    refunded_money: 0,
+  }),
+  false,
+);
+assert.equal(
+  isOfficialRefundable({
+    payment_provider: 'wxpay_official',
+    payment_method: 'wxpay_official',
+    status: 'success',
+    money: 1,
+    refunded_money: 0,
+  }),
+  true,
+);
+assert.equal(
+  isOfficialRefundable({
+    trade_no: 'WXSUB_1_ABCDEF1234567890',
+    amount: 0,
+    payment_provider: 'wxpay_official',
+    payment_method: 'wxpay_official',
+    status: 'success',
+    money: 9.99,
+    refunded_money: 0,
+  }),
+  true,
+);
+assert.equal(
+  isOfficialRefundable({
+    trade_no: 'WXSUB_1_ABCDEF1234567890',
+    amount: 0,
+    payment_provider: 'wxpay_official',
+    payment_method: 'wxpay_official',
+    status: 'partial_refunded',
+    money: 9.99,
+    refunded_money: 4,
+  }),
+  true,
+);
+assert.equal(
+  isOfficialRefundable({
+    payment_provider: 'stripe',
+    payment_method: 'stripe',
+    status: 'success',
+    money: 1,
     refunded_money: 0,
   }),
   false,

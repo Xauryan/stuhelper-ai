@@ -34,7 +34,9 @@ import {
   renderNumber,
   renderQuota,
   timestamp2string,
+  isRoot,
 } from '../../../helpers';
+import { USER_ROLES } from '../../../constants/roles';
 
 const renderTimestamp = (text) => (text ? timestamp2string(text) : '-');
 
@@ -53,6 +55,12 @@ const renderRole = (role, t) => {
       return (
         <Tag color='yellow' shape='circle'>
           {t('管理员')}
+        </Tag>
+      );
+    case 5:
+      return (
+        <Tag color='cyan' shape='circle'>
+          {t('审计管理员')}
         </Tag>
       );
     case 100:
@@ -210,7 +218,9 @@ const renderOperations = (
     setEditingUser,
     setShowEditUser,
     showPromoteModal,
+    showPromoteAuditModal,
     showDemoteModal,
+    showDemoteAuditModal,
     showEnableDisableModal,
     showDeleteModal,
     showResetPasskeyModal,
@@ -281,20 +291,48 @@ const renderOperations = (
       >
         {t('编辑')}
       </Button>
-      <Button
-        type='warning'
-        size='small'
-        onClick={() => showPromoteModal(record)}
-      >
-        {t('提升')}
-      </Button>
-      <Button
-        type='secondary'
-        size='small'
-        onClick={() => showDemoteModal(record)}
-      >
-        {t('降级')}
-      </Button>
+      {isRoot() && record.role < USER_ROLES.ADMIN && (
+        <Button
+          type='warning'
+          size='small'
+          onClick={() => showPromoteModal(record)}
+        >
+          {record.role === USER_ROLES.AUDIT_ADMIN ? t('设为管理员') : t('提升')}
+        </Button>
+      )}
+      {record.role < USER_ROLES.AUDIT_ADMIN && (
+        <Button
+          type='secondary'
+          size='small'
+          onClick={() => showPromoteAuditModal(record)}
+        >
+          {t('设为审计管理员')}
+        </Button>
+      )}
+      {isRoot() &&
+        record.role > USER_ROLES.AUDIT_ADMIN &&
+        record.role < USER_ROLES.ROOT && (
+          <Button
+            type='secondary'
+            size='small'
+            onClick={() => showDemoteAuditModal(record)}
+          >
+            {t('设为审计管理员')}
+          </Button>
+        )}
+      {record.role > USER_ROLES.COMMON &&
+        record.role < USER_ROLES.ROOT &&
+        (isRoot() || record.role < USER_ROLES.ADMIN) && (
+          <Button
+            type='secondary'
+            size='small'
+            onClick={() => showDemoteModal(record)}
+          >
+            {record.role === USER_ROLES.AUDIT_ADMIN
+              ? t('设为普通用户')
+              : t('降级')}
+          </Button>
+        )}
       <Dropdown menu={moreMenu} trigger='click' position='bottomRight'>
         <Button type='tertiary' size='small' icon={<IconMore />} />
       </Dropdown>
@@ -310,14 +348,17 @@ export const getUsersColumns = ({
   setEditingUser,
   setShowEditUser,
   showPromoteModal,
+  showPromoteAuditModal,
   showDemoteModal,
+  showDemoteAuditModal,
   showEnableDisableModal,
   showDeleteModal,
   showResetPasskeyModal,
   showResetTwoFAModal,
   showUserSubscriptionsModal,
+  canWrite = true,
 }) => {
-  return [
+  const columns = [
     {
       title: 'ID',
       dataIndex: 'id',
@@ -371,13 +412,15 @@ export const getUsersColumns = ({
       title: '',
       dataIndex: 'operate',
       fixed: 'right',
-      width: 200,
+      width: 360,
       render: (text, record, index) =>
         renderOperations(text, record, {
           setEditingUser,
           setShowEditUser,
           showPromoteModal,
+          showPromoteAuditModal,
           showDemoteModal,
+          showDemoteAuditModal,
           showEnableDisableModal,
           showDeleteModal,
           showResetPasskeyModal,
@@ -387,4 +430,10 @@ export const getUsersColumns = ({
         }),
     },
   ];
+
+  if (!canWrite) {
+    return columns.filter((column) => column.dataIndex !== 'operate');
+  }
+
+  return columns;
 };

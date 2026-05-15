@@ -327,8 +327,9 @@ export const getChannelsColumns = ({
   setCurrentMultiKeyChannel,
   openUpstreamUpdateModal,
   detectChannelUpstreamUpdates,
+  canWrite = true,
 }) => {
-  return [
+  const columns = [
     {
       key: COLUMN_KEYS.ID,
       title: t('ID'),
@@ -903,4 +904,14 @@ export const getChannelsColumns = ({
       },
     },
   ];
+
+  if (!canWrite) {
+    return columns
+      .filter((column) => column.key !== COLUMN_KEYS.OPERATE)
+      .filter((column) => column.key !== COLUMN_KEYS.BALANCE)
+      .filter((column) => column.key !== COLUMN_KEYS.PRIORITY)
+      .filter((column) => column.key !== COLUMN_KEYS.WEIGHT);
+  }
+
+  return columns;
 };

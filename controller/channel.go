@@ -68,6 +68,37 @@ func clearChannelInfo(channel *model.Channel) {
 	}
 }
 
+func clearAuditChannelDetail(channel *model.Channel) {
+	if channel == nil {
+		return
+	}
+	channel.Key = ""
+	channel.BaseURL = nil
+	channel.Other = ""
+	channel.OtherInfo = ""
+	channel.ModelMapping = nil
+	channel.StatusCodeMapping = nil
+	channel.Setting = nil
+	channel.ParamOverride = nil
+	channel.HeaderOverride = nil
+	channel.Remark = nil
+	channel.OtherSettings = ""
+	channel.ChannelInfo = model.ChannelInfo{
+		IsMultiKey:   channel.ChannelInfo.IsMultiKey,
+		MultiKeySize: channel.ChannelInfo.MultiKeySize,
+		MultiKeyMode: channel.ChannelInfo.MultiKeyMode,
+	}
+}
+
+func sanitizeAuditChannels(c *gin.Context, channels []*model.Channel) {
+	if c.GetInt("role") >= common.RoleAdminUser {
+		return
+	}
+	for _, channel := range channels {
+		clearAuditChannelDetail(channel)
+	}
+}
+
 func GetAllChannels(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	channelData := make([]*model.Channel, 0)
@@ -143,6 +174,7 @@ func GetAllChannels(c *gin.Context) {
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
 	}
+	sanitizeAuditChannels(c, channelData)
 
 	countQuery := model.DB.Model(&model.Channel{})
 	if statusFilter == common.ChannelStatusEnabled {
@@ -342,6 +374,7 @@ func SearchChannels(c *gin.Context) {
 	for _, datum := range pagedData {
 		clearChannelInfo(datum)
 	}
+	sanitizeAuditChannels(c, pagedData)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

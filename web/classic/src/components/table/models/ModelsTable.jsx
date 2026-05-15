@@ -25,6 +25,7 @@ import {
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
 import { getModelsColumns } from './ModelsColumnDefs';
+import { isAuditOnlyAdmin } from '../../../helpers';
 
 const ModelsTable = (modelsData) => {
   const {
@@ -45,6 +46,7 @@ const ModelsTable = (modelsData) => {
     vendorMap,
     t,
   } = modelsData;
+  const canWrite = !isAuditOnlyAdmin();
 
   // Get all columns
   const columns = useMemo(() => {
@@ -55,8 +57,17 @@ const ModelsTable = (modelsData) => {
       setShowEdit,
       refresh,
       vendorMap,
+      canWrite,
     });
-  }, [t, manageModel, setEditingModel, setShowEdit, refresh, vendorMap]);
+  }, [
+    t,
+    manageModel,
+    setEditingModel,
+    setShowEdit,
+    refresh,
+    vendorMap,
+    canWrite,
+  ]);
 
   // Handle compact mode by removing fixed positioning
   const tableColumns = useMemo(() => {
@@ -87,8 +98,8 @@ const ModelsTable = (modelsData) => {
       }}
       hidePagination={true}
       loading={loading}
-      rowSelection={rowSelection}
-      onRow={handleRow}
+      rowSelection={canWrite ? rowSelection : undefined}
+      onRow={canWrite ? handleRow : undefined}
       empty={
         <Empty
           image={<IllustrationNoResult style={{ width: 150, height: 150 }} />}

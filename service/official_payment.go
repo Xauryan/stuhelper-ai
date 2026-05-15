@@ -28,6 +28,7 @@ import (
 )
 
 var ErrAlipayOfficialTradeNotFound = errors.New("alipay trade not found")
+var ErrWechatPayOfficialH5Unavailable = errors.New("wechat pay h5 unavailable")
 
 const (
 	AlipayOfficialPagePayMethod      = "alipay.trade.page.pay"
@@ -89,6 +90,7 @@ type AlipayOfficialOpenAPIResponse struct {
 	RefundFee    string `json:"refund_fee"`
 	RefundAmount string `json:"refund_amount"`
 	RefundStatus string `json:"refund_status"`
+	OutRequestNo string `json:"out_request_no"`
 }
 
 type AlipayOfficialError struct {
@@ -150,6 +152,11 @@ type WechatPayOfficialPrepayResult struct {
 	H5URL   string `json:"h5_url,omitempty"`
 }
 
+type wechatPayOfficialErrorResponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
 type WechatPayOfficialNotifyEnvelope struct {
 	ID           string `json:"id"`
 	CreateTime   string `json:"create_time"`
@@ -179,6 +186,45 @@ type WechatPayOfficialTransaction struct {
 		Currency      string `json:"currency"`
 		PayerCurrency string `json:"payer_currency"`
 	} `json:"amount"`
+}
+
+type WechatPayOfficialRefundParams struct {
+	TransactionID string
+	OutTradeNo    string
+	OutRefundNo   string
+	Reason        string
+	NotifyURL     string
+	RefundFen     int64
+	TotalFen      int64
+}
+
+type WechatPayOfficialRefundResponse struct {
+	RefundID      string `json:"refund_id"`
+	OutRefundNo   string `json:"out_refund_no"`
+	TransactionID string `json:"transaction_id"`
+	OutTradeNo    string `json:"out_trade_no"`
+	Status        string `json:"status"`
+	RefundStatus  string `json:"refund_status"`
+	SuccessTime   string `json:"success_time"`
+	UserReceived  string `json:"user_received_account"`
+	Amount        struct {
+		Total    int64  `json:"total"`
+		Refund   int64  `json:"refund"`
+		Currency string `json:"currency"`
+	} `json:"amount"`
+}
+
+func (r WechatPayOfficialRefundResponse) EffectiveStatus() string {
+	status := strings.TrimSpace(r.Status)
+	if status == "" {
+		status = strings.TrimSpace(r.RefundStatus)
+	}
+	switch status {
+	case "CLOSED":
+		return "REFUNDCLOSE"
+	default:
+		return status
+	}
 }
 
 func BuildAlipayOfficialPageExecuteForm(params AlipayOfficialBuildParams) (string, error) {
@@ -748,6 +794,9 @@ func (c *WechatPayOfficialClient) Prepay(ctx context.Context, params WechatPayOf
 		return nil, fmt.Errorf("read WeChat Pay prepay response: %w", err)
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
+		if params.TradeType == "h5" && isWechatPayOfficialH5UnavailableResponse(responseBody) {
+			return nil, fmt.Errorf("%w: %s", ErrWechatPayOfficialH5Unavailable, string(responseBody))
+		}
 		return nil, fmt.Errorf("WeChat Pay prepay failed with status %d: %s", resp.StatusCode, string(responseBody))
 	}
 	if err := VerifyWechatPayOfficialResponseSignature(
@@ -772,6 +821,263 @@ func (c *WechatPayOfficialClient) Prepay(ctx context.Context, params WechatPayOf
 		return nil, fmt.Errorf("WeChat Pay returned empty code_url")
 	}
 	return &result, nil
+}
+
+func isWechatPayOfficialH5UnavailableResponse(body []byte) bool {
+	var payload wechatPayOfficialErrorResponse
+	if err := common.Unmarshal(body, &payload); err != nil {
+		return false
+	}
+	code := strings.ToUpper(strings.TrimSpace(payload.Code))
+	message := strings.TrimSpace(payload.Message)
+	if code == "NO_AUTH" {
+		return true
+	}
+	unavailableHints := []string{
+		"H5支付权限",
+		"H5支付产品",
+		"H5支付未开通",
+		"未开通H5",
+		"没有开通H5",
+		"产品权限",
+		"商户无权限",
+	}
+	for _, hint := range unavailableHints {
+		if strings.Contains(message, hint) {
+			return true
+		}
+	}
+	return false
+}
+
+func IsWechatPayOfficialH5Unavailable(err error) bool {
+	return errors.Is(err, ErrWechatPayOfficialH5Unavailable)
+}
+
+func (c *WechatPayOfficialClient) QueryTransactionByOutTradeNo(ctx context.Context, outTradeNo string) (*WechatPayOfficialTransaction, error) {
+	if c == nil {
+		return nil, fmt.Errorf("missing WeChat Pay client")
+	}
+	outTradeNo = strings.TrimSpace(outTradeNo)
+	if outTradeNo == "" {
+		return nil, fmt.Errorf("missing out_trade_no")
+	}
+	canonicalURL := "/v3/pay/transactions/out-trade-no/" + url.PathEscape(outTradeNo) + "?mchid=" + url.QueryEscape(strings.TrimSpace(c.MchID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.mch.weixin.qq.com"+canonicalURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build WeChat Pay query request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	auth, err := c.BuildAuthorization(http.MethodGet, canonicalURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", auth)
+
+	client := c.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request WeChat Pay query: %w", err)
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read WeChat Pay query response: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("WeChat Pay query failed with status %d: %s", resp.StatusCode, string(responseBody))
+	}
+	if err := VerifyWechatPayOfficialResponseSignature(
+		resp.Header.Get("Wechatpay-Timestamp"),
+		resp.Header.Get("Wechatpay-Nonce"),
+		resp.Header.Get("Wechatpay-Signature"),
+		responseBody,
+		c.PlatformPublicKey,
+	); err != nil {
+		return nil, err
+	}
+
+	var transaction WechatPayOfficialTransaction
+	if err := common.Unmarshal(responseBody, &transaction); err != nil {
+		return nil, fmt.Errorf("decode WeChat Pay query response: %w", err)
+	}
+	return &transaction, nil
+}
+
+func (c *WechatPayOfficialClient) CloseTransactionByOutTradeNo(ctx context.Context, outTradeNo string) error {
+	if c == nil {
+		return fmt.Errorf("missing WeChat Pay client")
+	}
+	outTradeNo = strings.TrimSpace(outTradeNo)
+	if outTradeNo == "" {
+		return fmt.Errorf("missing out_trade_no")
+	}
+	bodyBytes, err := common.Marshal(map[string]string{
+		"mchid": strings.TrimSpace(c.MchID),
+	})
+	if err != nil {
+		return fmt.Errorf("marshal WeChat Pay close payload: %w", err)
+	}
+	canonicalURL := "/v3/pay/transactions/out-trade-no/" + url.PathEscape(outTradeNo) + "/close"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.mch.weixin.qq.com"+canonicalURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("build WeChat Pay close request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	auth, err := c.BuildAuthorization(http.MethodPost, canonicalURL, bodyBytes)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", auth)
+
+	client := c.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request WeChat Pay close: %w", err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read WeChat Pay close response: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("WeChat Pay close failed with status %d: %s", resp.StatusCode, string(responseBody))
+	}
+	return nil
+}
+
+func (c *WechatPayOfficialClient) Refund(ctx context.Context, params WechatPayOfficialRefundParams) (*WechatPayOfficialRefundResponse, error) {
+	if c == nil {
+		return nil, fmt.Errorf("missing WeChat Pay client")
+	}
+	outTradeNo := strings.TrimSpace(params.OutTradeNo)
+	transactionID := strings.TrimSpace(params.TransactionID)
+	outRefundNo := strings.TrimSpace(params.OutRefundNo)
+	if outTradeNo == "" && transactionID == "" {
+		return nil, fmt.Errorf("missing WeChat Pay refund trade id")
+	}
+	if outRefundNo == "" {
+		return nil, fmt.Errorf("missing out_refund_no")
+	}
+	if params.RefundFen <= 0 {
+		return nil, fmt.Errorf("invalid refund amount")
+	}
+	if params.TotalFen <= 0 {
+		return nil, fmt.Errorf("invalid original order amount")
+	}
+
+	body := map[string]any{
+		"out_refund_no": outRefundNo,
+		"amount": map[string]any{
+			"refund":   params.RefundFen,
+			"total":    params.TotalFen,
+			"currency": "CNY",
+		},
+	}
+	if transactionID != "" {
+		body["transaction_id"] = transactionID
+	} else {
+		body["out_trade_no"] = outTradeNo
+	}
+	if reason := strings.TrimSpace(params.Reason); reason != "" {
+		body["reason"] = reason
+	}
+	if notifyURL := strings.TrimSpace(params.NotifyURL); notifyURL != "" {
+		body["notify_url"] = notifyURL
+	}
+	response, err := c.doWechatPayJSON(ctx, http.MethodPost, "/v3/refund/domestic/refunds", body)
+	if err != nil {
+		return nil, err
+	}
+	var refund WechatPayOfficialRefundResponse
+	if err := common.Unmarshal(response, &refund); err != nil {
+		return nil, fmt.Errorf("decode WeChat Pay refund response: %w", err)
+	}
+	return &refund, nil
+}
+
+func (c *WechatPayOfficialClient) QueryRefundByOutRefundNo(ctx context.Context, outRefundNo string) (*WechatPayOfficialRefundResponse, error) {
+	if c == nil {
+		return nil, fmt.Errorf("missing WeChat Pay client")
+	}
+	outRefundNo = strings.TrimSpace(outRefundNo)
+	if outRefundNo == "" {
+		return nil, fmt.Errorf("missing out_refund_no")
+	}
+	response, err := c.doWechatPayJSON(ctx, http.MethodGet, "/v3/refund/domestic/refunds/"+url.PathEscape(outRefundNo), nil)
+	if err != nil {
+		return nil, err
+	}
+	var refund WechatPayOfficialRefundResponse
+	if err := common.Unmarshal(response, &refund); err != nil {
+		return nil, fmt.Errorf("decode WeChat Pay refund query response: %w", err)
+	}
+	return &refund, nil
+}
+
+func (c *WechatPayOfficialClient) doWechatPayJSON(ctx context.Context, method string, canonicalURL string, body any) ([]byte, error) {
+	var bodyBytes []byte
+	var err error
+	if body != nil {
+		bodyBytes, err = common.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal WeChat Pay payload: %w", err)
+		}
+	}
+	var reqBody io.Reader
+	if bodyBytes != nil {
+		reqBody = bytes.NewReader(bodyBytes)
+	}
+	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(method), "https://api.mch.weixin.qq.com"+canonicalURL, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("build WeChat Pay request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	if bodyBytes != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	auth, err := c.BuildAuthorization(method, canonicalURL, bodyBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", auth)
+
+	client := c.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request WeChat Pay %s %s: %w", strings.ToUpper(method), canonicalURL, err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read WeChat Pay response: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("WeChat Pay %s %s failed with status %d: %s", strings.ToUpper(method), canonicalURL, resp.StatusCode, string(responseBody))
+	}
+	if len(responseBody) > 0 {
+		if err := VerifyWechatPayOfficialResponseSignature(
+			resp.Header.Get("Wechatpay-Timestamp"),
+			resp.Header.Get("Wechatpay-Nonce"),
+			resp.Header.Get("Wechatpay-Signature"),
+			responseBody,
+			c.PlatformPublicKey,
+		); err != nil {
+			return nil, err
+		}
+	}
+	return responseBody, nil
 }
 
 func (c *WechatPayOfficialClient) BuildAuthorization(method string, canonicalURL string, body []byte) (string, error) {
@@ -846,18 +1152,48 @@ func DecodeWechatPayOfficialNotify(body []byte, apiV3Key string) (*WechatPayOffi
 	if err := common.Unmarshal(body, &envelope); err != nil {
 		return nil, nil, fmt.Errorf("decode WeChat Pay notify envelope: %w", err)
 	}
+	if envelope.EventType == "REFUND.SUCCESS" || envelope.Resource.OriginalType == "refund" {
+		return &envelope, &WechatPayOfficialTransaction{}, nil
+	}
+	transaction, err := DecodeWechatPayOfficialTransactionResource(envelope, apiV3Key)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &envelope, transaction, nil
+}
+
+func DecodeWechatPayOfficialTransactionResource(envelope WechatPayOfficialNotifyEnvelope, apiV3Key string) (*WechatPayOfficialTransaction, error) {
 	if envelope.Resource.Algorithm != "AEAD_AES_256_GCM" {
-		return nil, nil, fmt.Errorf("unsupported WeChat Pay notify algorithm: %s", envelope.Resource.Algorithm)
+		return nil, fmt.Errorf("unsupported WeChat Pay notify algorithm: %s", envelope.Resource.Algorithm)
+	}
+	plain, err := decryptWechatPayResource(apiV3Key, envelope.Resource.AssociatedData, envelope.Resource.Nonce, envelope.Resource.Ciphertext)
+	if err != nil {
+		return nil, err
+	}
+	var transaction WechatPayOfficialTransaction
+	if err := common.Unmarshal(plain, &transaction); err != nil {
+		return nil, fmt.Errorf("decode WeChat Pay transaction: %w", err)
+	}
+	return &transaction, nil
+}
+
+func DecodeWechatPayOfficialRefundNotify(body []byte, apiV3Key string) (*WechatPayOfficialNotifyEnvelope, *WechatPayOfficialRefundResponse, error) {
+	var envelope WechatPayOfficialNotifyEnvelope
+	if err := common.Unmarshal(body, &envelope); err != nil {
+		return nil, nil, fmt.Errorf("decode WeChat Pay refund notify envelope: %w", err)
+	}
+	if envelope.Resource.Algorithm != "AEAD_AES_256_GCM" {
+		return nil, nil, fmt.Errorf("unsupported WeChat Pay refund notify algorithm: %s", envelope.Resource.Algorithm)
 	}
 	plain, err := decryptWechatPayResource(apiV3Key, envelope.Resource.AssociatedData, envelope.Resource.Nonce, envelope.Resource.Ciphertext)
 	if err != nil {
 		return nil, nil, err
 	}
-	var transaction WechatPayOfficialTransaction
-	if err := common.Unmarshal(plain, &transaction); err != nil {
-		return nil, nil, fmt.Errorf("decode WeChat Pay transaction: %w", err)
+	var refund WechatPayOfficialRefundResponse
+	if err := common.Unmarshal(plain, &refund); err != nil {
+		return nil, nil, fmt.Errorf("decode WeChat Pay refund: %w", err)
 	}
-	return &envelope, &transaction, nil
+	return &envelope, &refund, nil
 }
 
 func decryptWechatPayResource(apiV3Key string, associatedData string, nonce string, ciphertext string) ([]byte, error) {

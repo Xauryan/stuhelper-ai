@@ -18,26 +18,20 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import React from 'react';
-import { Button } from '@douyinfe/semi-ui';
-import { isAuditOnlyAdmin } from '../../../helpers';
+import { Modal } from '@douyinfe/semi-ui';
 
-const SubscriptionsActions = ({ openCreate, t }) => {
-  if (isAuditOnlyAdmin()) {
-    return null;
-  }
-
+const AuditRoleUserModal = ({ visible, onCancel, onConfirm, t }) => {
   return (
-    <div className='flex gap-2 w-full md:w-auto'>
-      <Button
-        type='primary'
-        className='w-full md:w-auto'
-        onClick={openCreate}
-        size='small'
-      >
-        {t('新建套餐')}
-      </Button>
-    </div>
+    <Modal
+      title={t('确定要设为审计管理员吗？')}
+      visible={visible}
+      onCancel={onCancel}
+      onOk={onConfirm}
+      type='warning'
+    >
+      {t('此操作将授予只读审计管理权限')}
+    </Modal>
   );
 };
 
-export default SubscriptionsActions;
+export default AuditRoleUserModal;

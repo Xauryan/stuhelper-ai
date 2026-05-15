@@ -20,6 +20,7 @@ For commercial licensing, please contact support@xauryan.com
 import React from 'react';
 import { Modal, Button, Checkbox } from '@douyinfe/semi-ui';
 import { getChannelsColumns } from '../ChannelsColumnDefs';
+import { isAuditOnlyAdmin } from '../../../../helpers';
 
 const ColumnSelectorModal = ({
   showColumnSelector,
@@ -47,6 +48,8 @@ const ColumnSelectorModal = ({
   activePage,
   channels,
 }) => {
+  const canWrite = !isAuditOnlyAdmin();
+
   // Get all columns for display in selector
   const allColumns = getChannelsColumns({
     t,
@@ -66,6 +69,7 @@ const ColumnSelectorModal = ({
     refresh,
     activePage,
     channels,
+    canWrite,
   });
 
   return (

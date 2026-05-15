@@ -268,6 +268,253 @@ func TestCreateOfficialPaymentRefundRejectsOverRefundAndDeductsPartialQuota(t *t
 	assert.Equal(t, 600, getUserQuotaForPaymentGuardTest(t, 170))
 }
 
+func TestCalculateOfficialPaymentRefundPreviewCapsBalanceRefundByCurrentQuota(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 1
+
+	insertUserForPaymentGuardTest(t, 270, 150)
+	topUp := &TopUp{
+		UserId:          270,
+		Amount:          100,
+		Money:           100.00,
+		TradeNo:         "official-refund-preview-full",
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CompleteTime:    time.Now().Unix(),
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+
+	preview, err := CalculateOfficialPaymentRefundPreview(topUp.TradeNo)
+	require.NoError(t, err)
+	require.True(t, preview.Refundable)
+	assert.InDelta(t, 100.00, preview.MaxRefundAmount, 0.0001)
+	assert.Equal(t, int64(100), preview.MaxRefundQuota)
+
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", 270).Update("quota", 50).Error)
+	preview, err = CalculateOfficialPaymentRefundPreview(topUp.TradeNo)
+	require.NoError(t, err)
+	require.True(t, preview.Refundable)
+	assert.InDelta(t, 50.00, preview.MaxRefundAmount, 0.0001)
+	assert.Equal(t, int64(50), preview.MaxRefundQuota)
+}
+
+func TestCalculateOfficialPaymentRefundPreviewUsesStrictSubscriptionUnusedRatio(t *testing.T) {
+	truncateTables(t)
+
+	now := common.GetTimestamp()
+	insertUserForPaymentGuardTest(t, 271, 0)
+	plan := insertSubscriptionPlanForPaymentGuardTest(t, 407)
+	order := &SubscriptionOrder{
+		UserId:          271,
+		PlanId:          plan.Id,
+		Money:           100.00,
+		TradeNo:         "WXSUB_REFUND_PREVIEW",
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CreateTime:      now - 500,
+		CompleteTime:    now - 500,
+	}
+	require.NoError(t, order.Insert())
+	require.NoError(t, DB.Create(&UserSubscription{
+		UserId:      271,
+		PlanId:      plan.Id,
+		AmountTotal: 1000,
+		AmountUsed:  200,
+		StartTime:   now - 500,
+		EndTime:     now + 500,
+		Status:      "active",
+		Source:      "order",
+	}).Error)
+
+	preview, err := CalculateOfficialPaymentRefundPreview(order.TradeNo)
+	require.NoError(t, err)
+	require.True(t, preview.Refundable)
+	assert.True(t, preview.IsSubscription)
+	assert.InDelta(t, 50.00, preview.MaxRefundAmount, 0.0001)
+	assert.Equal(t, int64(500), preview.MaxRefundQuota)
+}
+
+func TestCreateTopUpRefundRequestRequiresReasonAndExposesPendingRequest(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 1
+
+	insertUserForPaymentGuardTest(t, 273, 50)
+	topUp := &TopUp{
+		UserId:          273,
+		Amount:          100,
+		Money:           100.00,
+		TradeNo:         "official-refund-request",
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CompleteTime:    time.Now().Unix(),
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+
+	_, _, err := CreateTopUpRefundRequest(273, topUp.TradeNo, 10.00, "")
+	require.Error(t, err)
+
+	request, preview, err := CreateTopUpRefundRequest(273, topUp.TradeNo, 50.00, "unused quota")
+	require.NoError(t, err)
+	require.NotNil(t, request)
+	require.NotNil(t, preview)
+	assert.Equal(t, TopUpRefundRequestStatusPending, request.Status)
+	assert.InDelta(t, 50.00, request.RequestedAmount, 0.0001)
+	assert.InDelta(t, 50.00, request.MaxRefundAmount, 0.0001)
+	assert.Equal(t, int64(50), request.MaxRefundQuota)
+
+	_, _, err = CreateTopUpRefundRequest(273, topUp.TradeNo, 50.01, "too much")
+	require.Error(t, err)
+
+	topups, total, err := GetUserTopUps(273, &common.PageInfo{Page: 1, PageSize: 20})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, topups, 1)
+	assert.Equal(t, request.Id, topups[0].RefundRequestId)
+	assert.Equal(t, TopUpRefundRequestStatusPending, topups[0].RefundRequestStatus)
+	assert.InDelta(t, 50.00, topups[0].RefundRequestAmount, 0.0001)
+	assert.Equal(t, "unused quota", topups[0].RefundRequestReason)
+}
+
+func TestCreateOfficialPaymentRefundAllowsSubscriptionRefundWithoutDeductingWalletQuota(t *testing.T) {
+	truncateTables(t)
+
+	now := common.GetTimestamp()
+	insertUserForPaymentGuardTest(t, 272, 0)
+	plan := insertSubscriptionPlanForPaymentGuardTest(t, 408)
+	order := &SubscriptionOrder{
+		UserId:          272,
+		PlanId:          plan.Id,
+		Money:           100.00,
+		TradeNo:         "WXSUB_REFUND_EXEC",
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CreateTime:      now - 100,
+		CompleteTime:    now - 100,
+	}
+	require.NoError(t, order.Insert())
+	require.NoError(t, DB.Create(&UserSubscription{
+		UserId:      272,
+		PlanId:      plan.Id,
+		AmountTotal: 1000,
+		AmountUsed:  0,
+		StartTime:   now - 100,
+		EndTime:     now + 900,
+		Status:      "active",
+		Source:      "order",
+	}).Error)
+
+	refund, err := CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+		TradeNo:         order.TradeNo,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		RefundAmount:    10.00,
+		Reason:          "subscription partial",
+		OutRequestNo:    "WXSUB_REFUND_EXEC_RF_1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), refund.RefundQuota)
+	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 272))
+
+	require.NoError(t, MarkTopUpRefundSuccess(refund.OutRequestNo, "WXREFUNDID", "{}"))
+	require.NoError(t, RefundSubscriptionOrder(order.TradeNo, PaymentProviderWechatPayOfficial, refund.RefundAmount, false))
+
+	topUp := GetTopUpByTradeNo(order.TradeNo)
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusPartialRefunded, topUp.Status)
+	assert.InDelta(t, 10.00, topUp.RefundedMoney, 0.0001)
+
+	reloadedOrder := GetSubscriptionOrderByTradeNo(order.TradeNo)
+	require.NotNil(t, reloadedOrder)
+	assert.Equal(t, common.TopUpStatusPartialRefunded, reloadedOrder.Status)
+}
+
+func TestRefundSubscriptionOrderReversesSubscriptionReferralCommission(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 1
+
+	now := common.GetTimestamp()
+	inviter := &User{Id: 274, Username: "sub-refund-inviter", Status: common.UserStatusEnabled, AffCode: "sub-refund-inviter-aff", AffQuota: 10, AffHistoryQuota: 10}
+	invitee := &User{Id: 275, Username: "sub-refund-invitee", Status: common.UserStatusEnabled, AffCode: "sub-refund-invitee-aff", InviterId: 274}
+	require.NoError(t, DB.Create(inviter).Error)
+	require.NoError(t, DB.Create(invitee).Error)
+	plan := insertSubscriptionPlanForPaymentGuardTest(t, 409)
+	order := &SubscriptionOrder{
+		UserId:          275,
+		PlanId:          plan.Id,
+		Money:           100.00,
+		TradeNo:         "WXSUB_REFUND_COMMISSION",
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CreateTime:      now - 100,
+		CompleteTime:    now - 100,
+	}
+	require.NoError(t, order.Insert())
+	require.NoError(t, DB.Create(&UserSubscription{
+		UserId:      275,
+		PlanId:      plan.Id,
+		AmountTotal: 1000,
+		StartTime:   now - 100,
+		EndTime:     now + 900,
+		Status:      "active",
+		Source:      "order",
+	}).Error)
+	require.NoError(t, DB.Create(&ReferralCommission{
+		InviterId:       274,
+		InviteeId:       275,
+		SourceType:      ReferralCommissionSourceSubscription,
+		SourceId:        order.Id,
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		RechargeAmount:  100.00,
+		CommissionQuota: 10,
+		CommissionRate:  10,
+	}).Error)
+
+	refund, err := CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+		TradeNo:         order.TradeNo,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		RefundAmount:    40.00,
+		Reason:          "subscription partial",
+		OutRequestNo:    "WXSUB_REFUND_COMMISSION_RF_1",
+	})
+	require.NoError(t, err)
+	require.NoError(t, MarkTopUpRefundSuccess(refund.OutRequestNo, "WXREFUNDID", "{}"))
+	require.NoError(t, RefundSubscriptionOrder(order.TradeNo, PaymentProviderWechatPayOfficial, refund.RefundAmount, false))
+
+	var updatedInviter User
+	require.NoError(t, DB.First(&updatedInviter, 274).Error)
+	assert.Equal(t, 6, updatedInviter.AffQuota)
+	assert.Equal(t, 6, updatedInviter.AffHistoryQuota)
+
+	var updatedCommission ReferralCommission
+	require.NoError(t, DB.Where("source_type = ? AND source_id = ?", ReferralCommissionSourceSubscription, order.Id).First(&updatedCommission).Error)
+	assert.Equal(t, 4, updatedCommission.RefundedCommissionQuota)
+	assert.InDelta(t, 40.00, updatedCommission.RefundedRechargeAmount, 0.0001)
+}
+
 func TestCreateOfficialPaymentRefundFullRefundDeductsRemainingQuota(t *testing.T) {
 	truncateTables(t)
 
@@ -510,6 +757,73 @@ func TestMarkTopUpRefundFailedRestoresQuotaAndReferralCommission(t *testing.T) {
 	assert.Equal(t, 0, updatedCommission.RefundedCommissionQuota)
 	assert.InDelta(t, 1.00, updatedCommission.RechargeAmount, 0.0001)
 	assert.InDelta(t, 0.00, updatedCommission.RefundedRechargeAmount, 0.0001)
+}
+
+func TestMarkTopUpRefundFailedCanRollbackSuccessfulRefundAfterDepositbackFailure(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 100
+
+	inviter := &User{Id: 186, Username: "depositback-rollback-inviter", Status: common.UserStatusEnabled, AffCode: "depositback-rollback-inviter-aff", AffQuota: 100, AffHistoryQuota: 100}
+	invitee := &User{Id: 187, Username: "depositback-rollback-invitee", Status: common.UserStatusEnabled, AffCode: "depositback-rollback-invitee-aff", InviterId: 186, Quota: 1000}
+	require.NoError(t, DB.Create(inviter).Error)
+	require.NoError(t, DB.Create(invitee).Error)
+	topUp := &TopUp{
+		UserId:          187,
+		Amount:          10,
+		Money:           1.00,
+		TradeNo:         "official-refund-depositback-rollback",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CompleteTime:    time.Now().Unix(),
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+	require.NoError(t, DB.Create(&ReferralCommission{
+		InviterId:       186,
+		InviteeId:       187,
+		SourceType:      ReferralCommissionSourceTopUp,
+		SourceId:        topUp.Id,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RechargeAmount:  1.00,
+		CommissionQuota: 10,
+		CommissionRate:  10,
+	}).Error)
+
+	_, err := CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+		TradeNo:         topUp.TradeNo,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RefundAmount:    0.40,
+		Reason:          "depositback rollback",
+		OutRequestNo:    "official-refund-depositback-rollback-rf-1",
+	})
+	require.NoError(t, err)
+	require.NoError(t, MarkTopUpRefundSuccess("official-refund-depositback-rollback-rf-1", "202605150000000000", `{"fund_change":"Y"}`))
+
+	require.NoError(t, MarkTopUpRefundFailed("official-refund-depositback-rollback-rf-1", `{"dback_status":"F"}`))
+
+	updated := GetTopUpByTradeNo(topUp.TradeNo)
+	require.NotNil(t, updated)
+	assert.Equal(t, common.TopUpStatusSuccess, updated.Status)
+	assert.Equal(t, 0.0, updated.RefundedMoney)
+	assert.Equal(t, int64(0), updated.RefundedQuota)
+	assert.Equal(t, 1000, getUserQuotaForPaymentGuardTest(t, 187))
+
+	refund := GetTopUpRefundByOutRequestNo("official-refund-depositback-rollback-rf-1")
+	require.NotNil(t, refund)
+	assert.Equal(t, TopUpRefundStatusFailed, refund.Status)
+
+	var updatedInviter User
+	require.NoError(t, DB.First(&updatedInviter, 186).Error)
+	assert.Equal(t, 100, updatedInviter.AffQuota)
+	assert.Equal(t, 100, updatedInviter.AffHistoryQuota)
 }
 
 func TestFullRefundReversesUnlockedInviterRewardAndPaymentState(t *testing.T) {

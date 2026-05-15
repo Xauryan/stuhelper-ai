@@ -8,43 +8,76 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func isRankingsEnabled() bool {
+type rankingsAccessConfig struct {
+	enabled     bool
+	requireAuth bool
+}
+
+func getRankingsAccessConfig() rankingsAccessConfig {
 	common.OptionMapRWMutex.RLock()
 	raw := common.OptionMap["HeaderNavModules"]
 	common.OptionMapRWMutex.RUnlock()
 
+	config := rankingsAccessConfig{enabled: true}
 	if raw == "" {
-		return true
+		return config
 	}
 
 	var parsed map[string]interface{}
 	if err := common.Unmarshal([]byte(raw), &parsed); err != nil {
-		return true
+		return config
 	}
 	rankings, ok := parsed["rankings"]
 	if !ok {
-		return true
+		return config
 	}
 	switch v := rankings.(type) {
 	case bool:
-		return v
+		config.enabled = v
 	case map[string]interface{}:
 		if enabled, ok := v["enabled"]; ok {
 			if b, ok := enabled.(bool); ok {
-				return b
+				config.enabled = b
 			}
 		}
-		return true
+		if requireAuth, ok := v["requireAuth"]; ok {
+			if b, ok := requireAuth.(bool); ok {
+				config.requireAuth = b
+			}
+		}
+	}
+	return config
+}
+
+func isRankingsEnabled() bool {
+	return getRankingsAccessConfig().enabled
+}
+
+func abortRankingsDisabled(c *gin.Context) {
+	c.JSON(http.StatusForbidden, gin.H{
+		"success": false,
+		"message": "rankings is disabled",
+	})
+}
+
+func enforceRankingsAccess(c *gin.Context) bool {
+	config := getRankingsAccessConfig()
+	if !config.enabled {
+		abortRankingsDisabled(c)
+		return false
+	}
+	if config.requireAuth && c.GetInt("id") <= 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": "login required",
+		})
+		return false
 	}
 	return true
 }
 
 func GetRankings(c *gin.Context) {
-	if !isRankingsEnabled() {
-		c.JSON(http.StatusForbidden, gin.H{
-			"success": false,
-			"message": "rankings is disabled",
-		})
+	if !enforceRankingsAccess(c) {
 		return
 	}
 
@@ -64,6 +97,10 @@ func GetRankings(c *gin.Context) {
 }
 
 func GetUserRankings(c *gin.Context) {
+	if !enforceRankingsAccess(c) {
+		return
+	}
+
 	result, err := service.GetUserRankingsSnapshot(c.DefaultQuery("period", "week"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

@@ -19,8 +19,14 @@ For commercial licensing, please contact support@xauryan.com
 
 import React from 'react';
 import { Button } from '@douyinfe/semi-ui';
+import { isAuditOnlyAdmin } from '../../../helpers';
 
 const UsersActions = ({ setShowAddUser, t }) => {
+  const canWrite = !isAuditOnlyAdmin();
+  if (!canWrite) {
+    return null;
+  }
+
   // Add new user
   const handleAddUser = () => {
     setShowAddUser(true);

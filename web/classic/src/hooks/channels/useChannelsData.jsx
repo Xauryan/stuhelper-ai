@@ -27,6 +27,7 @@ import {
   loadChannelModels,
   copy,
   toBoolean,
+  isAuditOnlyAdmin,
 } from '../../helpers';
 import {
   CHANNEL_OPTIONS,
@@ -43,6 +44,7 @@ import { openCodexUsageModal } from '../../components/table/channels/modals/Code
 export const useChannelsData = () => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  const canWrite = !isAuditOnlyAdmin();
 
   // Basic states
   const [channels, setChannels] = useState([]);
@@ -157,6 +159,9 @@ export const useChannelsData = () => {
     setPageSize(localPageSize);
     setEnableTagMode(localEnableTagMode);
     setEnableBatchDelete(localEnableBatchDelete);
+    if (!canWrite) {
+      setEnableBatchDelete(false);
+    }
 
     loadChannels(1, localPageSize, localIdSort, localEnableTagMode)
       .then()
@@ -164,13 +169,15 @@ export const useChannelsData = () => {
         showError(reason);
       });
     fetchGroups().then();
-    loadChannelModels().then();
-    fetchGlobalPassThroughEnabled().then();
+    if (canWrite) {
+      loadChannelModels().then();
+      fetchGlobalPassThroughEnabled().then();
+    }
   }, []);
 
   // Column visibility management
   const getDefaultColumnVisibility = () => {
-    return {
+    const defaults = {
       [COLUMN_KEYS.ID]: true,
       [COLUMN_KEYS.NAME]: true,
       [COLUMN_KEYS.GROUP]: true,
@@ -182,6 +189,15 @@ export const useChannelsData = () => {
       [COLUMN_KEYS.WEIGHT]: true,
       [COLUMN_KEYS.OPERATE]: true,
     };
+
+    if (!canWrite) {
+      defaults[COLUMN_KEYS.BALANCE] = false;
+      defaults[COLUMN_KEYS.PRIORITY] = false;
+      defaults[COLUMN_KEYS.WEIGHT] = false;
+      defaults[COLUMN_KEYS.OPERATE] = false;
+    }
+
+    return defaults;
   };
 
   const initDefaultColumns = () => {

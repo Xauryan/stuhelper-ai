@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
@@ -427,6 +428,195 @@ func TestWechatPayOfficialPrepayVerifiesPlatformResponseSignature(t *testing.T) 
 	require.Error(t, err)
 }
 
+func TestWechatPayOfficialPrepayDetectsH5Unavailable(t *testing.T) {
+	merchantPrivateKey, _ := generateOfficialPaymentTestKey(t)
+	client := &WechatPayOfficialClient{
+		AppID:             "wx123",
+		MchID:             "1900000109",
+		CertificateSerial: "merchant-serial",
+		PrivateKey:        merchantPrivateKey,
+		PlatformPublicKey: "unused",
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, "/v3/pay/transactions/h5", req.URL.Path)
+			return &http.Response{
+				StatusCode: http.StatusForbidden,
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader(`{"code":"NO_AUTH","message":"商户未开通H5支付权限"}`)),
+			}, nil
+		}).client(),
+	}
+
+	_, err := client.Prepay(t.Context(), WechatPayOfficialPrepayParams{
+		Description: "StuHelper AI recharge",
+		OutTradeNo:  "WXPAY-H5-NOAUTH",
+		NotifyURL:   "https://example.com/api/wechat-pay/official/notify",
+		AmountTotal: 100,
+		ClientIP:    "127.0.0.1",
+		WapURL:      "https://example.com/console/topup",
+		WapName:     "StuHelper AI",
+		TradeType:   "h5",
+	})
+	require.ErrorIs(t, err, ErrWechatPayOfficialH5Unavailable)
+}
+
+func TestWechatPayOfficialQueryTransactionByOutTradeNo(t *testing.T) {
+	merchantPrivateKey, _ := generateOfficialPaymentTestKey(t)
+	platformKey, platformPublicKey := generateOfficialPaymentTestKeyPair(t)
+	responseBody := []byte(`{"appid":"wx123","mchid":"1900000109","out_trade_no":"WX_1_QUERY","transaction_id":"420000000000000000","trade_state":"SUCCESS","trade_type":"NATIVE","amount":{"total":123,"currency":"CNY"}}`)
+	timestamp := "1710000001"
+	nonce := "query-response-nonce"
+	signature := signWechatPayHeaderMessage(t, platformKey, timestamp, nonce, responseBody)
+
+	client := &WechatPayOfficialClient{
+		AppID:             "wx123",
+		MchID:             "1900000109",
+		CertificateSerial: "merchant-serial",
+		PrivateKey:        merchantPrivateKey,
+		PlatformPublicKey: platformPublicKey,
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/pay/transactions/out-trade-no/WX_1_QUERY", req.URL.Path)
+			require.Equal(t, "mchid=1900000109", req.URL.RawQuery)
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body:       io.NopCloser(bytes.NewReader(responseBody)),
+			}
+			resp.Header.Set("Wechatpay-Timestamp", timestamp)
+			resp.Header.Set("Wechatpay-Nonce", nonce)
+			resp.Header.Set("Wechatpay-Signature", signature)
+			return resp, nil
+		}).client(),
+	}
+
+	transaction, err := client.QueryTransactionByOutTradeNo(t.Context(), "WX_1_QUERY")
+
+	require.NoError(t, err)
+	require.NotNil(t, transaction)
+	require.Equal(t, "WX_1_QUERY", transaction.OutTradeNo)
+	require.Equal(t, "SUCCESS", transaction.TradeState)
+	require.Equal(t, int64(123), transaction.Amount.Total)
+}
+
+func TestWechatPayOfficialCloseTransactionByOutTradeNo(t *testing.T) {
+	merchantPrivateKey, _ := generateOfficialPaymentTestKey(t)
+	var capturedBody string
+	client := &WechatPayOfficialClient{
+		AppID:             "wx123",
+		MchID:             "1900000109",
+		CertificateSerial: "merchant-serial",
+		PrivateKey:        merchantPrivateKey,
+		PlatformPublicKey: "unused",
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, "/v3/pay/transactions/out-trade-no/WX_1_CLOSE/close", req.URL.Path)
+			body, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			capturedBody = string(body)
+			require.Contains(t, req.Header.Get("Authorization"), `mchid="1900000109"`)
+			return &http.Response{
+				StatusCode: http.StatusNoContent,
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+			}, nil
+		}).client(),
+	}
+
+	err := client.CloseTransactionByOutTradeNo(t.Context(), "WX_1_CLOSE")
+
+	require.NoError(t, err)
+	require.JSONEq(t, `{"mchid":"1900000109"}`, capturedBody)
+}
+
+func TestWechatPayOfficialRefundBuildsV3Request(t *testing.T) {
+	merchantPrivateKey, _ := generateOfficialPaymentTestKey(t)
+	platformKey, platformPublicKey := generateOfficialPaymentTestKeyPair(t)
+	responseBody := []byte(`{"refund_id":"503000000000000000","out_refund_no":"WX_1_RF_1","out_trade_no":"WX_1_REFUND","transaction_id":"420000000000000000","status":"PROCESSING","amount":{"refund":123,"total":1000,"currency":"CNY"}}`)
+	timestamp := "1710000002"
+	nonce := "refund-response-nonce"
+	signature := signWechatPayHeaderMessage(t, platformKey, timestamp, nonce, responseBody)
+	var capturedBody string
+	client := &WechatPayOfficialClient{
+		AppID:             "wx123",
+		MchID:             "1900000109",
+		CertificateSerial: "merchant-serial",
+		PrivateKey:        merchantPrivateKey,
+		PlatformPublicKey: platformPublicKey,
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, "/v3/refund/domestic/refunds", req.URL.Path)
+			body, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			capturedBody = string(body)
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body:       io.NopCloser(bytes.NewReader(responseBody)),
+			}
+			resp.Header.Set("Wechatpay-Timestamp", timestamp)
+			resp.Header.Set("Wechatpay-Nonce", nonce)
+			resp.Header.Set("Wechatpay-Signature", signature)
+			return resp, nil
+		}).client(),
+	}
+
+	refund, err := client.Refund(t.Context(), WechatPayOfficialRefundParams{
+		OutTradeNo:  "WX_1_REFUND",
+		OutRefundNo: "WX_1_RF_1",
+		Reason:      "user request",
+		NotifyURL:   "https://example.com/api/wechat-pay/official/notify",
+		RefundFen:   123,
+		TotalFen:    1000,
+	})
+
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"out_trade_no":"WX_1_REFUND",
+		"out_refund_no":"WX_1_RF_1",
+		"reason":"user request",
+		"notify_url":"https://example.com/api/wechat-pay/official/notify",
+		"amount":{"refund":123,"total":1000,"currency":"CNY"}
+	}`, capturedBody)
+	require.Equal(t, "WX_1_RF_1", refund.OutRefundNo)
+	require.Equal(t, "PROCESSING", refund.EffectiveStatus())
+	require.Equal(t, int64(123), refund.Amount.Refund)
+}
+
+func TestWechatPayOfficialQueryRefundByOutRefundNo(t *testing.T) {
+	merchantPrivateKey, _ := generateOfficialPaymentTestKey(t)
+	platformKey, platformPublicKey := generateOfficialPaymentTestKeyPair(t)
+	responseBody := []byte(`{"refund_id":"503000000000000000","out_refund_no":"WX_1_RF_QUERY","out_trade_no":"WX_1_REFUND","status":"SUCCESS","amount":{"refund":123,"total":1000,"currency":"CNY"}}`)
+	timestamp := "1710000003"
+	nonce := "refund-query-response-nonce"
+	signature := signWechatPayHeaderMessage(t, platformKey, timestamp, nonce, responseBody)
+	client := &WechatPayOfficialClient{
+		AppID:             "wx123",
+		MchID:             "1900000109",
+		CertificateSerial: "merchant-serial",
+		PrivateKey:        merchantPrivateKey,
+		PlatformPublicKey: platformPublicKey,
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/refund/domestic/refunds/WX_1_RF_QUERY", req.URL.Path)
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body:       io.NopCloser(bytes.NewReader(responseBody)),
+			}
+			resp.Header.Set("Wechatpay-Timestamp", timestamp)
+			resp.Header.Set("Wechatpay-Nonce", nonce)
+			resp.Header.Set("Wechatpay-Signature", signature)
+			return resp, nil
+		}).client(),
+	}
+
+	refund, err := client.QueryRefundByOutRefundNo(t.Context(), "WX_1_RF_QUERY")
+
+	require.NoError(t, err)
+	require.Equal(t, "WX_1_RF_QUERY", refund.OutRefundNo)
+	require.Equal(t, "SUCCESS", refund.EffectiveStatus())
+}
+
 func TestDecodeWechatPayOfficialNotifyDecryptsTransaction(t *testing.T) {
 	apiV3Key := "12345678901234567890123456789012"
 	nonce := "nonce1234567"
@@ -461,6 +651,47 @@ func TestDecodeWechatPayOfficialNotifyDecryptsTransaction(t *testing.T) {
 	require.Equal(t, "WX-1", transaction.OutTradeNo)
 	require.Equal(t, "SUCCESS", transaction.TradeState)
 	require.Equal(t, int64(123), transaction.Amount.Total)
+}
+
+func TestDecodeWechatPayOfficialRefundNotifyAcceptsClosedEvent(t *testing.T) {
+	apiV3Key := "12345678901234567890123456789012"
+	nonce := "refundnonce1"
+	associatedData := "refund"
+	plain := []byte(`{"mchid":"1900000109","out_trade_no":"WX-REFUND-CLOSED","out_refund_no":"WX-REFUND-CLOSED-RF-1","refund_id":"503000000000000001","refund_status":"CLOSED","amount":{"refund":123,"total":1000,"currency":"CNY"}}`)
+
+	block, err := aes.NewCipher([]byte(apiV3Key))
+	require.NoError(t, err)
+	aead, err := cipher.NewGCM(block)
+	require.NoError(t, err)
+	ciphertext := aead.Seal(nil, []byte(nonce), plain, []byte(associatedData))
+
+	body, err := common.Marshal(map[string]any{
+		"id":            "refund-notify-id",
+		"create_time":   "2026-05-15T12:00:00+08:00",
+		"event_type":    "REFUND.CLOSED",
+		"resource_type": "encrypt-resource",
+		"summary":       "退款关闭",
+		"resource": map[string]any{
+			"original_type":   "refund",
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      base64.StdEncoding.EncodeToString(ciphertext),
+			"associated_data": associatedData,
+			"nonce":           nonce,
+		},
+	})
+	require.NoError(t, err)
+
+	envelope, transaction, err := DecodeWechatPayOfficialNotify(body, apiV3Key)
+	require.NoError(t, err)
+	require.Equal(t, "REFUND.CLOSED", envelope.EventType)
+	require.Equal(t, "refund", envelope.Resource.OriginalType)
+	require.Empty(t, transaction.OutTradeNo)
+
+	refundEnvelope, refund, err := DecodeWechatPayOfficialRefundNotify(body, apiV3Key)
+	require.NoError(t, err)
+	require.Equal(t, "REFUND.CLOSED", refundEnvelope.EventType)
+	require.Equal(t, "WX-REFUND-CLOSED-RF-1", refund.OutRefundNo)
+	require.Equal(t, "REFUNDCLOSE", refund.EffectiveStatus())
 }
 
 func TestNormalizeRSAKeyAcceptsBase64DER(t *testing.T) {

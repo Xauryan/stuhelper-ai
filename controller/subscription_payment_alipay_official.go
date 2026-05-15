@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -26,6 +27,7 @@ type SubscriptionWechatPayOfficialPayRequest struct {
 }
 
 var wechatPayOfficialPrepayHTTPClient *http.Client
+var wechatPayOfficialQueryHTTPClient *http.Client
 
 func SubscriptionRequestAlipayOfficialPay(c *gin.Context) {
 	if !isAlipayOfficialTopUpEnabled() {
@@ -86,6 +88,10 @@ func SubscriptionRequestAlipayOfficialPay(c *gin.Context) {
 	}
 	if err := order.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方订阅支付 创建订单失败 user_id=%d plan_id=%d trade_no=%s error=%q", userId, plan.Id, tradeNo, err.Error()))
+		if errors.Is(err, model.ErrSubscriptionPurchaseLimit) {
+			common.ApiErrorMsg(c, err.Error())
+			return
+		}
 		common.ApiErrorMsg(c, "创建订单失败")
 		return
 	}
@@ -206,6 +212,10 @@ func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
 	}
 	if err := order.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("微信支付官方订阅支付 创建订单失败 user_id=%d plan_id=%d trade_no=%s error=%q", userId, plan.Id, tradeNo, err.Error()))
+		if errors.Is(err, model.ErrSubscriptionPurchaseLimit) {
+			common.ApiErrorMsg(c, err.Error())
+			return
+		}
 		common.ApiErrorMsg(c, "创建订单失败")
 		return
 	}
@@ -229,7 +239,7 @@ func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
 		PlatformPublicKey: setting.WechatPayOfficialPlatformPublicKey,
 		HTTPClient:        wechatPayOfficialPrepayHTTPClient,
 	}
-	result, err := client.Prepay(c.Request.Context(), service.WechatPayOfficialPrepayParams{
+	prepay, err := prepayWechatPayOfficialWithNativeFallback(c.Request.Context(), client, service.WechatPayOfficialPrepayParams{
 		Description: fmt.Sprintf("StuHelper AI 订阅 %s", plan.Title),
 		OutTradeNo:  tradeNo,
 		NotifyURL:   notifyURL,
@@ -246,17 +256,20 @@ func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方订阅支付 订单创建成功 user_id=%d plan_id=%d trade_no=%s money=%.2f scene=%s", userId, plan.Id, tradeNo, payMoney, scene))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方订阅支付 订单创建成功 user_id=%d plan_id=%d trade_no=%s money=%.2f scene=%s", userId, plan.Id, tradeNo, payMoney, prepay.Scene))
 	data := gin.H{
 		"order_id": tradeNo,
-		"scene":    scene,
+		"scene":    prepay.Scene,
 	}
-	if scene == officialPaymentSceneH5 {
+	if prepay.Scene == officialPaymentSceneH5 {
 		data["payment_type"] = "redirect"
-		data["payment_url"] = result.H5URL
+		data["payment_url"] = prepay.Result.H5URL
 	} else {
 		data["payment_type"] = "qrcode"
-		data["code_url"] = result.CodeURL
+		data["code_url"] = prepay.Result.CodeURL
+		if scene == officialPaymentSceneH5 {
+			data["fallback"] = "native"
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": data})
 }

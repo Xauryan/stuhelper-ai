@@ -25,6 +25,7 @@ import {
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
 import { getSubscriptionsColumns } from './SubscriptionsColumnDefs';
+import { isAuditOnlyAdmin } from '../../../helpers';
 
 const SubscriptionsTable = (subscriptionsData) => {
   const {
@@ -36,6 +37,7 @@ const SubscriptionsTable = (subscriptionsData) => {
     t,
     enableEpay,
   } = subscriptionsData;
+  const canWrite = !isAuditOnlyAdmin();
 
   const columns = useMemo(() => {
     return getSubscriptionsColumns({
@@ -43,8 +45,9 @@ const SubscriptionsTable = (subscriptionsData) => {
       openEdit,
       setPlanEnabled,
       enableEpay,
+      canWrite,
     });
-  }, [t, openEdit, setPlanEnabled, enableEpay]);
+  }, [t, openEdit, setPlanEnabled, enableEpay, canWrite]);
 
   const tableColumns = useMemo(() => {
     return compactMode

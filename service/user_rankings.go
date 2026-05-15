@@ -18,8 +18,6 @@ type UserRankingsResponse struct {
 
 type RankedUser struct {
 	Rank       int    `json:"rank"`
-	UserId     int    `json:"user_id"`
-	Username   string `json:"username"`
 	Display    string `json:"display"`
 	TotalQuota int64  `json:"total_quota"`
 }
@@ -82,8 +80,6 @@ func buildRankedUsers(rows []model.UserRankingTotal) []RankedUser {
 	for idx, row := range rows {
 		result = append(result, RankedUser{
 			Rank:       idx + 1,
-			UserId:     row.UserId,
-			Username:   row.Username,
 			Display:    maskRankingUsername(row.Username, row.UserId),
 			TotalQuota: row.TotalQuota,
 		})

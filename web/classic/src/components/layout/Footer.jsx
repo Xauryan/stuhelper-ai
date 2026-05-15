@@ -161,12 +161,12 @@ const FooterBar = () => {
                 </p>
                 <div className='flex flex-col gap-4'>
                   <a
-                    href='https://github.com/songquanpeng/one-api'
+                    href='https://github.com/Xauryan/stuhelper-ai'
                     target='_blank'
                     rel='noopener noreferrer'
                     className='!text-semi-color-text-1'
                   >
-                    One API
+                    StuHelper AI
                   </a>
                   <a
                     href='https://github.com/novicezk/midjourney-proxy'
@@ -175,14 +175,6 @@ const FooterBar = () => {
                     className='!text-semi-color-text-1'
                   >
                     Midjourney-Proxy
-                  </a>
-                  <a
-                    href='https://github.com/Calcium-Ion/new-api-key-tool'
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    className='!text-semi-color-text-1'
-                  >
-                    new-api-key-tool
                   </a>
                 </div>
               </div>

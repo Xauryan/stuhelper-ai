@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func insertSubscriptionPlanForModelLimitTest(t *testing.T, id int, totalAmount int64, modelLimitsEnabled bool, modelLimits string) *SubscriptionPlan {
@@ -103,4 +105,124 @@ func TestPreConsumeUserSubscriptionReturnsModelLimitErrorBeforeQuotaError(t *tes
 	require.Error(t, err)
 	assert.Nil(t, result)
 	assert.True(t, strings.Contains(err.Error(), "no subscription allows model gemini-1.5-pro"), err.Error())
+}
+
+func TestRefundSubscriptionPreConsumeRefundsQuotaAndMarksRecordOnce(t *testing.T) {
+	truncateTables(t)
+
+	now := time.Now().Unix()
+	insertSubscriptionPlanForModelLimitTest(t, 1004, 100, false, "")
+	insertUserSubscriptionForModelLimitTest(t, 2004, 3004, 1004, 100, 30, now+3600)
+	require.NoError(t, DB.Create(&SubscriptionPreConsumeRecord{
+		RequestId:          "refund-same-tx",
+		UserId:             3004,
+		UserSubscriptionId: 2004,
+		PreConsumed:        30,
+		Status:             "consumed",
+	}).Error)
+
+	err := RefundSubscriptionPreConsume("refund-same-tx")
+
+	require.NoError(t, err)
+
+	var sub UserSubscription
+	require.NoError(t, DB.First(&sub, 2004).Error)
+	assert.EqualValues(t, 0, sub.AmountUsed)
+
+	var record SubscriptionPreConsumeRecord
+	require.NoError(t, DB.Where("request_id = ?", "refund-same-tx").First(&record).Error)
+	assert.Equal(t, "refunded", record.Status)
+
+	require.NoError(t, RefundSubscriptionPreConsume("refund-same-tx"))
+	require.NoError(t, DB.First(&sub, 2004).Error)
+	assert.EqualValues(t, 0, sub.AmountUsed)
+}
+
+func TestCreateUserSubscriptionFromPlanTxLocksUserBeforeMaxPurchaseCheck(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, DB.Create(&User{Id: 3005, Username: "max-purchase-lock-user", Status: common.UserStatusEnabled}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1005, 100, false, "")
+	plan.MaxPurchasePerUser = 1
+
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		_, err := CreateUserSubscriptionFromPlanTx(tx, 3005, plan, "order")
+		return err
+	}))
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		_, err := CreateUserSubscriptionFromPlanTx(tx, 3005, plan, "order")
+		return err
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "已达到该套餐购买上限")
+}
+
+func TestSubscriptionOrderInsertCountsPendingOrdersAgainstMaxPurchase(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, DB.Create(&User{Id: 3006, Username: "max-purchase-pending-user", Status: common.UserStatusEnabled}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1006, 100, false, "")
+	plan.MaxPurchasePerUser = 1
+	require.NoError(t, DB.Save(plan).Error)
+
+	first := &SubscriptionOrder{
+		UserId:          3006,
+		PlanId:          plan.Id,
+		Money:           9.99,
+		TradeNo:         "pending-max-purchase-1",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusPending,
+		CreateTime:      common.GetTimestamp(),
+	}
+	require.NoError(t, first.Insert())
+
+	second := &SubscriptionOrder{
+		UserId:          3006,
+		PlanId:          plan.Id,
+		Money:           9.99,
+		TradeNo:         "pending-max-purchase-2",
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		Status:          common.TopUpStatusPending,
+		CreateTime:      common.GetTimestamp(),
+	}
+	err := second.Insert()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "已达到该套餐购买上限")
+}
+
+func TestSubscriptionOrderInsertAllowsExpiredPendingOrderReplacement(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, DB.Create(&User{Id: 3007, Username: "max-purchase-expired-user", Status: common.UserStatusEnabled}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1007, 100, false, "")
+	plan.MaxPurchasePerUser = 1
+	require.NoError(t, DB.Save(plan).Error)
+	require.NoError(t, DB.Create(&SubscriptionOrder{
+		UserId:          3007,
+		PlanId:          plan.Id,
+		Money:           9.99,
+		TradeNo:         "expired-max-purchase",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusExpired,
+		CreateTime:      common.GetTimestamp(),
+	}).Error)
+
+	order := &SubscriptionOrder{
+		UserId:          3007,
+		PlanId:          plan.Id,
+		Money:           9.99,
+		TradeNo:         "replacement-max-purchase",
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		Status:          common.TopUpStatusPending,
+		CreateTime:      common.GetTimestamp(),
+	}
+
+	require.NoError(t, order.Insert())
 }

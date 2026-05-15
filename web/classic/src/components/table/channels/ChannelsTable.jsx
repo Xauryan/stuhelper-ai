@@ -25,6 +25,7 @@ import {
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
 import { getChannelsColumns } from './ChannelsColumnDefs';
+import { isAuditOnlyAdmin } from '../../../helpers';
 
 const ChannelsTable = (channelsData) => {
   const {
@@ -64,6 +65,7 @@ const ChannelsTable = (channelsData) => {
     openUpstreamUpdateModal,
     detectChannelUpstreamUpdates,
   } = channelsData;
+  const canWrite = !isAuditOnlyAdmin();
 
   // Get all columns
   const allColumns = useMemo(() => {
@@ -90,6 +92,7 @@ const ChannelsTable = (channelsData) => {
       setCurrentMultiKeyChannel,
       openUpstreamUpdateModal,
       detectChannelUpstreamUpdates,
+      canWrite,
     });
   }, [
     t,
@@ -114,6 +117,7 @@ const ChannelsTable = (channelsData) => {
     setCurrentMultiKeyChannel,
     openUpstreamUpdateModal,
     detectChannelUpstreamUpdates,
+    canWrite,
   ]);
 
   // Filter columns based on visibility settings
@@ -147,9 +151,9 @@ const ChannelsTable = (channelsData) => {
       }}
       hidePagination={true}
       expandAllRows={false}
-      onRow={handleRow}
+      onRow={canWrite ? handleRow : undefined}
       rowSelection={
-        enableBatchDelete
+        canWrite && enableBatchDelete
           ? {
               onChange: (selectedRowKeys, selectedRows) => {
                 setSelectedChannels(selectedRows);

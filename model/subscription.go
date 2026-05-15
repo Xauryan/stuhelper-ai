@@ -11,6 +11,7 @@ import (
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/pkg/cachex"
 	"github.com/samber/hot"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -35,6 +36,7 @@ const (
 var (
 	ErrSubscriptionOrderNotFound      = errors.New("subscription order not found")
 	ErrSubscriptionOrderStatusInvalid = errors.New("subscription order status invalid")
+	ErrSubscriptionPurchaseLimit      = errors.New("已达到该套餐购买上限")
 )
 
 const (
@@ -283,6 +285,9 @@ func (o *SubscriptionOrder) Insert() error {
 		o.Status = common.TopUpStatusPending
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := reserveSubscriptionPurchaseSlotTx(tx, o); err != nil {
+			return err
+		}
 		if err := tx.Create(o).Error; err != nil {
 			return err
 		}
@@ -461,6 +466,44 @@ func CountUserSubscriptionsByPlan(userId int, planId int) (int64, error) {
 	return count, nil
 }
 
+func reserveSubscriptionPurchaseSlotTx(tx *gorm.DB, order *SubscriptionOrder) error {
+	if tx == nil || order == nil {
+		return errors.New("invalid subscription order")
+	}
+	if order.UserId <= 0 || order.PlanId <= 0 {
+		return errors.New("invalid subscription order")
+	}
+	if order.Status != common.TopUpStatusPending && order.Status != common.TopUpStatusSuccess {
+		return nil
+	}
+	if err := lockSubscriptionPurchaseUserTx(tx, order.UserId); err != nil {
+		return err
+	}
+	plan, err := getSubscriptionPlanByIdTx(tx, order.PlanId)
+	if err != nil {
+		return err
+	}
+	if plan.MaxPurchasePerUser <= 0 {
+		return nil
+	}
+	var subscriptionCount int64
+	if err := tx.Model(&UserSubscription{}).
+		Where("user_id = ? AND plan_id = ?", order.UserId, order.PlanId).
+		Count(&subscriptionCount).Error; err != nil {
+		return err
+	}
+	var pendingOrderCount int64
+	if err := tx.Model(&SubscriptionOrder{}).
+		Where("user_id = ? AND plan_id = ? AND status = ?", order.UserId, order.PlanId, common.TopUpStatusPending).
+		Count(&pendingOrderCount).Error; err != nil {
+		return err
+	}
+	if subscriptionCount+pendingOrderCount >= int64(plan.MaxPurchasePerUser) {
+		return ErrSubscriptionPurchaseLimit
+	}
+	return nil
+}
+
 func getUserGroupByIdTx(tx *gorm.DB, userId int) (string, error) {
 	if userId <= 0 {
 		return "", errors.New("invalid userId")
@@ -520,6 +563,9 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 	if userId <= 0 {
 		return nil, errors.New("invalid user id")
 	}
+	if err := lockSubscriptionPurchaseUserTx(tx, userId); err != nil {
+		return nil, err
+	}
 	if plan.MaxPurchasePerUser > 0 {
 		var count int64
 		if err := tx.Model(&UserSubscription{}).
@@ -528,7 +574,7 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 			return nil, err
 		}
 		if count >= int64(plan.MaxPurchasePerUser) {
-			return nil, errors.New("已达到该套餐购买上限")
+			return nil, ErrSubscriptionPurchaseLimit
 		}
 	}
 	nowUnix := getDBTimestampTx(tx)
@@ -744,6 +790,124 @@ func ExpireSubscriptionOrder(tradeNo string, expectedPaymentProvider string) err
 		}
 		return upsertSubscriptionTopUpTx(tx, &order)
 	})
+}
+
+func RefundSubscriptionOrder(tradeNo string, expectedPaymentProvider string, refundAmount float64, fullRefund bool) error {
+	tradeNo = strings.TrimSpace(tradeNo)
+	if tradeNo == "" {
+		return errors.New("tradeNo is empty")
+	}
+	refundMoney := decimal.NewFromFloat(refundAmount).Round(2)
+	if !refundMoney.IsPositive() {
+		return errors.New("退款金额必须大于 0")
+	}
+	return SyncSubscriptionOrderRefundState(tradeNo, expectedPaymentProvider, fullRefund)
+}
+
+func SyncSubscriptionOrderRefundState(tradeNo string, expectedPaymentProvider string, fullRefund bool) error {
+	tradeNo = strings.TrimSpace(tradeNo)
+	if tradeNo == "" {
+		return errors.New("tradeNo is empty")
+	}
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+	now := common.GetTimestamp()
+	cacheGroup := ""
+	cacheUserId := 0
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var order SubscriptionOrder
+		if err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(&order).Error; err != nil {
+			return ErrSubscriptionOrderNotFound
+		}
+		if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {
+			return ErrPaymentMethodMismatch
+		}
+		if order.Status != common.TopUpStatusSuccess &&
+			order.Status != common.TopUpStatusPartialRefunded &&
+			order.Status != common.TopUpStatusRefunded {
+			return ErrSubscriptionOrderStatusInvalid
+		}
+		orderMoney := decimal.NewFromFloat(order.Money).Round(2)
+		topUp := &TopUp{}
+		if err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
+			return err
+		}
+		refundedMoney := decimal.NewFromFloat(topUp.RefundedMoney).Round(2)
+		if refundedMoney.GreaterThan(orderMoney) {
+			return errors.New("退款金额超过可退金额")
+		}
+		nextStatus := common.TopUpStatusSuccess
+		if refundedMoney.IsPositive() {
+			nextStatus = common.TopUpStatusPartialRefunded
+		}
+		if refundedMoney.IsPositive() && (fullRefund || !refundedMoney.LessThan(orderMoney)) {
+			nextStatus = common.TopUpStatusRefunded
+		}
+		order.Status = nextStatus
+		if nextStatus != common.TopUpStatusSuccess {
+			order.CompleteTime = now
+		}
+		if err := tx.Save(&order).Error; err != nil {
+			return err
+		}
+		topUp.Status = nextStatus
+		topUp.RefundedMoney = refundedMoney.InexactFloat64()
+		topUp.RefundedQuota = 0
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+
+		if err := setReferralCommissionRefundTargetTx(tx, ReferralCommissionSourceSubscription, order.Id, refundedMoney, orderMoney); err != nil {
+			return err
+		}
+
+		sub, err := findRefundableUserSubscriptionForOrderTx(tx, order)
+		if err != nil {
+			return err
+		}
+		if sub != nil {
+			switch {
+			case nextStatus == common.TopUpStatusRefunded:
+				if err := tx.Model(&UserSubscription{}).
+					Where("id = ?", sub.Id).
+					Updates(map[string]interface{}{
+						"status":     "cancelled",
+						"updated_at": now,
+					}).Error; err != nil {
+					return err
+				}
+				target, err := downgradeUserGroupForSubscriptionTx(tx, sub, now)
+				if err != nil {
+					return err
+				}
+				cacheGroup = target
+				cacheUserId = sub.UserId
+			case nextStatus == common.TopUpStatusSuccess && sub.Status == "cancelled":
+				if err := tx.Model(&UserSubscription{}).
+					Where("id = ?", sub.Id).
+					Updates(map[string]interface{}{
+						"status":     "active",
+						"updated_at": now,
+					}).Error; err != nil {
+					return err
+				}
+				if strings.TrimSpace(sub.UpgradeGroup) != "" {
+					cacheGroup = strings.TrimSpace(sub.UpgradeGroup)
+					cacheUserId = sub.UserId
+				}
+			}
+		}
+		if nextStatus == common.TopUpStatusRefunded {
+			return reverseInviterRewardForFullRefundTx(tx, order.UserId)
+		}
+		return nil
+	})
+	if cacheGroup != "" && cacheUserId > 0 {
+		_ = UpdateUserGroupCache(cacheUserId, cacheGroup)
+	}
+	return nil
 }
 
 // Admin bind (no payment). Creates a UserSubscription from a plan.
@@ -1204,7 +1368,7 @@ func RefundSubscriptionPreConsume(requestId string) error {
 			record.Status = "refunded"
 			return tx.Save(&record).Error
 		}
-		if err := PostConsumeUserSubscriptionDelta(record.UserSubscriptionId, -record.PreConsumed); err != nil {
+		if err := postConsumeUserSubscriptionDeltaTx(tx, record.UserSubscriptionId, -record.PreConsumed); err != nil {
 			return err
 		}
 		record.Status = "refunded"
@@ -1303,20 +1467,47 @@ func PostConsumeUserSubscriptionDelta(userSubscriptionId int, delta int64) error
 		return nil
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
-		var sub UserSubscription
-		if err := withRowLock(tx).
-			Where("id = ?", userSubscriptionId).
-			First(&sub).Error; err != nil {
-			return err
-		}
-		newUsed := sub.AmountUsed + delta
-		if newUsed < 0 {
-			newUsed = 0
-		}
-		if sub.AmountTotal > 0 && newUsed > sub.AmountTotal {
-			return fmt.Errorf("subscription used exceeds total, used=%d total=%d", newUsed, sub.AmountTotal)
-		}
-		sub.AmountUsed = newUsed
-		return tx.Save(&sub).Error
+		return postConsumeUserSubscriptionDeltaTx(tx, userSubscriptionId, delta)
 	})
+}
+
+func postConsumeUserSubscriptionDeltaTx(tx *gorm.DB, userSubscriptionId int, delta int64) error {
+	if tx == nil {
+		return errors.New("tx is nil")
+	}
+	if userSubscriptionId <= 0 {
+		return errors.New("invalid userSubscriptionId")
+	}
+	if delta == 0 {
+		return nil
+	}
+	var sub UserSubscription
+	if err := withRowLock(tx).
+		Where("id = ?", userSubscriptionId).
+		First(&sub).Error; err != nil {
+		return err
+	}
+	newUsed := sub.AmountUsed + delta
+	if newUsed < 0 {
+		newUsed = 0
+	}
+	if sub.AmountTotal > 0 && newUsed > sub.AmountTotal {
+		return fmt.Errorf("subscription used exceeds total, used=%d total=%d", newUsed, sub.AmountTotal)
+	}
+	sub.AmountUsed = newUsed
+	return tx.Save(&sub).Error
+}
+
+func lockSubscriptionPurchaseUserTx(tx *gorm.DB, userId int) error {
+	if tx == nil {
+		return errors.New("tx is nil")
+	}
+	if userId <= 0 {
+		return errors.New("invalid userId")
+	}
+	var user User
+	return withRowLock(tx).
+		Select("id").
+		Where("id = ?", userId).
+		First(&user).Error
 }

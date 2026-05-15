@@ -280,8 +280,9 @@ export const getModelsColumns = ({
   setShowEdit,
   refresh,
   vendorMap,
+  canWrite = true,
 }) => {
-  return [
+  const columns = [
     {
       title: t('图标'),
       dataIndex: 'icon',
@@ -377,4 +378,10 @@ export const getModelsColumns = ({
         ),
     },
   ];
+
+  if (!canWrite) {
+    return columns.filter((column) => column.dataIndex !== 'operate');
+  }
+
+  return columns;
 };

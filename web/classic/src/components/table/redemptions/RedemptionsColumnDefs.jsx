@@ -86,8 +86,9 @@ export const getRedemptionsColumns = ({
   redemptions,
   activePage,
   showDeleteRedemptionModal,
+  canWrite = true,
 }) => {
-  return [
+  const columns = [
     {
       title: t('ID'),
       dataIndex: 'id',
@@ -219,4 +220,10 @@ export const getRedemptionsColumns = ({
       },
     },
   ];
+
+  if (!canWrite) {
+    return columns.filter((column) => column.dataIndex !== 'operate');
+  }
+
+  return columns;
 };

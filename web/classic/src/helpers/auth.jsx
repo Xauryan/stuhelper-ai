@@ -20,6 +20,7 @@ For commercial licensing, please contact support@xauryan.com
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { history } from './history';
+import { USER_ROLES } from '../constants/roles';
 
 export function authHeader() {
   // return authorization header with jwt token
@@ -50,13 +51,25 @@ function PrivateRoute({ children }) {
 }
 
 export function AdminRoute({ children }) {
+  return <RoleRoute minRole={USER_ROLES.ADMIN}>{children}</RoleRoute>;
+}
+
+export function AuditAdminRoute({ children }) {
+  return <RoleRoute minRole={USER_ROLES.AUDIT_ADMIN}>{children}</RoleRoute>;
+}
+
+export function RootRoute({ children }) {
+  return <RoleRoute minRole={USER_ROLES.ROOT}>{children}</RoleRoute>;
+}
+
+function RoleRoute({ children, minRole }) {
   const raw = localStorage.getItem('user');
   if (!raw) {
     return <Navigate to='/login' state={{ from: history.location }} />;
   }
   try {
     const user = JSON.parse(raw);
-    if (user && typeof user.role === 'number' && user.role >= 10) {
+    if (user && typeof user.role === 'number' && user.role >= minRole) {
       return children;
     }
   } catch (e) {

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -93,6 +94,10 @@ func SubscriptionRequestCreemPay(c *gin.Context) {
 		Status:          common.TopUpStatusPending,
 	}
 	if err := order.Insert(); err != nil {
+		if errors.Is(err, model.ErrSubscriptionPurchaseLimit) {
+			common.ApiErrorMsg(c, err.Error())
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
 		return
 	}

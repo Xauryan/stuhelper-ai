@@ -40,6 +40,11 @@ import InvitationCard from './InvitationCard';
 import TransferModal from './modals/TransferModal';
 import PaymentConfirmModal from './modals/PaymentConfirmModal';
 import TopupHistoryModal from './modals/TopupHistoryModal';
+import {
+  getOfficialWechatStatus,
+  getTopupStatusFromPage,
+  getWechatOfficialQrPaymentHint,
+} from './wechatOfficialPaymentStatus.mjs';
 
 const TopUp = () => {
   const { t } = useTranslation();
@@ -83,6 +88,8 @@ const TopUp = () => {
   const [wechatQrOpen, setWechatQrOpen] = useState(false);
   const [wechatQrCodeUrl, setWechatQrCodeUrl] = useState('');
   const [wechatQrOrderId, setWechatQrOrderId] = useState('');
+  const [wechatQrFallback, setWechatQrFallback] = useState('');
+  const [wechatQrChecking, setWechatQrChecking] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
@@ -93,6 +100,7 @@ const TopUp = () => {
   const [payMethods, setPayMethods] = useState([]);
 
   const affFetchedRef = useRef(false);
+  const wechatQrPollTimerRef = useRef(null);
 
   // 邀请相关状态
   const [affLink, setAffLink] = useState('');
@@ -595,10 +603,65 @@ const TopUp = () => {
     if (data?.payment_type === 'qrcode' && data?.code_url) {
       setWechatQrCodeUrl(data.code_url);
       setWechatQrOrderId(data.order_id || '');
+      setWechatQrFallback(data.fallback || '');
       setWechatQrOpen(true);
       return;
     }
     showError(t('支付请求失败'));
+  };
+
+  const closeWechatQrModal = () => {
+    setWechatQrOpen(false);
+    setWechatQrCodeUrl('');
+    setWechatQrOrderId('');
+    setWechatQrFallback('');
+    setWechatQrChecking(false);
+  };
+
+  const checkWechatQrOrderStatus = async (orderId) => {
+    if (!orderId) {
+      return false;
+    }
+    setWechatQrChecking(true);
+    try {
+      const officialRes = await API.post(
+        '/api/user/wechat-pay/official/status',
+        {
+          trade_no: orderId,
+        },
+      );
+      let status = getOfficialWechatStatus(officialRes?.data);
+      if (!status) {
+        const res = await API.get('/api/user/topup/self', {
+          params: {
+            p: 1,
+            page_size: 1,
+            keyword: orderId,
+          },
+        });
+        status = getTopupStatusFromPage(res?.data, orderId);
+      }
+      if (status === 'success') {
+        showSuccess(t('支付成功'));
+        closeWechatQrModal();
+        getUserQuota();
+        return true;
+      }
+      if (
+        status === 'failed' ||
+        status === 'expired' ||
+        status === 'refunded'
+      ) {
+        showError(t('订单未完成，请重新发起支付'));
+        closeWechatQrModal();
+        return true;
+      }
+    } catch (e) {
+      // 轮询失败时保持二维码，等待下一次查询。
+    } finally {
+      setWechatQrChecking(false);
+    }
+    return false;
   };
 
   const getWaffoPancakeAmount = async (value) => {
@@ -943,6 +1006,41 @@ const TopUp = () => {
   }, []);
 
   useEffect(() => {
+    if (!wechatQrOpen || !wechatQrOrderId) {
+      if (wechatQrPollTimerRef.current) {
+        clearInterval(wechatQrPollTimerRef.current);
+        wechatQrPollTimerRef.current = null;
+      }
+      return;
+    }
+
+    let stopped = false;
+    const poll = async () => {
+      const done = await checkWechatQrOrderStatus(wechatQrOrderId);
+      if (done && wechatQrPollTimerRef.current) {
+        clearInterval(wechatQrPollTimerRef.current);
+        wechatQrPollTimerRef.current = null;
+        stopped = true;
+      }
+    };
+
+    poll();
+    wechatQrPollTimerRef.current = setInterval(() => {
+      if (!stopped) {
+        poll();
+      }
+    }, 3000);
+
+    return () => {
+      stopped = true;
+      if (wechatQrPollTimerRef.current) {
+        clearInterval(wechatQrPollTimerRef.current);
+        wechatQrPollTimerRef.current = null;
+      }
+    };
+  }, [wechatQrOpen, wechatQrOrderId]);
+
+  useEffect(() => {
     // 始终获取最新用户数据，确保余额等统计信息准确
     getUserQuota().then();
     setTransferAmount(getQuotaPerUnit());
@@ -1112,7 +1210,7 @@ const TopUp = () => {
       <Modal
         title={t('微信支付扫码')}
         visible={wechatQrOpen}
-        onCancel={() => setWechatQrOpen(false)}
+        onCancel={closeWechatQrModal}
         footer={null}
         size='small'
         centered
@@ -1122,7 +1220,10 @@ const TopUp = () => {
             <QRCodeSVG value={wechatQrCodeUrl} size={220} level='M' />
           )}
           <div className='text-sm text-gray-500 text-center'>
-            {t('请使用微信扫码完成支付')}
+            {t(getWechatOfficialQrPaymentHint(wechatQrFallback))}
+          </div>
+          <div className='text-xs text-gray-400 text-center'>
+            {wechatQrChecking ? t('正在等待支付结果') : t('支付后将自动刷新')}
           </div>
           {wechatQrOrderId && (
             <div className='text-xs text-gray-400 break-all text-center'>

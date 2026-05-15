@@ -133,6 +133,26 @@ const renderPlanTitle = (text, record, t) => {
   );
 };
 
+const renderPlanTitleText = (text, record) => {
+  const subtitle = record?.plan?.subtitle;
+  return (
+    <div style={{ maxWidth: 180 }}>
+      <Text strong ellipsis={{ showTooltip: true }}>
+        {text}
+      </Text>
+      {subtitle && (
+        <Text
+          type='tertiary'
+          ellipsis={{ showTooltip: true }}
+          style={{ display: 'block' }}
+        >
+          {subtitle}
+        </Text>
+      )}
+    </div>
+  );
+};
+
 const renderPrice = (text) => {
   return (
     <Text strong style={{ color: 'var(--semi-color-success)' }}>
@@ -314,8 +334,9 @@ export const getSubscriptionsColumns = ({
   openEdit,
   setPlanEnabled,
   enableEpay,
+  canWrite = true,
 }) => {
-  return [
+  const columns = [
     {
       title: 'ID',
       dataIndex: ['plan', 'id'],
@@ -326,7 +347,10 @@ export const getSubscriptionsColumns = ({
       title: t('套餐'),
       dataIndex: ['plan', 'title'],
       width: 200,
-      render: (text, record) => renderPlanTitle(text, record, t),
+      render: (text, record) =>
+        canWrite
+          ? renderPlanTitle(text, record, t)
+          : renderPlanTitleText(text, record),
     },
     {
       title: t('价格'),
@@ -397,4 +421,10 @@ export const getSubscriptionsColumns = ({
         renderOperations(text, record, { openEdit, setPlanEnabled, t }),
     },
   ];
+
+  if (!canWrite) {
+    return columns.filter((column) => column.dataIndex !== 'operate');
+  }
+
+  return columns;
 };

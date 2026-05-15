@@ -21,7 +21,12 @@ import React, { lazy, Suspense, useContext, useMemo } from 'react';
 import { Route, Routes, useLocation, useParams } from 'react-router-dom';
 import Loading from './components/common/ui/Loading';
 import User from './pages/User';
-import { AuthRedirect, PrivateRoute, AdminRoute } from './helpers';
+import {
+  AuthRedirect,
+  PrivateRoute,
+  AdminRoute,
+  AuditAdminRoute,
+} from './helpers';
 import RegisterForm from './components/auth/RegisterForm';
 import LoginForm from './components/auth/LoginForm';
 import NotFound from './pages/NotFound';
@@ -129,9 +134,9 @@ function App() {
         <Route
           path='/console/models'
           element={
-            <AdminRoute>
+            <AuditAdminRoute>
               <ModelPage />
-            </AdminRoute>
+            </AuditAdminRoute>
           }
         />
         <Route
@@ -145,17 +150,17 @@ function App() {
         <Route
           path='/console/subscription'
           element={
-            <AdminRoute>
+            <AuditAdminRoute>
               <Subscription />
-            </AdminRoute>
+            </AuditAdminRoute>
           }
         />
         <Route
           path='/console/channel'
           element={
-            <AdminRoute>
+            <AuditAdminRoute>
               <Channel />
-            </AdminRoute>
+            </AuditAdminRoute>
           }
         />
         <Route
@@ -177,17 +182,17 @@ function App() {
         <Route
           path='/console/redemption'
           element={
-            <AdminRoute>
+            <AuditAdminRoute>
               <Redemption />
-            </AdminRoute>
+            </AuditAdminRoute>
           }
         />
         <Route
           path='/console/user'
           element={
-            <AdminRoute>
+            <AuditAdminRoute>
               <User />
-            </AdminRoute>
+            </AuditAdminRoute>
           }
         />
         <Route

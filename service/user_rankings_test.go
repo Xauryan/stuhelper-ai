@@ -19,7 +19,6 @@ func TestUserRankingsResponseDoesNotExposeAggregateTotalsOrShare(t *testing.T) {
 
 	require.Len(t, ranked, 2)
 	assert.Equal(t, 1, ranked[0].Rank)
-	assert.Equal(t, 1, ranked[0].UserId)
 	assert.Equal(t, "al***ce", ranked[0].Display)
 
 	data, err := common.Marshal(UserRankingsResponse{
@@ -32,4 +31,8 @@ func TestUserRankingsResponseDoesNotExposeAggregateTotalsOrShare(t *testing.T) {
 	assert.NotContains(t, string(data), "share")
 	assert.NotContains(t, string(data), "consumption_total")
 	assert.NotContains(t, string(data), "recharge_total")
+	assert.NotContains(t, string(data), "user_id")
+	assert.NotContains(t, string(data), "username")
+	assert.NotContains(t, string(data), "alice")
+	assert.NotContains(t, string(data), "bob")
 }
