@@ -104,6 +104,50 @@ func TestCreditReferralCommissionUsesInviterOverrideAndMaxRechargeCap(t *testing
 	assert.Equal(t, int64(1), countReferralCommissionsForTest(t, 11))
 }
 
+func TestCreditReferralCommissionMaxRechargeCapIncludesReversedRows(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 1)
+
+	insertReferralUserForTest(t, 15, "cap-reversed-inviter", 0, nil)
+	insertReferralUserForTest(t, 16, "cap-reversed-invitee", 15, nil)
+	require.NoError(t, DB.Create(&ReferralCommission{
+		InviterId:       15,
+		InviteeId:       16,
+		SourceType:      ReferralCommissionSourceTopUp,
+		SourceId:        251,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RechargeAmount:  0,
+		CommissionQuota: 0,
+		CommissionRate:  10,
+	}).Error)
+
+	credited, err := CreditReferralCommission(16, 10, PaymentMethodStripe, ReferralCommissionSourceTopUp, 252)
+	require.NoError(t, err)
+	assert.False(t, credited)
+	assert.Equal(t, int64(1), countReferralCommissionsForTest(t, 15))
+}
+
+func TestCreditReferralCommissionAssignsMonotonicRechargeSequence(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	insertReferralUserForTest(t, 17, "sequence-inviter", 0, nil)
+	insertReferralUserForTest(t, 18, "sequence-invitee", 17, nil)
+
+	credited, err := CreditReferralCommission(18, 10, PaymentMethodStripe, ReferralCommissionSourceTopUp, 271)
+	require.NoError(t, err)
+	assert.True(t, credited)
+	credited, err = CreditReferralCommission(18, 10, PaymentMethodStripe, ReferralCommissionSourceTopUp, 272)
+	require.NoError(t, err)
+	assert.True(t, credited)
+
+	var commissions []ReferralCommission
+	require.NoError(t, DB.Where("invitee_id = ?", 18).Order("source_id asc").Find(&commissions).Error)
+	require.Len(t, commissions, 2)
+	assert.Equal(t, 1, commissions[0].RechargeSequence)
+	assert.Equal(t, 2, commissions[1].RechargeSequence)
+}
+
 func TestUpdateOptionRejectsInvalidReferralCommissionSettings(t *testing.T) {
 	originalPercent := common.ReferralCommissionPercent
 	originalMaxRecharges := common.ReferralCommissionMaxRecharges

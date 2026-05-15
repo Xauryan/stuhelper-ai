@@ -390,7 +390,8 @@ func migrateLOGDB() error {
 func hasInviterRewardMigrationStateColumns() bool {
 	migrator := DB.Migrator()
 	return migrator.HasColumn(&User{}, "inviter_reward_quota") ||
-		migrator.HasColumn(&User{}, "inviter_reward_unlocked")
+		migrator.HasColumn(&User{}, "inviter_reward_unlocked") ||
+		migrator.HasColumn(&User{}, "inviter_reward_unlocked_by_payment")
 }
 
 func backfillInviterRewardMigrationState(hadMigrationStateColumns bool) error {

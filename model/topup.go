@@ -168,7 +168,7 @@ func CreateOfficialPaymentRefund(params OfficialPaymentRefundCreateParams) (*Top
 	var refund *TopUpRefund
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &TopUp{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", params.TradeNo).First(topUp).Error; err != nil {
+		if err := withRowLock(tx).Where(refCol+" = ?", params.TradeNo).First(topUp).Error; err != nil {
 			return ErrTopUpNotFound
 		}
 		if params.PaymentProvider != "" && topUp.PaymentProvider != params.PaymentProvider {
@@ -225,7 +225,13 @@ func CreateOfficialPaymentRefund(params OfficialPaymentRefundCreateParams) (*Top
 		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota - ?", refundQuota)).Error; err != nil {
 			return err
 		}
-		return reverseTopUpReferralCommissionForRefundTx(tx, topUp.Id, refundAmount, orderMoney)
+		if err := reverseTopUpReferralCommissionForRefundTx(tx, topUp.Id, refundAmount, orderMoney); err != nil {
+			return err
+		}
+		if topUp.Status == common.TopUpStatusRefunded {
+			return reverseInviterRewardForFullRefundTx(tx, topUp.UserId)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -239,7 +245,7 @@ func MarkTopUpRefundSuccess(outRequestNo string, alipayTradeNo string, rawRespon
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
 		refund := &TopUpRefund{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("out_request_no = ?", outRequestNo).First(refund).Error; err != nil {
+		if err := withRowLock(tx).Where("out_request_no = ?", outRequestNo).First(refund).Error; err != nil {
 			return err
 		}
 		if refund.Status == TopUpRefundStatusSuccess {
@@ -262,19 +268,20 @@ func MarkTopUpRefundFailed(outRequestNo string, rawResponse string) error {
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
 		refund := &TopUpRefund{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("out_request_no = ?", outRequestNo).First(refund).Error; err != nil {
+		if err := withRowLock(tx).Where("out_request_no = ?", outRequestNo).First(refund).Error; err != nil {
 			return err
 		}
 		if refund.Status != TopUpRefundStatusPending {
 			return nil
 		}
 		topUp := &TopUp{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", refund.TopUpId).First(topUp).Error; err != nil {
+		if err := withRowLock(tx).Where("id = ?", refund.TopUpId).First(topUp).Error; err != nil {
 			return err
 		}
 		if err := reverseTopUpReferralCommissionForRefundTx(tx, refund.TopUpId, decimal.NewFromFloat(refund.RefundAmount).Neg(), decimal.NewFromFloat(topUp.Money).Round(2)); err != nil {
 			return err
 		}
+		wasFullyRefunded := topUp.Status == common.TopUpStatusRefunded
 		refund.Status = TopUpRefundStatusFailed
 		refund.RawResponse = rawResponse
 		refund.CompleteTime = common.GetTimestamp()
@@ -297,6 +304,11 @@ func MarkTopUpRefundFailed(outRequestNo string, rawResponse string) error {
 		}
 		if err := tx.Save(topUp).Error; err != nil {
 			return err
+		}
+		if wasFullyRefunded && topUp.Status != common.TopUpStatusRefunded {
+			if err := restoreInviterRewardForRefundFailureTx(tx, topUp.UserId); err != nil {
+				return err
+			}
 		}
 		return tx.Model(&User{}).Where("id = ?", refund.UserId).Update("quota", gorm.Expr("quota + ?", refund.RefundQuota)).Error
 	})
@@ -332,37 +344,176 @@ func reverseTopUpReferralCommissionForRefundTx(tx *gorm.DB, topUpId int, refundA
 		return err
 	}
 	for _, commission := range commissions {
-		if commission.InviterId <= 0 || commission.CommissionQuota <= 0 {
-			continue
-		}
 		absoluteRefundAmount := refundAmount.Abs()
-		reverseQuota := decimal.NewFromInt(int64(commission.CommissionQuota)).
-			Mul(absoluteRefundAmount).
-			Div(orderMoney).
-			Round(0).
-			IntPart()
-		if reverseQuota <= 0 {
-			reverseQuota = 1
+		currentRefundedQuota := commission.RefundedCommissionQuota
+		if currentRefundedQuota < 0 {
+			currentRefundedQuota = 0
 		}
-		if reverseQuota > int64(commission.CommissionQuota) {
-			reverseQuota = int64(commission.CommissionQuota)
+		if currentRefundedQuota > commission.CommissionQuota {
+			currentRefundedQuota = commission.CommissionQuota
 		}
-		expr := gorm.Expr("aff_quota - ?", reverseQuota)
-		historyExpr := gorm.Expr("aff_history - ?", reverseQuota)
+		currentRefundedAmount := decimal.NewFromFloat(commission.RefundedRechargeAmount).Round(2)
+		if currentRefundedAmount.IsNegative() {
+			currentRefundedAmount = decimal.Zero
+		}
+
+		nextRefundedAmount := currentRefundedAmount.Add(absoluteRefundAmount)
 		if refundAmount.IsNegative() {
-			expr = gorm.Expr("aff_quota + ?", reverseQuota)
-			historyExpr = gorm.Expr("aff_history + ?", reverseQuota)
+			nextRefundedAmount = currentRefundedAmount.Sub(absoluteRefundAmount)
 		}
-		if err := tx.Model(&User{}).
-			Where("id = ?", commission.InviterId).
+		if nextRefundedAmount.IsNegative() {
+			nextRefundedAmount = decimal.Zero
+		}
+		if nextRefundedAmount.GreaterThan(orderMoney) {
+			nextRefundedAmount = orderMoney
+		}
+
+		targetRefundedQuota := referralCommissionRefundQuotaTarget(commission.CommissionQuota, nextRefundedAmount, orderMoney)
+		quotaDelta := int64(targetRefundedQuota - currentRefundedQuota)
+		if refundAmount.IsPositive() {
+			remainingReversibleQuota := int64(commission.CommissionQuota - currentRefundedQuota)
+			if quotaDelta > remainingReversibleQuota {
+				quotaDelta = remainingReversibleQuota
+			}
+		} else {
+			if quotaDelta < -int64(currentRefundedQuota) {
+				quotaDelta = -int64(currentRefundedQuota)
+			}
+		}
+
+		commissionAmount := decimal.NewFromFloat(commission.RechargeAmount).Round(2)
+		recordedRefundedAmount := nextRefundedAmount
+		if commissionAmount.IsPositive() && recordedRefundedAmount.GreaterThan(commissionAmount) {
+			recordedRefundedAmount = commissionAmount
+		}
+
+		if quotaDelta != 0 && commission.InviterId > 0 {
+			affExpr := gorm.Expr("aff_quota - ?", quotaDelta)
+			historyExpr := gorm.Expr("aff_history - ?", quotaDelta)
+			if quotaDelta < 0 {
+				restoredQuota := -quotaDelta
+				affExpr = gorm.Expr("aff_quota + ?", restoredQuota)
+				historyExpr = gorm.Expr("aff_history + ?", restoredQuota)
+			}
+			if err := tx.Model(&User{}).
+				Where("id = ?", commission.InviterId).
+				Updates(map[string]interface{}{
+					"aff_quota":   affExpr,
+					"aff_history": historyExpr,
+				}).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(&ReferralCommission{}).
+			Where("id = ?", commission.Id).
 			Updates(map[string]interface{}{
-				"aff_quota":   expr,
-				"aff_history": historyExpr,
+				"refunded_commission_quota": targetRefundedQuota,
+				"refunded_recharge_amount":  recordedRefundedAmount.InexactFloat64(),
 			}).Error; err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func referralCommissionRefundQuotaTarget(commissionQuota int, refundedAmount decimal.Decimal, orderMoney decimal.Decimal) int {
+	if commissionQuota <= 0 || !refundedAmount.IsPositive() || !orderMoney.IsPositive() {
+		return 0
+	}
+	if !refundedAmount.LessThan(orderMoney) {
+		return commissionQuota
+	}
+	target := decimal.NewFromInt(int64(commissionQuota)).
+		Mul(refundedAmount).
+		Div(orderMoney).
+		Round(0).
+		IntPart()
+	if target < 0 {
+		return 0
+	}
+	if target > int64(commissionQuota) {
+		return commissionQuota
+	}
+	return int(target)
+}
+
+func reverseInviterRewardForFullRefundTx(tx *gorm.DB, userId int) error {
+	if tx == nil || userId <= 0 {
+		return nil
+	}
+	var invitee User
+	if err := withRowLock(tx).
+		Select("id", "inviter_id", "inviter_reward_quota", "inviter_reward_unlocked", "inviter_reward_unlocked_by_payment").
+		Where("id = ?", userId).
+		First(&invitee).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+	if invitee.InviterId <= 0 || invitee.InviterId == invitee.Id ||
+		!invitee.InviterRewardUnlocked || !invitee.InviterRewardUnlockedByPayment ||
+		invitee.InviterRewardQuota <= 0 {
+		return nil
+	}
+	hasPayment, err := inviteeHasEffectivePaymentTx(tx, userId)
+	if err != nil {
+		return err
+	}
+	if hasPayment {
+		return nil
+	}
+	if err := tx.Model(&User{}).
+		Where("id = ?", invitee.InviterId).
+		Updates(map[string]interface{}{
+			"aff_quota":   gorm.Expr("aff_quota - ?", invitee.InviterRewardQuota),
+			"aff_history": gorm.Expr("aff_history - ?", invitee.InviterRewardQuota),
+		}).Error; err != nil {
+		return err
+	}
+	return tx.Model(&User{}).
+		Where("id = ? AND inviter_reward_unlocked = ?", invitee.Id, true).
+		Updates(map[string]interface{}{
+			"inviter_reward_unlocked":            false,
+			"inviter_reward_unlocked_by_payment": false,
+		}).Error
+}
+
+func restoreInviterRewardForRefundFailureTx(tx *gorm.DB, userId int) error {
+	if tx == nil || userId <= 0 {
+		return nil
+	}
+	hasPayment, err := inviteeHasEffectivePaymentTx(tx, userId)
+	if err != nil {
+		return err
+	}
+	if !hasPayment {
+		return nil
+	}
+	_, _, _, _, err = creditInviterRewardTx(tx, userId)
+	return err
+}
+
+func inviteeHasEffectivePaymentTx(tx *gorm.DB, userId int) (bool, error) {
+	if tx == nil || userId <= 0 {
+		return false, nil
+	}
+	var topUpCount int64
+	if err := tx.Model(&TopUp{}).
+		Where("user_id = ? AND status IN ? AND complete_time > ?", userId, []string{
+			common.TopUpStatusSuccess,
+			common.TopUpStatusPartialRefunded,
+		}, 0).
+		Count(&topUpCount).Error; err != nil {
+		return false, err
+	}
+	var subscriptionCount int64
+	if err := tx.Model(&SubscriptionOrder{}).
+		Where("user_id = ? AND status = ? AND complete_time > ?", userId, common.TopUpStatusSuccess, 0).
+		Count(&subscriptionCount).Error; err != nil {
+		return false, err
+	}
+	return topUpCount+subscriptionCount > 0, nil
 }
 
 func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, targetStatus string) error {
@@ -377,7 +528,7 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 
 	return DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &TopUp{}
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
+		if err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
 			return ErrTopUpNotFound
 		}
 		if expectedPaymentProvider != "" && topUp.PaymentProvider != expectedPaymentProvider {
@@ -407,7 +558,7 @@ func CompleteEpayTopUp(tradeNo string, actualPaymentMethod string) (*TopUp, int,
 	var topUp TopUp
 	var referralResult *ReferralCommissionCreditResult
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(&topUp).Error; err != nil {
+		if err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(&topUp).Error; err != nil {
 			return ErrTopUpNotFound
 		}
 		if topUp.PaymentProvider != PaymentProviderEpay {
@@ -470,7 +621,7 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 	}
 
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", referenceId).First(topUp).Error
+		err := withRowLock(tx).Where(refCol+" = ?", referenceId).First(topUp).Error
 		if err != nil {
 			return errors.New("充值订单不存在")
 		}
@@ -789,7 +940,7 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &TopUp{}
 		// 行级锁，避免并发补单
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
+		if err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
 			return errors.New("充值订单不存在")
 		}
 
@@ -870,7 +1021,7 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 	}
 
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", referenceId).First(topUp).Error
+		err := withRowLock(tx).Where(refCol+" = ?", referenceId).First(topUp).Error
 		if err != nil {
 			return errors.New("充值订单不存在")
 		}
@@ -952,7 +1103,7 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 	}
 
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(topUp).Error
+		err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error
 		if err != nil {
 			return errors.New("充值订单不存在")
 		}
@@ -1022,7 +1173,7 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 	}
 
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(topUp).Error
+		err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error
 		if err != nil {
 			return errors.New("充值订单不存在")
 		}
@@ -1090,7 +1241,7 @@ func RechargeOfficialPayment(tradeNo string, expectedPaymentProvider string, act
 	}
 
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(topUp).Error
+		err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error
 		if err != nil {
 			return errors.New("充值订单不存在")
 		}

@@ -145,7 +145,7 @@ const ReferralsTable = ({
           <Space vertical align='start' spacing={2}>
             <Text>{renderQuota(record.total_commission_quota || 0)}</Text>
             <Text type='tertiary' size='small'>
-              {t('次数')}: {record.commission_count || 0} · {t('金额')}: $
+              {t('次数')}: {record.commission_count || 0} · {t('净支付金额')}: $
               {Number(record.total_recharge_amount || 0).toFixed(2)}
             </Text>
           </Space>

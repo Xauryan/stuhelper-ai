@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -366,6 +367,81 @@ func TestCreateOfficialPaymentRefundReversesReferralCommission(t *testing.T) {
 	require.NoError(t, DB.First(&updatedInviter, 172).Error)
 	assert.Equal(t, 96, updatedInviter.AffQuota)
 	assert.Equal(t, 96, updatedInviter.AffHistoryQuota)
+
+	var updatedCommission ReferralCommission
+	require.NoError(t, DB.Where("source_type = ? AND source_id = ?", ReferralCommissionSourceTopUp, topUp.Id).First(&updatedCommission).Error)
+	assert.Equal(t, 10, updatedCommission.CommissionQuota)
+	assert.Equal(t, 4, updatedCommission.RefundedCommissionQuota)
+	assert.InDelta(t, 1.00, updatedCommission.RechargeAmount, 0.0001)
+	assert.InDelta(t, 0.40, updatedCommission.RefundedRechargeAmount, 0.0001)
+
+	records, total, err := GetAdminReferralRecords(&AdminReferralQuery{PageInfo: &common.PageInfo{Page: 1, PageSize: 20}})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, records, 1)
+	assert.Equal(t, 6, records[0].TotalCommissionQuota)
+	assert.InDelta(t, 0.60, records[0].TotalRechargeAmount, 0.0001)
+}
+
+func TestCreateOfficialPaymentRefundFullyReversesReferralCommissionAfterSplitRefunds(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 100
+
+	inviter := &User{Id: 182, Username: "split-refund-inviter", Status: common.UserStatusEnabled, AffCode: "split-refund-inviter-aff", AffQuota: 100, AffHistoryQuota: 100}
+	invitee := &User{Id: 183, Username: "split-refund-invitee", Status: common.UserStatusEnabled, AffCode: "split-refund-invitee-aff", InviterId: 182, Quota: 1000}
+	require.NoError(t, DB.Create(inviter).Error)
+	require.NoError(t, DB.Create(invitee).Error)
+	topUp := &TopUp{
+		UserId:          183,
+		Amount:          10,
+		Money:           1.00,
+		TradeNo:         "official-split-refund-commission",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CompleteTime:    time.Now().Unix(),
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+	require.NoError(t, DB.Create(&ReferralCommission{
+		InviterId:       182,
+		InviteeId:       183,
+		SourceType:      ReferralCommissionSourceTopUp,
+		SourceId:        topUp.Id,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RechargeAmount:  1.00,
+		CommissionQuota: 10,
+		CommissionRate:  10,
+	}).Error)
+
+	for i, amount := range []float64{0.34, 0.33, 0.33} {
+		_, err := CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+			TradeNo:         topUp.TradeNo,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			RefundAmount:    amount,
+			Reason:          "split commission refund",
+			OutRequestNo:    fmt.Sprintf("official-split-refund-commission-rf-%d", i+1),
+		})
+		require.NoError(t, err)
+	}
+
+	var updatedInviter User
+	require.NoError(t, DB.First(&updatedInviter, 182).Error)
+	assert.Equal(t, 90, updatedInviter.AffQuota)
+	assert.Equal(t, 90, updatedInviter.AffHistoryQuota)
+
+	var updatedCommission ReferralCommission
+	require.NoError(t, DB.Where("source_type = ? AND source_id = ?", ReferralCommissionSourceTopUp, topUp.Id).First(&updatedCommission).Error)
+	assert.Equal(t, 10, updatedCommission.CommissionQuota)
+	assert.Equal(t, 10, updatedCommission.RefundedCommissionQuota)
+	assert.InDelta(t, 1.00, updatedCommission.RefundedRechargeAmount, 0.0001)
 }
 
 func TestMarkTopUpRefundFailedRestoresQuotaAndReferralCommission(t *testing.T) {
@@ -427,6 +503,256 @@ func TestMarkTopUpRefundFailedRestoresQuotaAndReferralCommission(t *testing.T) {
 	require.NoError(t, DB.First(&updatedInviter, 174).Error)
 	assert.Equal(t, 100, updatedInviter.AffQuota)
 	assert.Equal(t, 100, updatedInviter.AffHistoryQuota)
+
+	var updatedCommission ReferralCommission
+	require.NoError(t, DB.Where("source_type = ? AND source_id = ?", ReferralCommissionSourceTopUp, topUp.Id).First(&updatedCommission).Error)
+	assert.Equal(t, 10, updatedCommission.CommissionQuota)
+	assert.Equal(t, 0, updatedCommission.RefundedCommissionQuota)
+	assert.InDelta(t, 1.00, updatedCommission.RechargeAmount, 0.0001)
+	assert.InDelta(t, 0.00, updatedCommission.RefundedRechargeAmount, 0.0001)
+}
+
+func TestFullRefundReversesUnlockedInviterRewardAndPaymentState(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	originalInviterRewardAfterPayment := common.InviterRewardAfterPaymentEnabled
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+		common.InviterRewardAfterPaymentEnabled = originalInviterRewardAfterPayment
+	})
+	common.QuotaPerUnit = 100
+	common.InviterRewardAfterPaymentEnabled = true
+
+	inviter := &User{
+		Id:              176,
+		Username:        "refund-reward-inviter",
+		Status:          common.UserStatusEnabled,
+		AffCode:         "refund-reward-inviter-aff",
+		AffQuota:        130,
+		AffHistoryQuota: 130,
+	}
+	invitee := &User{
+		Id:                             177,
+		Username:                       "refund-reward-invitee",
+		Status:                         common.UserStatusEnabled,
+		AffCode:                        "refund-reward-invitee-aff",
+		InviterId:                      176,
+		Quota:                          1000,
+		InviterRewardQuota:             30,
+		InviterRewardUnlocked:          true,
+		InviterRewardUnlockedByPayment: true,
+	}
+	require.NoError(t, DB.Create(inviter).Error)
+	require.NoError(t, DB.Create(invitee).Error)
+	topUp := &TopUp{
+		UserId:          177,
+		Amount:          10,
+		Money:           1.00,
+		TradeNo:         "official-refund-reward",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CompleteTime:    time.Now().Unix(),
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+	require.NoError(t, DB.Create(&ReferralCommission{
+		InviterId:       176,
+		InviteeId:       177,
+		SourceType:      ReferralCommissionSourceTopUp,
+		SourceId:        topUp.Id,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RechargeAmount:  1.00,
+		CommissionQuota: 10,
+		CommissionRate:  10,
+	}).Error)
+
+	_, err := CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+		TradeNo:         topUp.TradeNo,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RefundAmount:    1.00,
+		Reason:          "full refund reward",
+		OutRequestNo:    "official-refund-reward-rf-1",
+	})
+	require.NoError(t, err)
+
+	var updatedInviter User
+	require.NoError(t, DB.First(&updatedInviter, 176).Error)
+	assert.Equal(t, 90, updatedInviter.AffQuota)
+	assert.Equal(t, 90, updatedInviter.AffHistoryQuota)
+
+	var updatedCommission ReferralCommission
+	require.NoError(t, DB.Where("source_type = ? AND source_id = ?", ReferralCommissionSourceTopUp, topUp.Id).First(&updatedCommission).Error)
+	assert.Equal(t, 10, updatedCommission.CommissionQuota)
+	assert.Equal(t, 10, updatedCommission.RefundedCommissionQuota)
+	assert.InDelta(t, 1.00, updatedCommission.RechargeAmount, 0.0001)
+	assert.InDelta(t, 1.00, updatedCommission.RefundedRechargeAmount, 0.0001)
+
+	var updatedInvitee User
+	require.NoError(t, DB.First(&updatedInvitee, 177).Error)
+	assert.False(t, updatedInvitee.InviterRewardUnlocked)
+
+	records, total, err := GetAdminReferralRecords(&AdminReferralQuery{PageInfo: &common.PageInfo{Page: 1, PageSize: 20}})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, records, 1)
+	assert.False(t, records[0].InviteeHasPaid)
+	assert.Equal(t, int64(0), records[0].FirstPaymentTime)
+	assert.Equal(t, 0, records[0].TotalCommissionQuota)
+	assert.InDelta(t, 0.0, records[0].TotalRechargeAmount, 0.0001)
+}
+
+func TestFullRefundFailureRestoresUnlockedInviterReward(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 100
+
+	inviter := &User{
+		Id:              178,
+		Username:        "refund-failure-reward-inviter",
+		Status:          common.UserStatusEnabled,
+		AffCode:         "refund-failure-reward-inviter-aff",
+		AffQuota:        130,
+		AffHistoryQuota: 130,
+	}
+	invitee := &User{
+		Id:                             179,
+		Username:                       "refund-failure-reward-invitee",
+		Status:                         common.UserStatusEnabled,
+		AffCode:                        "refund-failure-reward-invitee-aff",
+		InviterId:                      178,
+		Quota:                          1000,
+		InviterRewardQuota:             30,
+		InviterRewardUnlocked:          true,
+		InviterRewardUnlockedByPayment: true,
+	}
+	require.NoError(t, DB.Create(inviter).Error)
+	require.NoError(t, DB.Create(invitee).Error)
+	topUp := &TopUp{
+		UserId:          179,
+		Amount:          10,
+		Money:           1.00,
+		TradeNo:         "official-refund-failure-reward",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CompleteTime:    time.Now().Unix(),
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+	require.NoError(t, DB.Create(&ReferralCommission{
+		InviterId:       178,
+		InviteeId:       179,
+		SourceType:      ReferralCommissionSourceTopUp,
+		SourceId:        topUp.Id,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RechargeAmount:  1.00,
+		CommissionQuota: 10,
+		CommissionRate:  10,
+	}).Error)
+
+	_, err := CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+		TradeNo:         topUp.TradeNo,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RefundAmount:    1.00,
+		Reason:          "full refund failure reward",
+		OutRequestNo:    "official-refund-failure-reward-rf-1",
+	})
+	require.NoError(t, err)
+	require.NoError(t, MarkTopUpRefundFailed("official-refund-failure-reward-rf-1", "alipay failed"))
+
+	var updatedInviter User
+	require.NoError(t, DB.First(&updatedInviter, 178).Error)
+	assert.Equal(t, 130, updatedInviter.AffQuota)
+	assert.Equal(t, 130, updatedInviter.AffHistoryQuota)
+
+	var updatedInvitee User
+	require.NoError(t, DB.First(&updatedInvitee, 179).Error)
+	assert.True(t, updatedInvitee.InviterRewardUnlocked)
+	assert.True(t, updatedInvitee.InviterRewardUnlockedByPayment)
+}
+
+func TestFullRefundDoesNotReverseImmediateInviterReward(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 100
+
+	inviter := &User{
+		Id:              180,
+		Username:        "refund-immediate-inviter",
+		Status:          common.UserStatusEnabled,
+		AffCode:         "refund-immediate-inviter-aff",
+		AffQuota:        130,
+		AffHistoryQuota: 130,
+	}
+	invitee := &User{
+		Id:                    181,
+		Username:              "refund-immediate-invitee",
+		Status:                common.UserStatusEnabled,
+		AffCode:               "refund-immediate-invitee-aff",
+		InviterId:             180,
+		Quota:                 1000,
+		InviterRewardQuota:    30,
+		InviterRewardUnlocked: true,
+	}
+	require.NoError(t, DB.Create(inviter).Error)
+	require.NoError(t, DB.Create(invitee).Error)
+	topUp := &TopUp{
+		UserId:          181,
+		Amount:          10,
+		Money:           1.00,
+		TradeNo:         "official-refund-immediate",
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CompleteTime:    time.Now().Unix(),
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+	require.NoError(t, DB.Create(&ReferralCommission{
+		InviterId:       180,
+		InviteeId:       181,
+		SourceType:      ReferralCommissionSourceTopUp,
+		SourceId:        topUp.Id,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RechargeAmount:  1.00,
+		CommissionQuota: 10,
+		CommissionRate:  10,
+	}).Error)
+
+	_, err := CreateOfficialPaymentRefund(OfficialPaymentRefundCreateParams{
+		TradeNo:         topUp.TradeNo,
+		PaymentProvider: PaymentProviderAlipayOfficial,
+		PaymentMethod:   PaymentMethodAlipayOfficial,
+		RefundAmount:    1.00,
+		Reason:          "full refund immediate reward",
+		OutRequestNo:    "official-refund-immediate-rf-1",
+	})
+	require.NoError(t, err)
+
+	var updatedInviter User
+	require.NoError(t, DB.First(&updatedInviter, 180).Error)
+	assert.Equal(t, 120, updatedInviter.AffQuota)
+	assert.Equal(t, 120, updatedInviter.AffHistoryQuota)
+
+	var updatedInvitee User
+	require.NoError(t, DB.First(&updatedInvitee, 181).Error)
+	assert.True(t, updatedInvitee.InviterRewardUnlocked)
+	assert.False(t, updatedInvitee.InviterRewardUnlockedByPayment)
 }
 
 func TestSearchAllTopUpsMatchesUserIdUsernameAndTradeNo(t *testing.T) {

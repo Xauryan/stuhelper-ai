@@ -12,27 +12,39 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+func withRowLock(tx *gorm.DB) *gorm.DB {
+	if tx == nil {
+		return nil
+	}
+	return tx.Clauses(clause.Locking{Strength: "UPDATE"})
+}
+
 const (
 	ReferralCommissionSourceTopUp        = "topup"
 	ReferralCommissionSourceSubscription = "subscription"
 )
 
 type ReferralCommission struct {
-	Id              int     `json:"id" gorm:"primaryKey;index:idx_referral_commissions_inviter_id,priority:2"`
-	InviterId       int     `json:"inviter_id" gorm:"index;index:idx_referral_commissions_inviter_id,priority:1"`
-	InviteeId       int     `json:"invitee_id" gorm:"index;uniqueIndex:idx_referral_commission_source,priority:1"`
-	SourceType      string  `json:"source_type" gorm:"type:varchar(32);uniqueIndex:idx_referral_commission_source,priority:2"`
-	SourceId        int     `json:"source_id" gorm:"uniqueIndex:idx_referral_commission_source,priority:3"`
-	PaymentMethod   string  `json:"payment_method" gorm:"type:varchar(50);uniqueIndex:idx_referral_commission_source,priority:4"`
-	RechargeAmount  float64 `json:"recharge_amount"`
-	CommissionQuota int     `json:"commission_quota"`
-	CommissionRate  float64 `json:"commission_rate"`
-	CreatedAt       int64   `json:"created_at" gorm:"autoCreateTime"`
+	Id                      int     `json:"id" gorm:"primaryKey;index:idx_referral_commissions_inviter_id,priority:2"`
+	InviterId               int     `json:"inviter_id" gorm:"index;index:idx_referral_commissions_inviter_id,priority:1"`
+	InviteeId               int     `json:"invitee_id" gorm:"index;uniqueIndex:idx_referral_commission_source,priority:1"`
+	SourceType              string  `json:"source_type" gorm:"type:varchar(32);uniqueIndex:idx_referral_commission_source,priority:2"`
+	SourceId                int     `json:"source_id" gorm:"uniqueIndex:idx_referral_commission_source,priority:3"`
+	PaymentMethod           string  `json:"payment_method" gorm:"type:varchar(50);uniqueIndex:idx_referral_commission_source,priority:4"`
+	RechargeAmount          float64 `json:"recharge_amount"`
+	RefundedRechargeAmount  float64 `json:"refunded_recharge_amount" gorm:"default:0"`
+	CommissionQuota         int     `json:"commission_quota"`
+	RefundedCommissionQuota int     `json:"refunded_commission_quota" gorm:"default:0"`
+	RechargeSequence        int     `json:"recharge_sequence" gorm:"default:0"`
+	CommissionRate          float64 `json:"commission_rate"`
+	CreatedAt               int64   `json:"created_at" gorm:"autoCreateTime"`
 }
 
 type ReferralCommissionWithUser struct {
 	ReferralCommission
-	InviteeUsername string `json:"invitee_username"`
+	InviteeUsername    string  `json:"invitee_username"`
+	NetRechargeAmount  float64 `json:"net_recharge_amount"`
+	NetCommissionQuota int     `json:"net_commission_quota"`
 }
 
 const (
@@ -105,7 +117,7 @@ func FinalizeUserInvitation(userId int, inviterId int) {
 				return err
 			}
 			if common.QuotaForInviter <= 0 {
-				return markInviterRewardUnlockedTx(tx, userId)
+				return markInviterRewardUnlockedTx(tx, userId, false)
 			}
 			return nil
 		})
@@ -120,7 +132,7 @@ func FinalizeUserInvitation(userId int, inviterId int) {
 		if err := setInviterRewardQuotaTx(tx, userId, inviterQuota); err != nil {
 			return err
 		}
-		return markInviterRewardUnlockedTx(tx, userId)
+		return markInviterRewardUnlockedTx(tx, userId, false)
 	}); err == nil && inviterQuota > 0 {
 		RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(inviterQuota)))
 	}
@@ -214,7 +226,7 @@ func CreditReferralCommissionTx(tx *gorm.DB, userId int, rechargeAmount float64,
 	}
 
 	var invitee User
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").
+	if err := withRowLock(tx).
 		Select("id", "inviter_id").
 		Where("id = ?", userId).
 		First(&invitee).Error; err != nil {
@@ -228,7 +240,7 @@ func CreditReferralCommissionTx(tx *gorm.DB, userId int, rechargeAmount float64,
 	}
 
 	var inviter User
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").
+	if err := withRowLock(tx).
 		Where("id = ?", invitee.InviterId).
 		First(&inviter).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -243,27 +255,24 @@ func CreditReferralCommissionTx(tx *gorm.DB, userId int, rechargeAmount float64,
 		return &ReferralCommissionCreditResult{}, nil
 	}
 
-	if common.ReferralCommissionMaxRecharges > 0 {
-		var count int64
-		if err := tx.Model(&ReferralCommission{}).
-			Where("invitee_id = ?", invitee.Id).
-			Count(&count).Error; err != nil {
-			return nil, err
-		}
-		if count >= int64(common.ReferralCommissionMaxRecharges) {
-			return &ReferralCommissionCreditResult{}, nil
-		}
+	rechargeSequence, err := nextReferralCommissionSequenceTx(tx, invitee.Id)
+	if err != nil {
+		return nil, err
+	}
+	if common.ReferralCommissionMaxRecharges > 0 && rechargeSequence > common.ReferralCommissionMaxRecharges {
+		return &ReferralCommissionCreditResult{}, nil
 	}
 
 	commission := &ReferralCommission{
-		InviterId:       invitee.InviterId,
-		InviteeId:       invitee.Id,
-		SourceType:      sourceType,
-		SourceId:        sourceId,
-		PaymentMethod:   paymentMethod,
-		RechargeAmount:  rechargeAmount,
-		CommissionQuota: commissionQuota,
-		CommissionRate:  rate,
+		InviterId:        invitee.InviterId,
+		InviteeId:        invitee.Id,
+		SourceType:       sourceType,
+		SourceId:         sourceId,
+		PaymentMethod:    paymentMethod,
+		RechargeAmount:   rechargeAmount,
+		CommissionQuota:  commissionQuota,
+		RechargeSequence: rechargeSequence,
+		CommissionRate:   rate,
 	}
 	insertResult := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(commission)
 	if insertResult.Error != nil {
@@ -291,6 +300,29 @@ func CreditReferralCommissionTx(tx *gorm.DB, userId int, rechargeAmount float64,
 		CommissionRate:     rate,
 		RechargeAmount:     rechargeAmount,
 	}, nil
+}
+
+func nextReferralCommissionSequenceTx(tx *gorm.DB, inviteeId int) (int, error) {
+	if tx == nil || inviteeId <= 0 {
+		return 0, nil
+	}
+	var maxSequence int
+	if err := tx.Model(&ReferralCommission{}).
+		Where("invitee_id = ?", inviteeId).
+		Select("COALESCE(MAX(recharge_sequence), 0)").
+		Scan(&maxSequence).Error; err != nil {
+		return 0, err
+	}
+	if maxSequence > 0 {
+		return maxSequence + 1, nil
+	}
+	var count int64
+	if err := tx.Model(&ReferralCommission{}).
+		Where("invitee_id = ?", inviteeId).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return int(count) + 1, nil
 }
 
 func RecordReferralCommissionLog(result *ReferralCommissionCreditResult) {
@@ -327,8 +359,8 @@ func creditInviterRewardTx(tx *gorm.DB, userId int) (bool, int, int, int, error)
 	}
 
 	var invitee User
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").
-		Select("id", "inviter_id", "inviter_reward_quota", "inviter_reward_unlocked").
+	if err := withRowLock(tx).
+		Select("id", "inviter_id", "inviter_reward_quota", "inviter_reward_unlocked", "inviter_reward_unlocked_by_payment").
 		Where("id = ?", userId).
 		First(&invitee).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -343,7 +375,7 @@ func creditInviterRewardTx(tx *gorm.DB, userId int) (bool, int, int, int, error)
 		return false, invitee.InviterId, invitee.Id, invitee.InviterRewardQuota, nil
 	}
 	if invitee.InviterRewardQuota <= 0 {
-		if err := markInviterRewardUnlockedTx(tx, invitee.Id); err != nil {
+		if err := markInviterRewardUnlockedTx(tx, invitee.Id, false); err != nil {
 			return false, 0, 0, 0, err
 		}
 		return false, invitee.InviterId, invitee.Id, invitee.InviterRewardQuota, nil
@@ -351,7 +383,10 @@ func creditInviterRewardTx(tx *gorm.DB, userId int) (bool, int, int, int, error)
 
 	result := tx.Model(&User{}).
 		Where("id = ? AND inviter_reward_unlocked = ?", invitee.Id, false).
-		Update("inviter_reward_unlocked", true)
+		Updates(map[string]interface{}{
+			"inviter_reward_unlocked":            true,
+			"inviter_reward_unlocked_by_payment": true,
+		})
 	if result.Error != nil {
 		return false, 0, 0, 0, result.Error
 	}
@@ -393,11 +428,11 @@ func setInviteeRewardQuota(userId int, quota int) error {
 
 func markInviterRewardUnlocked(userId int) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
-		return markInviterRewardUnlockedTx(tx, userId)
+		return markInviterRewardUnlockedTx(tx, userId, false)
 	})
 }
 
-func markInviterRewardUnlockedTx(tx *gorm.DB, userId int) error {
+func markInviterRewardUnlockedTx(tx *gorm.DB, userId int, byPayment bool) error {
 	if tx == nil {
 		return errors.New("tx is nil")
 	}
@@ -406,7 +441,10 @@ func markInviterRewardUnlockedTx(tx *gorm.DB, userId int) error {
 	}
 	return tx.Model(&User{}).
 		Where("id = ?", userId).
-		Update("inviter_reward_unlocked", true).Error
+		Updates(map[string]interface{}{
+			"inviter_reward_unlocked":            true,
+			"inviter_reward_unlocked_by_payment": byPayment,
+		}).Error
 }
 
 func GetUserReferralCommissions(inviterId int, pageInfo *common.PageInfo) ([]*ReferralCommissionWithUser, int64, error) {
@@ -423,7 +461,6 @@ func GetUserReferralCommissions(inviterId int, pageInfo *common.PageInfo) ([]*Re
 	}
 
 	query := DB.Table("referral_commissions").
-		Select("referral_commissions.*, users.username as invitee_username").
 		Joins("LEFT JOIN users ON users.id = referral_commissions.invitee_id").
 		Where("referral_commissions.inviter_id = ?", inviterId)
 
@@ -431,11 +468,22 @@ func GetUserReferralCommissions(inviterId int, pageInfo *common.PageInfo) ([]*Re
 		return nil, 0, err
 	}
 
-	err := query.Order("referral_commissions.id desc").
+	err := query.Select(referralCommissionSelectColumns("users.username as invitee_username")).
+		Order("referral_commissions.id desc").
 		Limit(pageInfo.GetPageSize()).
 		Offset(pageInfo.GetStartIdx()).
 		Find(&commissions).Error
 	return commissions, total, err
+}
+
+func referralCommissionSelectColumns(extraColumns ...string) string {
+	columns := []string{
+		"referral_commissions.*",
+		"CASE WHEN referral_commissions.recharge_amount > COALESCE(referral_commissions.refunded_recharge_amount, 0) THEN referral_commissions.recharge_amount - COALESCE(referral_commissions.refunded_recharge_amount, 0) ELSE 0 END AS net_recharge_amount",
+		"CASE WHEN referral_commissions.commission_quota > COALESCE(referral_commissions.refunded_commission_quota, 0) THEN referral_commissions.commission_quota - COALESCE(referral_commissions.refunded_commission_quota, 0) ELSE 0 END AS net_commission_quota",
+	}
+	columns = append(columns, extraColumns...)
+	return strings.Join(columns, ", ")
 }
 
 func GetAdminReferralRecords(query *AdminReferralQuery) ([]*AdminReferralRecord, int64, error) {
@@ -542,7 +590,6 @@ func fillAdminReferralPaymentState(records []*AdminReferralRecord, inviteeIds []
 		Where("user_id IN ? AND status IN ? AND complete_time > ?", inviteeIds, []string{
 			common.TopUpStatusSuccess,
 			common.TopUpStatusPartialRefunded,
-			common.TopUpStatusRefunded,
 		}, 0).
 		Group("user_id").
 		Find(&topUpStates).Error; err != nil {
@@ -596,7 +643,7 @@ func fillAdminReferralCommissionSummary(records []*AdminReferralRecord, inviteeI
 	summaryByInviteeId := make(map[int]*adminReferralCommissionSummary, len(records))
 	var summaries []*adminReferralCommissionSummary
 	if err := DB.Table("referral_commissions").
-		Select("invitee_id, COUNT(*) AS commission_count, SUM(commission_quota) AS total_commission_quota, SUM(recharge_amount) AS total_recharge_amount, MAX(created_at) AS last_commission_at").
+		Select("invitee_id, COUNT(*) AS commission_count, SUM(CASE WHEN commission_quota > COALESCE(refunded_commission_quota, 0) THEN commission_quota - COALESCE(refunded_commission_quota, 0) ELSE 0 END) AS total_commission_quota, SUM(CASE WHEN recharge_amount > COALESCE(refunded_recharge_amount, 0) THEN recharge_amount - COALESCE(refunded_recharge_amount, 0) ELSE 0 END) AS total_recharge_amount, MAX(created_at) AS last_commission_at").
 		Where("referral_commissions.invitee_id IN ?", inviteeIds).
 		Group("invitee_id").
 		Find(&summaries).Error; err != nil {
@@ -629,13 +676,13 @@ func GetAdminReferralCommissions(inviteeId int, pageInfo *common.PageInfo) ([]*R
 	}
 	pageInfo = normalizeReferralPageInfo(pageInfo)
 	query := DB.Table("referral_commissions").
-		Select("referral_commissions.*, users.username AS invitee_username").
 		Joins("LEFT JOIN users ON users.id = referral_commissions.invitee_id").
 		Where("referral_commissions.invitee_id = ?", inviteeId)
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	if err := query.Order("referral_commissions.id desc").
+	if err := query.Select(referralCommissionSelectColumns("users.username AS invitee_username")).
+		Order("referral_commissions.id desc").
 		Limit(pageInfo.GetPageSize()).
 		Offset(pageInfo.GetStartIdx()).
 		Find(&commissions).Error; err != nil {

@@ -83,8 +83,13 @@ const ReferralCommissionsModal = ({ visible, onCancel, record, t }) => {
         render: (text) => text || '-',
       },
       {
-        title: t('支付金额'),
-        dataIndex: 'recharge_amount',
+        title: t('净支付金额'),
+        dataIndex: 'net_recharge_amount',
+        render: (text) => `$${Number(text || 0).toFixed(2)}`,
+      },
+      {
+        title: t('已退款金额'),
+        dataIndex: 'refunded_recharge_amount',
         render: (text) => `$${Number(text || 0).toFixed(2)}`,
       },
       {
@@ -94,7 +99,12 @@ const ReferralCommissionsModal = ({ visible, onCancel, record, t }) => {
       },
       {
         title: t('返佣额度'),
-        dataIndex: 'commission_quota',
+        dataIndex: 'net_commission_quota',
+        render: (text) => renderQuota(text || 0),
+      },
+      {
+        title: t('已冲销返佣'),
+        dataIndex: 'refunded_commission_quota',
         render: (text) => renderQuota(text || 0),
       },
       {

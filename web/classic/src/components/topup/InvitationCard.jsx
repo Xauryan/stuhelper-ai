@@ -104,8 +104,8 @@ const InvitationCard = ({
         render: (username) => <Text>{username || '-'}</Text>,
       },
       {
-        title: t('充值金额'),
-        dataIndex: 'recharge_amount',
+        title: t('净支付金额'),
+        dataIndex: 'net_recharge_amount',
         key: 'recharge_amount',
         render: (amount) => <Text>{Number(amount || 0).toFixed(2)}</Text>,
       },
@@ -117,7 +117,7 @@ const InvitationCard = ({
       },
       {
         title: t('获得额度'),
-        dataIndex: 'commission_quota',
+        dataIndex: 'net_commission_quota',
         key: 'commission_quota',
         render: (quota) => <Text>{renderQuota(quota || 0)}</Text>,
       },

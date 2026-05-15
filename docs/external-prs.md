@@ -173,15 +173,23 @@ git diff --check
   `inviter_reward_quota` 快照，不受后续全局配置调整影响。
 - `ReferralCommissionEnabled=true` 时，充值返佣与一次性邀请奖励独立叠加；
   返佣不会替代或关闭 `QuotaForInviter` / `QuotaForInvitee`。
-- `users` 表新增 `invitee_reward_quota`、`inviter_reward_quota` 和
-  `inviter_reward_unlocked`，用于展示被邀请用户实际获得的邀请码奖励，以及延迟
-  邀请人奖励幂等；首次新增延迟奖励状态字段时，已有邀请关系会标记为已处理，
-  避免老用户首充后被补发，后续启动不会清除新产生的待解锁奖励。字段上线前的
-  历史邀请关系没有被邀请人奖励快照，管理页中可能显示为 0。
+- `users` 表新增 `invitee_reward_quota`、`inviter_reward_quota`、
+  `inviter_reward_unlocked` 和 `inviter_reward_unlocked_by_payment`，用于展示
+  被邀请用户实际获得的邀请码奖励、延迟邀请人奖励幂等，以及区分一次性邀请人
+  奖励是否由首充/订阅支付解锁；首次新增延迟奖励状态字段时，已有邀请关系会
+  标记为已处理，避免老用户首充后被补发，后续启动不会清除新产生的待解锁奖励。
+  字段上线前的历史邀请关系没有被邀请人奖励快照，管理页中可能显示为 0。
 - 返佣覆盖的支付完成路径包括 Stripe、Creem、Epay、Waffo、Waffo Pancake、
   支付宝官方、微信支付官方、管理员补单和订阅订单完成。
 - 返佣额度按 `recharge_amount * QuotaPerUnit * rate / 100` 计算，向下取整；
-  邀请人单用户覆盖比例优先于全局比例。
+  邀请人单用户覆盖比例优先于全局比例。新返佣记录写入 `recharge_sequence`
+  用于审计和最大返佣次数判断；历史记录没有序号时按已有记录数量兜底，避免
+  旧库迁移时因默认序号重复而失败。
+- 官方支付退款会记录 `refunded_recharge_amount` 和 `refunded_commission_quota`
+  作为返佣冲销字段；用户侧返佣记录和 classic 邀请管理页展示净支付金额与净返佣。
+  退款失败会恢复冲销字段和邀请人收益；充值全额退款会回滚由首充触发的一次性
+  邀请人奖励解锁，即时发放的一次性邀请奖励不会被退款撤回，并且全额退款订单
+  不再计为邀请管理中的有效首充。
 - classic 运维设置页新增返佣全局开关、比例、最大次数和邀请人一次性奖励
   首充后到账开关；classic 用户编辑页新增单用户返佣比例覆盖；classic 充值页
   邀请卡展示分页返佣记录。
@@ -194,7 +202,7 @@ git diff --check
 ### 验证
 
 ```powershell
-go test ./model -run "ReferralCommission|CompleteEpayTopUp|PaymentGuard|SubscriptionOrder" -count=1
+go test ./model -run "ReferralCommission|CompleteEpayTopUp|PaymentGuard|SubscriptionOrder|ManualCompleteTopUp|Refund|Redemption" -count=1
 go test ./controller -run "TopUp|Epay|Stripe|Creem|Official|Option|User" -count=1
 Set-Location web/classic; bun run build
 ```
