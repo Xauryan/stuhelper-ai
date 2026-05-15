@@ -231,6 +231,13 @@ git diff --check
   奖励是否由首充/订阅支付解锁；首次新增延迟奖励状态字段时，已有邀请关系会
   标记为已处理，避免老用户首充后被补发，后续启动不会清除新产生的待解锁奖励。
   字段上线前的历史邀请关系没有被邀请人奖励快照，管理页中可能显示为 0。
+- 被邀请关系的唯一来源是 `users.inviter_id`。密码注册、统一 OAuth、旧 GitHub
+  和 LinuxDO 注册都必须把解析出的邀请人 ID 写入新用户记录；只增加邀请人的
+  `aff_count` / `aff_quota` 不能代表关系已持久化。2026-05-15 修复了
+  `Insert` / `InsertWithTx` 忽略传入 `inviterId` 的问题，并让后台邀请管理在邀请人
+  用户行缺失时仍按被邀请用户的 `inviter_id` 展示审计关系。受旧缺陷影响的生产
+  历史数据若 `users.inviter_id = 0`，需要从注册请求、系统日志或邀请奖励日志中
+  人工回填后，才能出现在邀请管理并参与后续返佣。
 - 返佣覆盖的支付完成路径包括 Stripe、Creem、Epay、Waffo、Waffo Pancake、
   支付宝官方、微信支付官方、管理员补单和订阅订单完成。
 - 返佣额度按 `recharge_amount * QuotaPerUnit * rate / 100` 计算，向下取整；

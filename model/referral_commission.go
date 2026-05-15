@@ -495,7 +495,7 @@ func GetAdminReferralRecords(query *AdminReferralQuery) ([]*AdminReferralRecord,
 	rewardStatus := strings.TrimSpace(query.RewardStatus)
 
 	baseQuery := DB.Table("users AS invitees").
-		Joins("JOIN users AS inviters ON inviters.id = invitees.inviter_id").
+		Joins("LEFT JOIN users AS inviters ON inviters.id = invitees.inviter_id").
 		Where("invitees.inviter_id > 0")
 
 	if keyword != "" {

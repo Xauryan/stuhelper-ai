@@ -24,6 +24,7 @@ import {
   API,
   copy,
   isAdmin,
+  isAuditAdmin,
   showError,
   showSuccess,
   timestamp2string,
@@ -58,9 +59,10 @@ export const useTaskLogsData = () => {
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
 
   // User and admin
-  const isAdminUser = isAdmin();
+  const canReadAllTaskLogs = isAuditAdmin();
+  const canViewUserDetail = isAdmin();
   // Role-specific storage key to prevent different roles from overwriting each other
-  const STORAGE_KEY = isAdminUser
+  const STORAGE_KEY = canReadAllTaskLogs
     ? 'task-logs-table-columns-admin'
     : 'task-logs-table-columns-user';
 
@@ -111,7 +113,7 @@ export const useTaskLogsData = () => {
         const merged = { ...defaults, ...parsed };
 
         // For non-admin users, force-hide admin-only columns (does not touch admin settings)
-        if (!isAdminUser) {
+        if (!canReadAllTaskLogs) {
           merged[COLUMN_KEYS.CHANNEL] = false;
           merged[COLUMN_KEYS.USERNAME] = false;
         }
@@ -131,8 +133,8 @@ export const useTaskLogsData = () => {
       [COLUMN_KEYS.SUBMIT_TIME]: true,
       [COLUMN_KEYS.FINISH_TIME]: true,
       [COLUMN_KEYS.DURATION]: true,
-      [COLUMN_KEYS.CHANNEL]: isAdminUser,
-      [COLUMN_KEYS.USERNAME]: isAdminUser,
+      [COLUMN_KEYS.CHANNEL]: canReadAllTaskLogs,
+      [COLUMN_KEYS.USERNAME]: canReadAllTaskLogs,
       [COLUMN_KEYS.PLATFORM]: true,
       [COLUMN_KEYS.TYPE]: true,
       [COLUMN_KEYS.TASK_ID]: true,
@@ -164,7 +166,7 @@ export const useTaskLogsData = () => {
     allKeys.forEach((key) => {
       if (
         (key === COLUMN_KEYS.CHANNEL || key === COLUMN_KEYS.USERNAME) &&
-        !isAdminUser
+        !canReadAllTaskLogs
       ) {
         updatedColumns[key] = false;
       } else {
@@ -232,7 +234,7 @@ export const useTaskLogsData = () => {
       getFormValues();
     let localStartTimestamp = parseInt(Date.parse(start_timestamp) / 1000);
     let localEndTimestamp = parseInt(Date.parse(end_timestamp) / 1000);
-    let url = isAdminUser
+    let url = canReadAllTaskLogs
       ? `/api/task/?p=${page}&page_size=${size}&channel_id=${channel_id}&task_id=${task_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`
       : `/api/task/self?p=${page}&page_size=${size}&task_id=${task_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
     const res = await API.get(url);
@@ -288,7 +290,7 @@ export const useTaskLogsData = () => {
 
   // User info function
   const showUserInfoFunc = async (userId) => {
-    if (!isAdminUser) {
+    if (!canViewUserDetail) {
       return;
     }
     const res = await API.get(`/api/user/${userId}`);
@@ -316,7 +318,8 @@ export const useTaskLogsData = () => {
     activePage,
     logCount,
     pageSize,
-    isAdminUser,
+    isAdminUser: canReadAllTaskLogs,
+    canViewUserDetail,
 
     // Modal state
     isModalOpen,

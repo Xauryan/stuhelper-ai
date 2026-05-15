@@ -35,7 +35,6 @@ import {
 } from '@douyinfe/semi-ui';
 import { IconSave, IconClose, IconUserAdd } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
-import { USER_ROLES } from '../../../../constants/roles';
 
 const { Text, Title } = Typography;
 
@@ -49,7 +48,6 @@ const AddUserModal = (props) => {
     username: '',
     display_name: '',
     password: '',
-    role: USER_ROLES.COMMON,
     remark: '',
   });
 
@@ -165,23 +163,6 @@ const AddUserModal = (props) => {
                       placeholder={t('请输入密码')}
                       rules={[{ required: true, message: t('请输入密码') }]}
                       showClear
-                    />
-                  </Col>
-                  <Col span={24}>
-                    <Form.Select
-                      field='role'
-                      label={t('角色')}
-                      placeholder={t('请选择角色')}
-                      optionList={[
-                        {
-                          label: t('普通用户'),
-                          value: USER_ROLES.COMMON,
-                        },
-                        {
-                          label: t('审计管理员'),
-                          value: USER_ROLES.AUDIT_ADMIN,
-                        },
-                      ]}
                     />
                   </Col>
                   <Col span={24}>

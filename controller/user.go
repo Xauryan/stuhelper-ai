@@ -31,7 +31,6 @@ func sanitizeAuditUsers(c *gin.Context, users []*model.User) {
 		if user == nil {
 			continue
 		}
-		user.Email = ""
 		user.GitHubId = ""
 		user.DiscordId = ""
 		user.OidcId = ""
@@ -45,6 +44,24 @@ func sanitizeAuditUsers(c *gin.Context, users []*model.User) {
 		user.StripeCustomer = ""
 		user.ReferralCommissionPercent = nil
 	}
+}
+
+func canAdministerUserRole(operatorRole int, targetRole int) bool {
+	if operatorRole == common.RoleRootUser {
+		return true
+	}
+	if targetRole == common.RoleAuditAdminUser {
+		return false
+	}
+	return operatorRole > targetRole
+}
+
+func requireCanAdministerUserRole(c *gin.Context, targetRole int, message string) bool {
+	if canAdministerUserRole(c.GetInt("role"), targetRole) {
+		return true
+	}
+	common.ApiErrorI18n(c, message)
+	return false
 }
 
 type LoginRequest struct {
@@ -332,9 +349,7 @@ func GetUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	myRole := c.GetInt("role")
-	if myRole <= user.Role && myRole != common.RoleRootUser {
-		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionSameLevel)
+	if !requireCanAdministerUserRole(c, user.Role, i18n.MsgUserNoPermissionSameLevel) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -526,7 +541,7 @@ func calculateUserPermissions(userRole int) map[string]interface{} {
 				"subscription": true,
 				"redemption":   true,
 				"user":         true,
-				"referral":     false,
+				"referral":     true,
 				"setting":      false,
 			},
 		}
@@ -593,7 +608,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"subscription": true,
 			"redemption":   true,
 			"user":         true,
-			"referral":     false,
+			"referral":     true,
 			"setting":      false,
 		}
 	} else if userRole == common.RoleRootUser {
@@ -668,11 +683,10 @@ func UpdateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	myRole := c.GetInt("role")
-	if myRole <= originUser.Role && myRole != common.RoleRootUser {
-		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+	if !requireCanAdministerUserRole(c, originUser.Role, i18n.MsgUserNoPermissionHigherLevel) {
 		return
 	}
+	myRole := c.GetInt("role")
 	if myRole <= updatedUser.Role && myRole != common.RoleRootUser {
 		common.ApiErrorI18n(c, i18n.MsgUserCannotCreateHigherLevel)
 		return
@@ -711,9 +725,7 @@ func AdminClearUserBinding(c *gin.Context) {
 		return
 	}
 
-	myRole := c.GetInt("role")
-	if myRole <= user.Role && myRole != common.RoleRootUser {
-		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionSameLevel)
+	if !requireCanAdministerUserRole(c, user.Role, i18n.MsgUserNoPermissionSameLevel) {
 		return
 	}
 
@@ -873,9 +885,11 @@ func DeleteUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	myRole := c.GetInt("role")
-	if myRole <= originUser.Role {
-		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+	if originUser.Role == common.RoleRootUser {
+		common.ApiErrorI18n(c, i18n.MsgUserCannotDeleteRootUser)
+		return
+	}
+	if !requireCanAdministerUserRole(c, originUser.Role, i18n.MsgUserNoPermissionHigherLevel) {
 		return
 	}
 	err = model.HardDeleteUserById(id)
@@ -924,24 +938,17 @@ func CreateUser(c *gin.Context) {
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
 	}
-	if user.Role == common.RoleGuestUser {
-		user.Role = common.RoleCommonUser
-	}
-	if !common.IsValidateRole(user.Role) {
+	if user.Role != common.RoleGuestUser && user.Role != common.RoleCommonUser {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
-	myRole := c.GetInt("role")
-	if user.Role >= myRole {
-		common.ApiErrorI18n(c, i18n.MsgUserCannotCreateHigherLevel)
-		return
-	}
+	user.Role = common.RoleCommonUser
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.DisplayName,
-		Role:        user.Role, // 保持管理员设置的角色
+		Role:        common.RoleCommonUser,
 	}
 	if err := cleanUser.Insert(0); err != nil {
 		common.ApiError(c, err)
@@ -991,8 +998,7 @@ func ManageUser(c *gin.Context) {
 		return
 	}
 	myRole := c.GetInt("role")
-	if myRole <= user.Role && myRole != common.RoleRootUser {
-		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+	if !requireCanAdministerUserRole(c, user.Role, i18n.MsgUserNoPermissionHigherLevel) {
 		return
 	}
 	roleChanged := false
@@ -1027,31 +1033,21 @@ func ManageUser(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgUserAdminCannotPromote)
 			return
 		}
-		if user.Role >= common.RoleAdminUser {
+		if user.Role == common.RoleRootUser || user.Role >= common.RoleAdminUser {
 			common.ApiErrorI18n(c, i18n.MsgUserAlreadyAdmin)
 			return
 		}
-		user.Role = common.RoleAdminUser
-		roleChanged = true
-	case "promote_audit":
-		if user.Role >= common.RoleAuditAdminUser {
-			common.ApiErrorMsg(c, "user is already audit admin or higher")
-			return
-		}
-		user.Role = common.RoleAuditAdminUser
-		roleChanged = true
-	case "demote_audit":
-		if user.Role == common.RoleRootUser {
-			common.ApiErrorI18n(c, i18n.MsgUserCannotDemoteRootUser)
-			return
-		}
 		if user.Role == common.RoleAuditAdminUser {
-			common.ApiErrorMsg(c, "user is already audit admin")
-			return
+			user.Role = common.RoleAdminUser
+		} else {
+			user.Role = common.RoleAuditAdminUser
 		}
-		user.Role = common.RoleAuditAdminUser
 		roleChanged = true
 	case "demote":
+		if myRole != common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserAdminCannotPromote)
+			return
+		}
 		if user.Role == common.RoleRootUser {
 			common.ApiErrorI18n(c, i18n.MsgUserCannotDemoteRootUser)
 			return
@@ -1060,7 +1056,11 @@ func ManageUser(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgUserAlreadyCommon)
 			return
 		}
-		user.Role = common.RoleCommonUser
+		if user.Role == common.RoleAdminUser {
+			user.Role = common.RoleAuditAdminUser
+		} else {
+			user.Role = common.RoleCommonUser
+		}
 		roleChanged = true
 	case "add_quota":
 		adminName := c.GetString("username")

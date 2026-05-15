@@ -45,6 +45,8 @@ type User struct {
 	AffQuota                       int            `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
 	AffHistoryQuota                int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
 	InviterId                      int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	InviterUsername                string         `json:"inviter_username,omitempty" gorm:"-"`
+	InviterDisplayName             string         `json:"inviter_display_name,omitempty" gorm:"-"`
 	InviteeRewardQuota             int            `json:"invitee_reward_quota" gorm:"type:int;default:0;column:invitee_reward_quota"`
 	InviterRewardQuota             int            `json:"inviter_reward_quota" gorm:"type:int;default:0;column:inviter_reward_quota"`
 	InviterRewardUnlocked          bool           `json:"inviter_reward_unlocked" gorm:"default:false;column:inviter_reward_unlocked"`
@@ -156,7 +158,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 			"subscription": true,
 			"redemption":   true,
 			"user":         true,
-			"referral":     false,
+			"referral":     true,
 			"setting":      false,
 		}
 	} else if userRole == common.RoleRootUser {
@@ -246,6 +248,8 @@ func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err err
 		return nil, 0, err
 	}
 
+	fillInviterDisplayInfo(users)
+
 	return users, total, nil
 }
 
@@ -313,7 +317,49 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*User, 
 		return nil, 0, err
 	}
 
+	fillInviterDisplayInfo(users)
+
 	return users, total, nil
+}
+
+func fillInviterDisplayInfo(users []*User) {
+	if len(users) == 0 {
+		return
+	}
+	inviterIds := make([]int, 0, len(users))
+	for _, user := range users {
+		if user != nil && user.InviterId > 0 {
+			inviterIds = append(inviterIds, user.InviterId)
+		}
+	}
+	if len(inviterIds) == 0 {
+		return
+	}
+	inviterIds = uniqueIntSlice(inviterIds)
+
+	var inviters []User
+	if err := DB.Unscoped().
+		Select("id", "username", "display_name").
+		Where("id IN ?", inviterIds).
+		Find(&inviters).Error; err != nil {
+		common.SysLog("failed to fill inviter display info: " + err.Error())
+		return
+	}
+	inviterById := make(map[int]User, len(inviters))
+	for _, inviter := range inviters {
+		inviterById[inviter.Id] = inviter
+	}
+	for _, user := range users {
+		if user == nil || user.InviterId <= 0 {
+			continue
+		}
+		inviter, ok := inviterById[user.InviterId]
+		if !ok {
+			continue
+		}
+		user.InviterUsername = inviter.Username
+		user.InviterDisplayName = inviter.DisplayName
+	}
 }
 
 func GetUserById(id int, selectAll bool) (*User, error) {
@@ -434,6 +480,7 @@ func (user *User) Insert(inviterId int) error {
 	user.Quota = common.QuotaForNewUser
 	//user.SetAccessToken(common.GetUUID())
 	user.AffCode = common.GetRandomString(4)
+	user.InviterId = inviterId
 
 	// 初始化用户设置，包括默认的边栏配置
 	if user.Setting == "" {
@@ -484,6 +531,7 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 	}
 	user.Quota = common.QuotaForNewUser
 	user.AffCode = common.GetRandomString(4)
+	user.InviterId = inviterId
 
 	// 初始化用户设置
 	if user.Setting == "" {

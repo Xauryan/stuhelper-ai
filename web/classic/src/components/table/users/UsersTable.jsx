@@ -32,7 +32,6 @@ import DeleteUserModal from './modals/DeleteUserModal';
 import ResetPasskeyModal from './modals/ResetPasskeyModal';
 import ResetTwoFAModal from './modals/ResetTwoFAModal';
 import UserSubscriptionsModal from './modals/UserSubscriptionsModal';
-import AuditRoleUserModal from './modals/AuditRoleUserModal';
 import { isAuditOnlyAdmin } from '../../../helpers';
 
 const UsersTable = (usersData) => {
@@ -57,9 +56,7 @@ const UsersTable = (usersData) => {
 
   // Modal states
   const [showPromoteModal, setShowPromoteModal] = useState(false);
-  const [showPromoteAuditModal, setShowPromoteAuditModal] = useState(false);
   const [showDemoteModal, setShowDemoteModal] = useState(false);
-  const [showDemoteAuditModal, setShowDemoteAuditModal] = useState(false);
   const [showEnableDisableModal, setShowEnableDisableModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [modalUser, setModalUser] = useState(null);
@@ -76,19 +73,9 @@ const UsersTable = (usersData) => {
     setShowPromoteModal(true);
   };
 
-  const showPromoteAuditUserModal = (user) => {
-    setModalUser(user);
-    setShowPromoteAuditModal(true);
-  };
-
   const showDemoteUserModal = (user) => {
     setModalUser(user);
     setShowDemoteModal(true);
-  };
-
-  const showDemoteAuditUserModal = (user) => {
-    setModalUser(user);
-    setShowDemoteAuditModal(true);
   };
 
   const showEnableDisableUserModal = (user, action) => {
@@ -123,19 +110,9 @@ const UsersTable = (usersData) => {
     setShowPromoteModal(false);
   };
 
-  const handlePromoteAuditConfirm = () => {
-    manageUser(modalUser.id, 'promote_audit', modalUser);
-    setShowPromoteAuditModal(false);
-  };
-
   const handleDemoteConfirm = () => {
     manageUser(modalUser.id, 'demote', modalUser);
     setShowDemoteModal(false);
-  };
-
-  const handleDemoteAuditConfirm = () => {
-    manageUser(modalUser.id, 'demote_audit', modalUser);
-    setShowDemoteAuditModal(false);
   };
 
   const handleEnableDisableConfirm = () => {
@@ -160,9 +137,7 @@ const UsersTable = (usersData) => {
       setEditingUser,
       setShowEditUser,
       showPromoteModal: showPromoteUserModal,
-      showPromoteAuditModal: showPromoteAuditUserModal,
       showDemoteModal: showDemoteUserModal,
-      showDemoteAuditModal: showDemoteAuditUserModal,
       showEnableDisableModal: showEnableDisableUserModal,
       showDeleteModal: showDeleteUserModal,
       showResetPasskeyModal: showResetPasskeyUserModal,
@@ -175,9 +150,7 @@ const UsersTable = (usersData) => {
     setEditingUser,
     setShowEditUser,
     showPromoteUserModal,
-    showPromoteAuditUserModal,
     showDemoteUserModal,
-    showDemoteAuditUserModal,
     showEnableDisableUserModal,
     showDeleteUserModal,
     showResetPasskeyUserModal,
@@ -244,22 +217,6 @@ const UsersTable = (usersData) => {
         visible={showDemoteModal}
         onCancel={() => setShowDemoteModal(false)}
         onConfirm={handleDemoteConfirm}
-        user={modalUser}
-        t={t}
-      />
-
-      <AuditRoleUserModal
-        visible={showPromoteAuditModal}
-        onCancel={() => setShowPromoteAuditModal(false)}
-        onConfirm={handlePromoteAuditConfirm}
-        user={modalUser}
-        t={t}
-      />
-
-      <AuditRoleUserModal
-        visible={showDemoteAuditModal}
-        onCancel={() => setShowDemoteAuditModal(false)}
-        onConfirm={handleDemoteAuditConfirm}
         user={modalUser}
         t={t}
       />

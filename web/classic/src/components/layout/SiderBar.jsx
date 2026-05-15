@@ -195,7 +195,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('邀请管理'),
         itemKey: 'referral',
         to: '/referral',
-        className: isAdmin() ? '' : 'tableHiddle',
+        className: isAuditAdmin() ? '' : 'tableHiddle',
       },
       {
         text: t('系统设置'),

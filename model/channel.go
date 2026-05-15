@@ -345,6 +345,10 @@ func GetChannelsByTag(tag string, idSort bool, selectAll bool, sortOptions ...Ch
 }
 
 func SearchChannels(keyword string, group string, model string, idSort bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
+	return SearchChannelsWithSensitive(keyword, group, model, idSort, true, sortOptions...)
+}
+
+func SearchChannelsWithSensitive(keyword string, group string, model string, idSort bool, includeSensitive bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
 	var channels []*Channel
 	modelsCol := "`models`"
 
@@ -367,6 +371,12 @@ func SearchChannels(keyword string, group string, model string, idSort bool, sor
 	// 构造WHERE子句
 	var whereClause string
 	var args []interface{}
+	searchClause := "(id = ? OR name LIKE ?)"
+	searchArgs := []interface{}{common.String2Int(keyword), "%" + keyword + "%"}
+	if includeSensitive {
+		searchClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?)"
+		searchArgs = append(searchArgs, keyword, "%"+keyword+"%")
+	}
 	if group != "" && group != "null" {
 		var groupCondition string
 		if common.UsingMySQL {
@@ -375,11 +385,13 @@ func SearchChannels(keyword string, group string, model string, idSort bool, sor
 			// sqlite, PostgreSQL
 			groupCondition = `(',' || ` + commonGroupCol + ` || ',') LIKE ?`
 		}
-		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + ` LIKE ? AND ` + groupCondition
-		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%", "%,"+group+",%")
+		whereClause = searchClause + " AND " + modelsCol + ` LIKE ? AND ` + groupCondition
+		args = append(args, searchArgs...)
+		args = append(args, "%"+model+"%", "%,"+group+",%")
 	} else {
-		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
-		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%")
+		whereClause = searchClause + " AND " + modelsCol + " LIKE ?"
+		args = append(args, searchArgs...)
+		args = append(args, "%"+model+"%")
 	}
 
 	// 执行查询
@@ -834,6 +846,10 @@ func GetPaginatedTags(offset int, limit int) ([]*string, error) {
 }
 
 func SearchTags(keyword string, group string, model string, idSort bool) ([]*string, error) {
+	return SearchTagsWithSensitive(keyword, group, model, idSort, true)
+}
+
+func SearchTagsWithSensitive(keyword string, group string, model string, idSort bool, includeSensitive bool) ([]*string, error) {
 	var tags []*string
 	modelsCol := "`models`"
 
@@ -859,6 +875,12 @@ func SearchTags(keyword string, group string, model string, idSort bool) ([]*str
 	// 构造WHERE子句
 	var whereClause string
 	var args []interface{}
+	searchClause := "(id = ? OR name LIKE ?)"
+	searchArgs := []interface{}{common.String2Int(keyword), "%" + keyword + "%"}
+	if includeSensitive {
+		searchClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?)"
+		searchArgs = append(searchArgs, keyword, "%"+keyword+"%")
+	}
 	if group != "" && group != "null" {
 		var groupCondition string
 		if common.UsingMySQL {
@@ -867,11 +889,13 @@ func SearchTags(keyword string, group string, model string, idSort bool) ([]*str
 			// sqlite, PostgreSQL
 			groupCondition = `(',' || ` + commonGroupCol + ` || ',') LIKE ?`
 		}
-		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + ` LIKE ? AND ` + groupCondition
-		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%", "%,"+group+",%")
+		whereClause = searchClause + " AND " + modelsCol + ` LIKE ? AND ` + groupCondition
+		args = append(args, searchArgs...)
+		args = append(args, "%"+model+"%", "%,"+group+",%")
 	} else {
-		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
-		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%")
+		whereClause = searchClause + " AND " + modelsCol + " LIKE ?"
+		args = append(args, searchArgs...)
+		args = append(args, "%"+model+"%")
 	}
 
 	subQuery := baseQuery.Where(whereClause, args...).

@@ -293,6 +293,9 @@ func AdminBindSubscription(c *gin.Context) {
 		common.ApiErrorMsg(c, "参数错误")
 		return
 	}
+	if !requireCanAdministerSubscriptionTarget(c, req.UserId) {
+		return
+	}
 	msg, err := model.AdminBindSubscription(req.UserId, req.PlanId, "")
 	if err != nil {
 		common.ApiError(c, err)
@@ -313,6 +316,9 @@ func AdminListUserSubscriptions(c *gin.Context) {
 		common.ApiErrorMsg(c, "无效的用户ID")
 		return
 	}
+	if !requireCanAdministerSubscriptionTarget(c, userId) {
+		return
+	}
 	subs, err := model.GetAllUserSubscriptions(userId)
 	if err != nil {
 		common.ApiError(c, err)
@@ -330,6 +336,9 @@ func AdminCreateUserSubscription(c *gin.Context) {
 	userId, _ := strconv.Atoi(c.Param("id"))
 	if userId <= 0 {
 		common.ApiErrorMsg(c, "无效的用户ID")
+		return
+	}
+	if !requireCanAdministerSubscriptionTarget(c, userId) {
 		return
 	}
 	var req AdminCreateUserSubscriptionRequest
@@ -356,6 +365,9 @@ func AdminInvalidateUserSubscription(c *gin.Context) {
 		common.ApiErrorMsg(c, "无效的订阅ID")
 		return
 	}
+	if !requireCanAdministerUserSubscription(c, subId) {
+		return
+	}
 	msg, err := model.AdminInvalidateUserSubscription(subId)
 	if err != nil {
 		common.ApiError(c, err)
@@ -375,6 +387,9 @@ func AdminDeleteUserSubscription(c *gin.Context) {
 		common.ApiErrorMsg(c, "无效的订阅ID")
 		return
 	}
+	if !requireCanAdministerUserSubscription(c, subId) {
+		return
+	}
 	msg, err := model.AdminDeleteUserSubscription(subId)
 	if err != nil {
 		common.ApiError(c, err)
@@ -385,4 +400,26 @@ func AdminDeleteUserSubscription(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, nil)
+}
+
+func requireCanAdministerSubscriptionTarget(c *gin.Context, userId int) bool {
+	targetUser, err := model.GetUserById(userId, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return false
+	}
+	if canAdministerUserRole(c.GetInt("role"), targetUser.Role) {
+		return true
+	}
+	common.ApiErrorMsg(c, "无权限管理该用户的订阅")
+	return false
+}
+
+func requireCanAdministerUserSubscription(c *gin.Context, subId int) bool {
+	sub, err := model.GetUserSubscriptionById(subId)
+	if err != nil {
+		common.ApiError(c, err)
+		return false
+	}
+	return requireCanAdministerSubscriptionTarget(c, sub.UserId)
 }

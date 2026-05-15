@@ -507,6 +507,23 @@ func TestGetAdminReferralRecordsFiltersByKeywordAndRewardStatus(t *testing.T) {
 	assert.False(t, records[0].InviterRewardUnlocked)
 }
 
+func TestGetAdminReferralRecordsIncludesInviteeWhenInviterRowMissing(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, false, 10, 0)
+
+	insertReferralUserForTest(t, 121, "orphan-invitee", 999, nil)
+
+	records, total, err := GetAdminReferralRecords(&AdminReferralQuery{
+		PageInfo: &common.PageInfo{Page: 1, PageSize: 20},
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, records, 1)
+	assert.Equal(t, 999, records[0].InviterId)
+	assert.Equal(t, 121, records[0].InviteeId)
+	assert.Equal(t, "orphan-invitee", records[0].InviteeUsername)
+}
+
 func TestCompleteSubscriptionOrderCreditsEachOrderOnce(t *testing.T) {
 	truncateTables(t)
 	setReferralCommissionSettingsForTest(t, true, 10, 0)

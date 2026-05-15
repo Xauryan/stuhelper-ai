@@ -32,6 +32,7 @@ const ColumnSelectorModal = ({
   setBillingDisplayMode,
   COLUMN_KEYS,
   isAdminUser,
+  canViewUserDetail,
   copyText,
   showUserInfoFunc,
   t,
@@ -51,6 +52,7 @@ const ColumnSelectorModal = ({
     copyText,
     showUserInfoFunc,
     isAdminUser,
+    canViewUserDetail,
     billingDisplayMode,
   });
 
@@ -73,7 +75,9 @@ const ColumnSelectorModal = ({
     >
       <div style={{ marginBottom: 20 }}>
         <div style={{ marginBottom: 16 }}>
-          <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('计费显示模式')}</div>
+          <div style={{ marginBottom: 8, fontWeight: 600 }}>
+            {t('计费显示模式')}
+          </div>
           <RadioGroup
             type='button'
             value={billingDisplayMode}

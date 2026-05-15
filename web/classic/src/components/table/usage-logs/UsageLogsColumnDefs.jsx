@@ -473,6 +473,7 @@ export const getLogsColumns = ({
   showUserInfoFunc,
   openChannelAffinityUsageCacheModal,
   isAdminUser,
+  canViewUserDetail,
   billingDisplayMode = 'price',
 }) => {
   return [
@@ -584,7 +585,9 @@ export const getLogsColumns = ({
               style={{ marginRight: 4 }}
               onClick={(event) => {
                 event.stopPropagation();
-                showUserInfoFunc(record.user_id);
+                if (canViewUserDetail) {
+                  showUserInfoFunc(record.user_id);
+                }
               }}
             >
               {typeof text === 'string' && text.slice(0, 1)}

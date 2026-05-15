@@ -24,6 +24,7 @@ import {
   API,
   getTodayStartTimestamp,
   isAdmin,
+  isAuditAdmin,
   showError,
   showSuccess,
   timestamp2string,
@@ -78,11 +79,12 @@ export const useLogsData = () => {
 
   // User and admin
   const isAdminUser = isAdmin();
+  const canReadAllLogs = isAuditAdmin();
   // Role-specific storage key to prevent different roles from overwriting each other
-  const STORAGE_KEY = isAdminUser
+  const STORAGE_KEY = canReadAllLogs
     ? 'logs-table-columns-admin'
     : 'logs-table-columns-user';
-  const BILLING_DISPLAY_MODE_STORAGE_KEY = isAdminUser
+  const BILLING_DISPLAY_MODE_STORAGE_KEY = canReadAllLogs
     ? 'logs-billing-display-mode-admin'
     : 'logs-billing-display-mode-user';
 
@@ -113,8 +115,8 @@ export const useLogsData = () => {
   const getDefaultColumnVisibility = () => {
     return {
       [COLUMN_KEYS.TIME]: true,
-      [COLUMN_KEYS.CHANNEL]: isAdminUser,
-      [COLUMN_KEYS.USERNAME]: isAdminUser,
+      [COLUMN_KEYS.CHANNEL]: canReadAllLogs,
+      [COLUMN_KEYS.USERNAME]: canReadAllLogs,
       [COLUMN_KEYS.TOKEN]: true,
       [COLUMN_KEYS.GROUP]: true,
       [COLUMN_KEYS.TYPE]: true,
@@ -123,7 +125,7 @@ export const useLogsData = () => {
       [COLUMN_KEYS.PROMPT]: true,
       [COLUMN_KEYS.COMPLETION]: true,
       [COLUMN_KEYS.COST]: true,
-      [COLUMN_KEYS.RETRY]: isAdminUser,
+      [COLUMN_KEYS.RETRY]: canReadAllLogs,
       [COLUMN_KEYS.IP]: true,
       [COLUMN_KEYS.DETAILS]: true,
     };
@@ -141,7 +143,7 @@ export const useLogsData = () => {
       const parsed = JSON.parse(savedColumns);
       const merged = { ...defaults, ...parsed };
 
-      if (!isAdminUser) {
+      if (!canReadAllLogs) {
         merged[COLUMN_KEYS.CHANNEL] = false;
         merged[COLUMN_KEYS.USERNAME] = false;
         merged[COLUMN_KEYS.RETRY] = false;
@@ -213,7 +215,7 @@ export const useLogsData = () => {
         (key === COLUMN_KEYS.CHANNEL ||
           key === COLUMN_KEYS.USERNAME ||
           key === COLUMN_KEYS.RETRY) &&
-        !isAdminUser
+        !canReadAllLogs
       ) {
         updatedColumns[key] = false;
       } else {
@@ -318,7 +320,7 @@ export const useLogsData = () => {
       return;
     }
     setLoadingStat(true);
-    if (isAdminUser) {
+    if (canReadAllLogs) {
       await getLogStat();
     } else {
       await getLogSelfStat();
@@ -386,7 +388,7 @@ export const useLogsData = () => {
       let other = getLogOther(logs[i].other);
       let expandDataLocal = [];
 
-      if (isAdminUser && (logs[i].type === 0 || logs[i].type === 2)) {
+      if (canReadAllLogs && (logs[i].type === 0 || logs[i].type === 2)) {
         expandDataLocal.push({
           key: t('渠道信息'),
           value: `${logs[i].channel} - ${logs[i].channel_name || '[未知]'}`,
@@ -446,7 +448,7 @@ export const useLogsData = () => {
             value: logs[i].content,
           });
         }
-        if (isAdminUser && other?.reject_reason) {
+        if (canReadAllLogs && other?.reject_reason) {
           expandDataLocal.push({
             key: t('拦截原因'),
             value: other.reject_reason,
@@ -547,7 +549,7 @@ export const useLogsData = () => {
           });
         }
       }
-      if (isAdminUser && logs[i].type === 6) {
+      if (canReadAllLogs && logs[i].type === 6) {
         const adminInfo = other?.admin_info;
         if (adminInfo) {
           if (adminInfo.payment_method) {
@@ -594,7 +596,7 @@ export const useLogsData = () => {
           value: other.request_path,
         });
       }
-      if (isAdminUser && other?.stream_status) {
+      if (canReadAllLogs && other?.stream_status) {
         const ss = other.stream_status;
         const isOk = ss.status === 'ok';
         const statusLabel = isOk ? '✓ ' + t('正常') : '✗ ' + t('异常');
@@ -692,13 +694,13 @@ export const useLogsData = () => {
           ),
         });
       }
-      if (isAdminUser && logs[i].type !== 6 && logs[i].type !== 1) {
+      if (canReadAllLogs && logs[i].type !== 6 && logs[i].type !== 1) {
         expandDataLocal.push({
           key: t('请求转换'),
           value: requestConversionDisplayValue(other?.request_conversion),
         });
       }
-      if (isAdminUser && logs[i].type !== 6 && logs[i].type !== 1) {
+      if (canReadAllLogs && logs[i].type !== 6 && logs[i].type !== 1) {
         let localCountMode = '';
         if (other?.admin_info?.local_count_tokens) {
           localCountMode = t('本地计费');
@@ -710,7 +712,7 @@ export const useLogsData = () => {
           value: localCountMode,
         });
       }
-      if (isAdminUser && logs[i].type === 1) {
+      if (canReadAllLogs && logs[i].type === 1) {
         const adminInfo = other?.admin_info;
         if (adminInfo) {
           if (adminInfo.payment_method) {
@@ -762,7 +764,7 @@ export const useLogsData = () => {
           });
         }
       }
-      if (isAdminUser && logs[i].type === 3 && other?.admin_info) {
+      if (canReadAllLogs && logs[i].type === 3 && other?.admin_info) {
         const adminInfo = other.admin_info;
         const hasUsername =
           adminInfo.admin_username !== undefined &&
@@ -820,7 +822,7 @@ export const useLogsData = () => {
 
     let localStartTimestamp = Date.parse(start_timestamp) / 1000;
     let localEndTimestamp = Date.parse(end_timestamp) / 1000;
-    if (isAdminUser) {
+    if (canReadAllLogs) {
       url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${currentLogType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}&group=${group}&request_id=${request_id}`;
     } else {
       url = `/api/log/self/?p=${startIdx}&page_size=${pageSize}&type=${currentLogType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&group=${group}&request_id=${request_id}`;
@@ -913,7 +915,8 @@ export const useLogsData = () => {
     pageSize,
     logType,
     stat,
-    isAdminUser,
+    isAdminUser: canReadAllLogs,
+    canViewUserDetail: isAdminUser,
 
     // Form state
     formApi,

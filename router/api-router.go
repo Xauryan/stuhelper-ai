@@ -137,8 +137,8 @@ func SetApiRouter(router *gin.Engine) {
 			{
 				adminRoute.GET("/", controller.GetAllUsers)
 				adminRoute.GET("/search", controller.SearchUsers)
-				adminRoute.GET("/referrals", middleware.RequireAdminRole(), controller.GetAdminReferralRecords)
-				adminRoute.GET("/referrals/:invitee_id/commissions", middleware.RequireAdminRole(), controller.GetAdminReferralCommissions)
+				adminRoute.GET("/referrals", middleware.RequireAuditOrAdminRole(), controller.GetAdminReferralRecords)
+				adminRoute.GET("/referrals/:invitee_id/commissions", middleware.RequireAuditOrAdminRole(), controller.GetAdminReferralCommissions)
 				adminRoute.GET("/topup", middleware.RequireAdminRole(), controller.GetAllTopUps)
 				adminRoute.POST("/topup/complete", middleware.RequireAdminRole(), controller.AdminCompleteTopUp)
 				adminRoute.POST("/topup/alipay-official/refund", middleware.RequireAdminRole(), controller.AdminRefundAlipayOfficialTopUp)
@@ -315,12 +315,12 @@ func SetApiRouter(router *gin.Engine) {
 			redemptionRoute.DELETE("/:id", middleware.RequireAdminRole(), controller.DeleteRedemption)
 		}
 		logRoute := apiRouter.Group("/log")
-		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
+		logRoute.GET("/", middleware.AuditAdminAuth(), controller.GetAllLogs)
 		logRoute.DELETE("/", middleware.AdminAuth(), controller.DeleteHistoryLogs)
-		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
+		logRoute.GET("/stat", middleware.AuditAdminAuth(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
-		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)
-		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
+		logRoute.GET("/channel_affinity_usage_cache", middleware.AuditAdminAuth(), controller.GetChannelAffinityUsageCacheStats)
+		logRoute.GET("/search", middleware.AuditAdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
 
@@ -350,12 +350,12 @@ func SetApiRouter(router *gin.Engine) {
 
 		mjRoute := apiRouter.Group("/mj")
 		mjRoute.GET("/self", middleware.UserAuth(), controller.GetUserMidjourney)
-		mjRoute.GET("/", middleware.AdminAuth(), controller.GetAllMidjourney)
+		mjRoute.GET("/", middleware.AuditAdminAuth(), controller.GetAllMidjourney)
 
 		taskRoute := apiRouter.Group("/task")
 		{
 			taskRoute.GET("/self", middleware.UserAuth(), controller.GetUserTask)
-			taskRoute.GET("/", middleware.AdminAuth(), controller.GetAllTask)
+			taskRoute.GET("/", middleware.AuditAdminAuth(), controller.GetAllTask)
 		}
 
 		vendorRoute := apiRouter.Group("/vendors")

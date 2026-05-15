@@ -199,9 +199,9 @@ function App() {
         <Route
           path='/console/referral'
           element={
-            <AdminRoute>
+            <AuditAdminRoute>
               <Referral />
-            </AdminRoute>
+            </AuditAdminRoute>
           }
         />
         <Route

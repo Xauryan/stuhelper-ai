@@ -51,6 +51,17 @@ func TestAuditAdminAuthAllowsAuditAdminAndRejectsCommonUser(t *testing.T) {
 		{name: "root allowed", role: common.RoleRootUser, want: http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			db := setupSessionAuthTestDB(t)
+			require.NoError(t, db.Create(&model.User{
+				Id:          123,
+				Username:    "role-test",
+				Password:    "password",
+				DisplayName: "Role Test",
+				Role:        tc.role,
+				Status:      common.UserStatusEnabled,
+				Group:       "default",
+			}).Error)
+
 			router := gin.New()
 			router.Use(sessions.Sessions("session", cookie.NewStore([]byte("test-secret"))))
 			router.Use(setTestSessionUser(tc.role))
@@ -71,6 +82,107 @@ func TestAuditAdminAuthAllowsAuditAdminAndRejectsCommonUser(t *testing.T) {
 			require.Equal(t, "ok", recorder.Body.String())
 		})
 	}
+}
+
+func setupSessionAuthTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+
+	originalRedisEnabled := common.RedisEnabled
+	originalUsingSQLite := common.UsingSQLite
+	originalUsingMySQL := common.UsingMySQL
+	originalUsingPostgreSQL := common.UsingPostgreSQL
+	originalDB := model.DB
+	originalLogDB := model.LOG_DB
+
+	gin.SetMode(gin.TestMode)
+	common.RedisEnabled = false
+	common.UsingSQLite = true
+	common.UsingMySQL = false
+	common.UsingPostgreSQL = false
+
+	dsn := fmt.Sprintf("file:%s_session?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	require.NoError(t, err)
+	model.DB = db
+	model.LOG_DB = db
+	require.NoError(t, db.AutoMigrate(&model.User{}))
+
+	t.Cleanup(func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+		common.RedisEnabled = originalRedisEnabled
+		common.UsingSQLite = originalUsingSQLite
+		common.UsingMySQL = originalUsingMySQL
+		common.UsingPostgreSQL = originalUsingPostgreSQL
+		model.DB = originalDB
+		model.LOG_DB = originalLogDB
+	})
+
+	return db
+}
+
+func setStaleTestSessionUser(role int, status int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session := sessions.Default(c)
+		session.Set("id", 123)
+		session.Set("username", "stale-session-user")
+		session.Set("role", role)
+		session.Set("status", status)
+		if err := session.Save(); err != nil {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		c.Request.Header.Set("StuHelper-AI-User", "123")
+		c.Next()
+	}
+}
+
+func TestSessionAuthRevalidatesCurrentRoleAndStatus(t *testing.T) {
+	db := setupSessionAuthTestDB(t)
+
+	require.NoError(t, db.Create(&model.User{
+		Id:          123,
+		Username:    "stale-session-user",
+		Password:    "password",
+		DisplayName: "Stale Session User",
+		Role:        common.RoleAuditAdminUser,
+		Status:      common.UserStatusEnabled,
+		Group:       "default",
+	}).Error)
+
+	router := gin.New()
+	router.Use(sessions.Sessions("session", cookie.NewStore([]byte("test-secret"))))
+	router.Use(setStaleTestSessionUser(common.RoleAdminUser, common.UserStatusEnabled))
+	router.GET("/", AdminAuth(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	require.Contains(t, recorder.Body.String(), `"success":false`)
+	require.Contains(t, recorder.Body.String(), "auth.insufficient_privilege")
+
+	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 123).Update("status", common.UserStatusDisabled).Error)
+
+	router = gin.New()
+	router.Use(sessions.Sessions("session", cookie.NewStore([]byte("test-secret"))))
+	router.Use(setStaleTestSessionUser(common.RoleCommonUser, common.UserStatusEnabled))
+	router.GET("/", UserAuth(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	recorder = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	require.Contains(t, recorder.Body.String(), `"success":false`)
+	require.Contains(t, recorder.Body.String(), "auth.user_banned")
 }
 
 func TestTryUserAuthIgnoresDisabledSession(t *testing.T) {
@@ -97,6 +209,80 @@ func TestTryUserAuthIgnoresDisabledSession(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	assert.Equal(t, "ok", recorder.Body.String())
+}
+
+func TestTryUserAuthIgnoresStaleEnabledSessionForDisabledUser(t *testing.T) {
+	db := setupSessionAuthTestDB(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:          123,
+		Username:    "disabled-db-user",
+		Password:    "password",
+		DisplayName: "Disabled DB User",
+		Role:        common.RoleCommonUser,
+		Status:      common.UserStatusDisabled,
+		Group:       "default",
+	}).Error)
+
+	router := gin.New()
+	router.Use(sessions.Sessions("session", cookie.NewStore([]byte("test-secret"))))
+	router.Use(setStaleTestSessionUser(common.RoleCommonUser, common.UserStatusEnabled))
+	router.GET("/", TryUserAuth(), func(c *gin.Context) {
+		assert.Zero(t, c.GetInt("id"))
+		c.String(http.StatusOK, "ok")
+	})
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, "ok", recorder.Body.String())
+}
+
+func TestTokenOrUserAuthRejectsStaleEnabledSessionForDisabledUser(t *testing.T) {
+	db := setupSessionAuthTestDB(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:          123,
+		Username:    "disabled-db-user",
+		Password:    "password",
+		DisplayName: "Disabled DB User",
+		Role:        common.RoleCommonUser,
+		Status:      common.UserStatusDisabled,
+		Group:       "default",
+	}).Error)
+
+	router := gin.New()
+	router.Use(sessions.Sessions("session", cookie.NewStore([]byte("test-secret"))))
+	router.Use(setStaleTestSessionUser(common.RoleCommonUser, common.UserStatusEnabled))
+	router.GET("/", TokenOrUserAuth(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code, recorder.Body.String())
+	require.NotEqual(t, "ok", recorder.Body.String())
+}
+
+func TestAdminAuthRejectsDeletedSessionUserAsLoggedOut(t *testing.T) {
+	setupSessionAuthTestDB(t)
+
+	router := gin.New()
+	router.Use(sessions.Sessions("session", cookie.NewStore([]byte("test-secret"))))
+	router.Use(setStaleTestSessionUser(common.RoleAdminUser, common.UserStatusEnabled))
+	router.GET("/", AdminAuth(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code, recorder.Body.String())
+	require.Contains(t, recorder.Body.String(), `"success":false`)
+	require.Contains(t, recorder.Body.String(), "auth.not_logged_in")
 }
 
 func TestRequireAdminRoleRejectsAuditAdmin(t *testing.T) {

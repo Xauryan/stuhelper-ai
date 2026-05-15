@@ -290,6 +290,111 @@ func TestAdminUpdateSubscriptionPlanPersistsRecommendedFlag(t *testing.T) {
 	assert.True(t, reloaded.Recommended)
 }
 
+func TestAdminSubscriptionUserActionsRejectAuditAdminTargets(t *testing.T) {
+	db := setupSubscriptionControllerTestDB(t)
+	target := model.User{
+		Username:    "audit-subscription-target",
+		Password:    "password123",
+		DisplayName: "Audit Subscription Target",
+		Role:        common.RoleAuditAdminUser,
+		Status:      common.UserStatusEnabled,
+		AffCode:     "audit-sub-aff",
+	}
+	require.NoError(t, db.Create(&target).Error)
+	plan := model.SubscriptionPlan{
+		Title:         "Audit Plan",
+		PriceAmount:   1,
+		Currency:      "USD",
+		DurationUnit:  model.SubscriptionDurationMonth,
+		DurationValue: 1,
+		Enabled:       true,
+	}
+	require.NoError(t, db.Create(&plan).Error)
+	sub := model.UserSubscription{
+		UserId:      target.Id,
+		PlanId:      plan.Id,
+		AmountTotal: 100,
+		StartTime:   common.GetTimestamp(),
+		EndTime:     common.GetTimestamp() + 3600,
+		Status:      "active",
+		Source:      "admin",
+	}
+	require.NoError(t, db.Create(&sub).Error)
+
+	for _, tc := range []struct {
+		name    string
+		method  string
+		target  string
+		body    any
+		params  gin.Params
+		handler gin.HandlerFunc
+	}{
+		{
+			name:    "bind",
+			method:  http.MethodPost,
+			target:  "/api/subscription/admin/bind",
+			body:    AdminBindSubscriptionRequest{UserId: target.Id, PlanId: plan.Id},
+			handler: AdminBindSubscription,
+		},
+		{
+			name:    "list user subscriptions",
+			method:  http.MethodGet,
+			target:  fmt.Sprintf("/api/subscription/admin/users/%d/subscriptions", target.Id),
+			body:    map[string]any{},
+			params:  gin.Params{{Key: "id", Value: fmt.Sprintf("%d", target.Id)}},
+			handler: AdminListUserSubscriptions,
+		},
+		{
+			name:    "create user subscription",
+			method:  http.MethodPost,
+			target:  fmt.Sprintf("/api/subscription/admin/users/%d/subscriptions", target.Id),
+			body:    AdminCreateUserSubscriptionRequest{PlanId: plan.Id},
+			params:  gin.Params{{Key: "id", Value: fmt.Sprintf("%d", target.Id)}},
+			handler: AdminCreateUserSubscription,
+		},
+		{
+			name:    "invalidate user subscription",
+			method:  http.MethodPost,
+			target:  fmt.Sprintf("/api/subscription/admin/user_subscriptions/%d/invalidate", sub.Id),
+			body:    map[string]any{},
+			params:  gin.Params{{Key: "id", Value: fmt.Sprintf("%d", sub.Id)}},
+			handler: AdminInvalidateUserSubscription,
+		},
+		{
+			name:    "delete user subscription",
+			method:  http.MethodDelete,
+			target:  fmt.Sprintf("/api/subscription/admin/user_subscriptions/%d", sub.Id),
+			body:    map[string]any{},
+			params:  gin.Params{{Key: "id", Value: fmt.Sprintf("%d", sub.Id)}},
+			handler: AdminDeleteUserSubscription,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, recorder := newSubscriptionControllerContext(t, tc.method, tc.target, tc.body)
+			ctx.Set("role", common.RoleAdminUser)
+			ctx.Params = tc.params
+
+			tc.handler(ctx)
+
+			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+			var response struct {
+				Success bool   `json:"success"`
+				Message string `json:"message"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			require.False(t, response.Success)
+			require.Contains(t, response.Message, "权限")
+		})
+	}
+
+	var count int64
+	require.NoError(t, db.Model(&model.UserSubscription{}).Where("user_id = ?", target.Id).Count(&count).Error)
+	require.Equal(t, int64(1), count)
+	var unchanged model.UserSubscription
+	require.NoError(t, db.First(&unchanged, sub.Id).Error)
+	require.Equal(t, "active", unchanged.Status)
+}
+
 func TestSubscriptionRequestAlipayOfficialPayCreatesOfficialOrder(t *testing.T) {
 	db := setupSubscriptionControllerTestDB(t)
 

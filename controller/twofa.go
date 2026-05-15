@@ -519,8 +519,7 @@ func AdminDisable2FA(c *gin.Context) {
 		return
 	}
 
-	myRole := c.GetInt("role")
-	if myRole <= targetUser.Role && myRole != common.RoleRootUser {
+	if !canAdministerUserRole(c.GetInt("role"), targetUser.Role) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "无权操作同级或更高级用户的2FA设置",

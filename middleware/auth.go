@@ -33,6 +33,47 @@ func validUserInfo(username string, role int) bool {
 	return true
 }
 
+func syncSessionUser(session sessions.Session, user *model.User) {
+	session.Set("username", user.Username)
+	session.Set("role", user.Role)
+	session.Set("id", user.Id)
+	session.Set("status", user.Status)
+	session.Set("group", user.Group)
+	_ = session.Save()
+}
+
+func refreshSessionUser(c *gin.Context, session sessions.Session, userId int) (*model.User, bool) {
+	if model.DB == nil {
+		common.SysLog(fmt.Sprintf("session auth user reload error for user %d: database is not initialized", userId))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+		})
+		c.Abort()
+		return nil, false
+	}
+	currentUser, err := model.GetUserById(userId, false)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgAuthNotLoggedIn),
+			})
+			c.Abort()
+			return nil, false
+		}
+		common.SysLog(fmt.Sprintf("session auth user reload error for user %d: %v", userId, err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+		})
+		c.Abort()
+		return nil, false
+	}
+	syncSessionUser(session, currentUser)
+	return currentUser, true
+}
+
 func authHelper(c *gin.Context, minRole int) {
 	session := sessions.Default(c)
 	username := session.Get("username")
@@ -120,6 +161,22 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
+	if !useAccessToken {
+		currentUser, ok := refreshSessionUser(c, session, apiUserId)
+		if !ok {
+			return
+		}
+		username = currentUser.Username
+		role = currentUser.Role
+		id = currentUser.Id
+		status = currentUser.Status
+		session.Set("username", username)
+		session.Set("role", role)
+		session.Set("id", id)
+		session.Set("status", status)
+		session.Set("group", currentUser.Group)
+		_ = session.Save()
+	}
 	if status.(int) == common.UserStatusDisabled {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -177,18 +234,31 @@ func TryUserAuth() func(c *gin.Context) {
 		session := sessions.Default(c)
 		id := session.Get("id")
 		if id != nil {
-			if status, ok := session.Get("status").(int); ok && status == common.UserStatusEnabled {
+			if status, ok := session.Get("status").(int); !ok || status != common.UserStatusEnabled {
+				c.Next()
+				return
+			}
+			userId, ok := id.(int)
+			if !ok {
+				c.Next()
+				return
+			}
+			if model.DB == nil {
+				c.Next()
+				return
+			}
+			currentUser, err := model.GetUserById(userId, false)
+			if err != nil {
+				c.Next()
+				return
+			}
+			syncSessionUser(session, currentUser)
+			if currentUser.Status == common.UserStatusEnabled {
 				c.Set("id", id)
-				if username := session.Get("username"); username != nil {
-					c.Set("username", username)
-				}
-				if role := session.Get("role"); role != nil {
-					c.Set("role", role)
-				}
-				if group := session.Get("group"); group != nil {
-					c.Set("group", group)
-					c.Set("user_group", group)
-				}
+				c.Set("username", currentUser.Username)
+				c.Set("role", currentUser.Role)
+				c.Set("group", currentUser.Group)
+				c.Set("user_group", currentUser.Group)
 			}
 		}
 		c.Next()
@@ -248,10 +318,25 @@ func TokenOrUserAuth() func(c *gin.Context) {
 		// Try session auth first (dashboard users)
 		session := sessions.Default(c)
 		if id := session.Get("id"); id != nil {
-			if status, ok := session.Get("status").(int); ok && status == common.UserStatusEnabled {
-				c.Set("id", id)
-				c.Next()
+			if status, ok := session.Get("status").(int); !ok || status != common.UserStatusEnabled {
+				TokenAuth()(c)
 				return
+			}
+			if model.DB == nil {
+				TokenAuth()(c)
+				return
+			}
+			userId, ok := id.(int)
+			if ok {
+				currentUser, err := model.GetUserById(userId, false)
+				if err == nil {
+					syncSessionUser(session, currentUser)
+					if currentUser.Status == common.UserStatusEnabled {
+						c.Set("id", id)
+						c.Next()
+						return
+					}
+				}
 			}
 		}
 		// Fall back to token auth (API clients)

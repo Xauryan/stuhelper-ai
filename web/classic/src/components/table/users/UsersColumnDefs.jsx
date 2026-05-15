@@ -201,7 +201,9 @@ const renderInviteInfo = (text, record, t) => {
         <Tag color='white' shape='circle' className='!text-xs'>
           {record.inviter_id === 0
             ? t('无邀请人')
-            : `${t('邀请人')}: ${record.inviter_id}`}
+            : `${t('邀请人')}: ${
+                record.inviter_display_name || record.inviter_username || '-'
+              } (ID ${record.inviter_id})`}
         </Tag>
       </Space>
     </div>
@@ -218,9 +220,7 @@ const renderOperations = (
     setEditingUser,
     setShowEditUser,
     showPromoteModal,
-    showPromoteAuditModal,
     showDemoteModal,
-    showDemoteAuditModal,
     showEnableDisableModal,
     showDeleteModal,
     showResetPasskeyModal,
@@ -297,40 +297,18 @@ const renderOperations = (
           size='small'
           onClick={() => showPromoteModal(record)}
         >
-          {record.role === USER_ROLES.AUDIT_ADMIN ? t('设为管理员') : t('提升')}
-        </Button>
-      )}
-      {record.role < USER_ROLES.AUDIT_ADMIN && (
-        <Button
-          type='secondary'
-          size='small'
-          onClick={() => showPromoteAuditModal(record)}
-        >
-          {t('设为审计管理员')}
+          {t('提升')}
         </Button>
       )}
       {isRoot() &&
-        record.role > USER_ROLES.AUDIT_ADMIN &&
+        record.role > USER_ROLES.COMMON &&
         record.role < USER_ROLES.ROOT && (
-          <Button
-            type='secondary'
-            size='small'
-            onClick={() => showDemoteAuditModal(record)}
-          >
-            {t('设为审计管理员')}
-          </Button>
-        )}
-      {record.role > USER_ROLES.COMMON &&
-        record.role < USER_ROLES.ROOT &&
-        (isRoot() || record.role < USER_ROLES.ADMIN) && (
           <Button
             type='secondary'
             size='small'
             onClick={() => showDemoteModal(record)}
           >
-            {record.role === USER_ROLES.AUDIT_ADMIN
-              ? t('设为普通用户')
-              : t('降级')}
+            {t('降级')}
           </Button>
         )}
       <Dropdown menu={moreMenu} trigger='click' position='bottomRight'>
@@ -348,9 +326,7 @@ export const getUsersColumns = ({
   setEditingUser,
   setShowEditUser,
   showPromoteModal,
-  showPromoteAuditModal,
   showDemoteModal,
-  showDemoteAuditModal,
   showEnableDisableModal,
   showDeleteModal,
   showResetPasskeyModal,
@@ -418,9 +394,7 @@ export const getUsersColumns = ({
           setEditingUser,
           setShowEditUser,
           showPromoteModal,
-          showPromoteAuditModal,
           showDemoteModal,
-          showDemoteAuditModal,
           showEnableDisableModal,
           showDeleteModal,
           showResetPasskeyModal,
