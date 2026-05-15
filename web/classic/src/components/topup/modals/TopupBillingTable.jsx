@@ -38,6 +38,7 @@ import { Coins } from 'lucide-react';
 import { IconSearch } from '@douyinfe/semi-icons';
 import { API, timestamp2string } from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
+import CardTable from '../../common/ui/CardTable';
 import {
   formatCurrency,
   getRemainingRefundMoney,
@@ -71,7 +72,18 @@ const PAYMENT_METHOD_MAP = {
 const isOfficialTopupRefundable = (record) =>
   isOfficialRefundable(record) && !record.refund_request_id;
 
-const TopupBillingTable = ({ active = true, pendingRefundOnly = false, t }) => {
+const TopupBillingTable = ({
+  active = true,
+  compactMode = false,
+  externalKeyword,
+  hideFilters = false,
+  hidePagination = false,
+  onPaginationChange,
+  onReady,
+  pendingRefundOnly = false,
+  t,
+  variant = 'embedded',
+}) => {
   const userIsAdmin = useMemo(() => isAdmin(), []);
   const [loading, setLoading] = useState(false);
   const [topups, setTopups] = useState([]);
@@ -87,6 +99,8 @@ const TopupBillingTable = ({ active = true, pendingRefundOnly = false, t }) => {
   const [refundPreview, setRefundPreview] = useState(null);
   const [refundMode, setRefundMode] = useState('direct');
   const [refundFull, setRefundFull] = useState(false);
+  const isPageVariant = variant === 'page';
+  const effectiveKeyword = hideFilters ? externalKeyword || '' : keyword;
 
   const loadTopups = async (currentPage, currentPageSize) => {
     setLoading(true);
@@ -96,8 +110,8 @@ const TopupBillingTable = ({ active = true, pendingRefundOnly = false, t }) => {
         p: String(currentPage),
         page_size: String(currentPageSize),
       });
-      if (keyword) {
-        params.set('keyword', keyword);
+      if (effectiveKeyword) {
+        params.set('keyword', effectiveKeyword);
       }
       if (pendingRefundOnly) {
         params.set('pending_refund', 'true');
@@ -122,7 +136,17 @@ const TopupBillingTable = ({ active = true, pendingRefundOnly = false, t }) => {
     if (active) {
       loadTopups(page, pageSize);
     }
-  }, [active, page, pageSize, keyword, pendingRefundOnly]);
+  }, [active, page, pageSize, effectiveKeyword, pendingRefundOnly]);
+
+  useEffect(() => {
+    onReady?.({ setPage, setPageSize });
+  }, [onReady]);
+
+  useEffect(() => {
+    if (onPaginationChange) {
+      onPaginationChange({ page, pageSize, total });
+    }
+  }, [onPaginationChange, page, pageSize, total]);
 
   const handlePageChange = (currentPage) => {
     setPage(currentPage);
@@ -620,44 +644,62 @@ const TopupBillingTable = ({ active = true, pendingRefundOnly = false, t }) => {
     handleRejectRefundRequest,
   ]);
 
+  const tableProps = {
+    columns: compactMode ? columns.map(({ fixed, ...rest }) => rest) : columns,
+    dataSource: topups,
+    loading: loading,
+    rowKey: 'id',
+    size: 'small',
+    empty: (
+      <Empty
+        image={<IllustrationNoResult style={{ width: 150, height: 150 }} />}
+        darkModeImage={
+          <IllustrationNoResultDark style={{ width: 150, height: 150 }} />
+        }
+        description={t('暂无充值记录')}
+        style={{ padding: 30 }}
+      />
+    ),
+    scroll: compactMode ? undefined : { x: 'max-content' },
+  };
+
+  const pagination = {
+    currentPage: page,
+    pageSize: pageSize,
+    total: total,
+    showSizeChanger: true,
+    pageSizeOpts: [10, 20, 50, 100],
+    onPageChange: handlePageChange,
+    onPageSizeChange: handlePageSizeChange,
+  };
+
+  const searchArea = !hideFilters ? (
+    <div className={isPageVariant ? '' : 'mb-3'}>
+      <Input
+        prefix={<IconSearch />}
+        placeholder={userIsAdmin ? t('用户ID/用户名/订单号') : t('订单号')}
+        value={keyword}
+        onChange={handleKeywordChange}
+        showClear
+        pure={isPageVariant}
+        size={isPageVariant ? 'small' : 'default'}
+      />
+    </div>
+  ) : null;
+
   return (
     <>
-      <div className='mb-3'>
-        <Input
-          prefix={<IconSearch />}
-          placeholder={userIsAdmin ? t('用户ID/用户名/订单号') : t('订单号')}
-          value={keyword}
-          onChange={handleKeywordChange}
-          showClear
+      {searchArea}
+      {isPageVariant ? (
+        <CardTable
+          {...tableProps}
+          className='rounded-xl overflow-hidden'
+          pagination={pagination}
+          hidePagination={hidePagination}
         />
-      </div>
-      <Table
-        columns={columns}
-        dataSource={topups}
-        loading={loading}
-        rowKey='id'
-        pagination={{
-          currentPage: page,
-          pageSize: pageSize,
-          total: total,
-          showSizeChanger: true,
-          pageSizeOpts: [10, 20, 50, 100],
-          onPageChange: handlePageChange,
-          onPageSizeChange: handlePageSizeChange,
-        }}
-        size='small'
-        empty={
-          <Empty
-            image={<IllustrationNoResult style={{ width: 150, height: 150 }} />}
-            darkModeImage={
-              <IllustrationNoResultDark style={{ width: 150, height: 150 }} />
-            }
-            description={t('暂无充值记录')}
-            style={{ padding: 30 }}
-          />
-        }
-        scroll={{ x: 'max-content' }}
-      />
+      ) : (
+        <Table {...tableProps} pagination={pagination} />
+      )}
       <Modal
         title={
           refundMode === 'approve'
