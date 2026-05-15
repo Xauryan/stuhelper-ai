@@ -10,6 +10,12 @@ export const TELECOM_LICENSE_TYPES = Object.freeze({
   edi: 'EDI',
 });
 
+export const TELECOM_LICENSE_TYPE_LABELS = Object.freeze({
+  [TELECOM_LICENSE_TYPES.icp]: '互联网信息服务业务经营许可证',
+  [TELECOM_LICENSE_TYPES.edi]:
+    '增值电信业务经营许可证—在线数据处理与交易处理业务',
+});
+
 const escapeHtml = (value) =>
   String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -51,6 +57,12 @@ export const joinFooterLicenseTypes = (value) =>
 
 export const parseFooterLicenseTypes = normalizeLicenseTypes;
 
+export const formatFooterLicenseName = (licenseTypes) =>
+  normalizeLicenseTypes(licenseTypes)
+    .map((type) => TELECOM_LICENSE_TYPE_LABELS[type])
+    .filter(Boolean)
+    .join('、');
+
 export const buildFooterCopyrightText = ({
   copyrightYear,
   copyrightOwner,
@@ -83,8 +95,9 @@ export const buildFooterTemplateHTML = ({
   const licenseNumber = normalizeText(telecomLicenseNumber);
   const licenseTypes = normalizeLicenseTypes(telecomLicenseTypes);
   if (licenseNumber && licenseTypes.length > 0) {
+    const licenseName = formatFooterLicenseName(licenseTypes);
     items.push(
-      `<a href="${escapeHtml(normalizeUrl(telecomLicenseUrl, FOOTER_TEMPLATE_DEFAULTS.telecomLicenseUrl))}" target="_blank" rel="noopener noreferrer">增值电信业务经营许可证(${escapeHtml(licenseTypes.join(','))})：${escapeHtml(licenseNumber)}</a>`,
+      `<a href="${escapeHtml(normalizeUrl(telecomLicenseUrl, FOOTER_TEMPLATE_DEFAULTS.telecomLicenseUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(licenseName)}：${escapeHtml(licenseNumber)}</a>`,
     );
   }
 

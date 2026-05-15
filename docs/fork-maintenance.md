@@ -87,6 +87,10 @@ StuHelper AI 本地任务决定修改它们：
   模板字段生成 ICP 备案、增值电信业务经营许可证和版权信息。备案号、许可证号
   或版权字段为空时不显示对应项；移动端必须允许这些内容换行，避免长备案号或
   许可证号挤压右侧署名。
+- classic 默认页脚模板中的许可证类型只把 `ICP` / `EDI` 作为内部选项值，页面
+  和页脚展示必须使用中文业务名称：`ICP` 显示为“互联网信息服务业务经营许可
+  证”，`EDI` 显示为“增值电信业务经营许可证—在线数据处理与交易处理业务”。
+  备案号和许可证号输入框不得放置示例号码作为默认提示。
 - classic 前端在 Vite 8 下仍有自定义 `treat-js-files-as-jsx` 插件调用
   `transformWithEsbuild`。Docker/GitHub Actions 干净环境必须安装显式
   `esbuild` devDependency，否则 classic 构建会因为 Vite 无法解析 `esbuild`

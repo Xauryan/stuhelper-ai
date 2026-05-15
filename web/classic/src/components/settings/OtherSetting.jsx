@@ -36,6 +36,7 @@ import { StatusContext } from '../../context/Status';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
 import {
   FOOTER_TEMPLATE_DEFAULTS,
+  TELECOM_LICENSE_TYPE_LABELS,
   buildFooterTemplateHTML,
   joinFooterLicenseTypes,
   parseFooterLicenseTypes,
@@ -725,7 +726,6 @@ const OtherSetting = () => {
                   <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                     <Form.Input
                       label={t('ICP备案号')}
-                      placeholder='京ICP备2025154912号'
                       field={'FooterTemplateIcpBeianNumber'}
                       onChange={handleInputChange}
                       extraText={t('留空则不显示')}
@@ -747,7 +747,6 @@ const OtherSetting = () => {
                   <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                     <Form.Input
                       label={t('增值电信业务经营许可证号')}
-                      placeholder='京B2-20253869'
                       field={'FooterTemplateTelecomLicenseNumber'}
                       onChange={handleInputChange}
                       extraText={t('留空则不显示')}
@@ -773,8 +772,12 @@ const OtherSetting = () => {
                     )}
                     onChange={handleFooterLicenseTypesChange}
                   >
-                    <Checkbox value='ICP'>ICP</Checkbox>
-                    <Checkbox value='EDI'>EDI</Checkbox>
+                    <Checkbox value='ICP'>
+                      {TELECOM_LICENSE_TYPE_LABELS.ICP}
+                    </Checkbox>
+                    <Checkbox value='EDI'>
+                      {TELECOM_LICENSE_TYPE_LABELS.EDI}
+                    </Checkbox>
                   </Checkbox.Group>
                 </div>
                 {footerTemplatePreview && (
