@@ -466,17 +466,12 @@ func GetUserTopUps(c *gin.Context) {
 	userId := c.GetInt("id")
 	pageInfo := common.GetPageQuery(c)
 	keyword := c.Query("keyword")
+	pendingRefund := c.Query("pending_refund") == "true"
 
-	var (
-		topups []*model.TopUp
-		total  int64
-		err    error
-	)
-	if keyword != "" {
-		topups, total, err = model.SearchUserTopUps(userId, keyword, pageInfo)
-	} else {
-		topups, total, err = model.GetUserTopUps(userId, pageInfo)
-	}
+	topups, total, err := model.GetUserTopUpsWithOptions(userId, model.TopUpQueryOptions{
+		Keyword:       keyword,
+		PendingRefund: pendingRefund,
+	}, pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -491,20 +486,15 @@ func GetUserTopUps(c *gin.Context) {
 func GetAllTopUps(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	keyword := c.Query("keyword")
+	pendingRefund := c.Query("pending_refund") == "true"
 	expireCtx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 	runAlipayOfficialOrderExpireTaskOnce(expireCtx)
 	cancel()
 
-	var (
-		topups []*model.TopUp
-		total  int64
-		err    error
-	)
-	if keyword != "" {
-		topups, total, err = model.SearchAllTopUps(keyword, pageInfo)
-	} else {
-		topups, total, err = model.GetAllTopUps(pageInfo)
-	}
+	topups, total, err := model.GetAllTopUpsWithOptions(model.TopUpQueryOptions{
+		Keyword:       keyword,
+		PendingRefund: pendingRefund,
+	}, pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
 		return

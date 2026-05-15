@@ -19,18 +19,22 @@
   - `controller/subscription_test.go`
   - `controller/topup_official.go`
   - `controller/topup_test.go`
+  - `controller/topup.go`
   - `model/subscription.go`
   - `model/main.go`
   - `model/payment_method_guard_test.go`
+  - `model/topup.go`
   - `router/api-router.go`
   - `web/classic/src/components/topup/RechargeCard.jsx`
   - `web/classic/src/components/topup/SubscriptionPlansCard.jsx`
   - `web/classic/src/components/topup/modals/SubscriptionPurchaseModal.jsx`
+  - `web/classic/src/components/topup/modals/TopupBillingTable.jsx`
   - `web/classic/src/components/topup/modals/TopupHistoryModal.jsx`
   - `web/classic/src/components/topup/modals/topupHistoryUtils.mjs`
   - `web/classic/src/components/topup/rechargeTabs.js`
   - `web/classic/src/components/topup/subscriptionPaymentMethods.js`
   - `web/classic/src/components/topup/subscriptionPlanDisplay.js`
+  - `web/classic/src/pages/Billing/index.jsx`
   - `web/classic/src/components/table/subscriptions/**`
   - `docs/official-cn-payments.md`
   - `docs/fork-maintenance.md`
@@ -105,6 +109,14 @@
 - 订阅退款不会扣用户钱包余额。部分退款只同步订阅订单为 `partial_refunded`；
   全额退款会取消订阅实例、按分组规则回退用户分组，并按 `subscription` 来源和
   订阅订单 ID 冲回返佣。额度充值退款仍按 `topup` 来源冲回返佣。
+- classic 新增独立账单页 `/console/billing`，侧边栏位置在“钱包管理”和“个人设置”
+  之间。普通用户只看自己的充值、订阅和退款记录；管理员在同一页面看全平台账单
+  并处理查询、关闭、退款、审批和拒绝退款。
+- 钱包页“充值账单”弹窗和独立账单页共用 `TopupBillingTable`，避免两套表格逻辑
+  分叉。独立账单页提供“全部账单”和“待处理退款”两个 tab。
+- 待处理退款 tab 通过 `pending_refund=true` 传给 `/api/user/topup/self` 或
+  `/api/user/topup`，后端使用待审核退款申请子查询过滤账单，分页总数和搜索结果
+  都来自数据库过滤结果，不在前端做客户端过滤。
 
 ### 验证
 
@@ -118,6 +130,7 @@ bun web/classic/src/components/topup/rechargeTabs.test.mjs
 bun web/classic/src/components/topup/modals/topupHistoryUtils.test.mjs
 go test ./service -run "WechatPayOfficial.*(Query|Close|Refund)|DecodeWechatPayOfficial" -count=1
 go test ./controller -run "WechatPayOfficial|AlipayOfficialRefund|AlipayOfficialQuery|AlipayOfficialClose" -count=1
+go test ./model -run "TopUpQueryOptions|SearchAllTopUps|CreateTopUpRefundRequest" -count=1
 Set-Location web/classic; bun run build
 git diff --check
 ```
@@ -138,6 +151,8 @@ git diff --check
   或 `ABNORMAL` 时，要回滚本地预留和订阅退款状态。
 - 保留用户退款申请和管理员审批的两段式流程，普通用户不能直接触发官方支付
   退款 API。
+- 保留 `/console/billing` 独立账单页、侧边栏顺序和 `pending_refund=true`
+  后端过滤，不能把待处理退款改回前端分页后的客户端过滤。
 
 ## QuantumNous/new-api#3288 - 邀请充值返佣
 

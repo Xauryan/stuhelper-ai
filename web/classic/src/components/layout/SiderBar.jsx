@@ -36,6 +36,7 @@ const routerMap = {
   token: '/console/token',
   redemption: '/console/redemption',
   topup: '/console/topup',
+  billing: '/console/billing',
   user: '/console/user',
   referral: '/console/referral',
   subscription: '/console/subscription',
@@ -129,6 +130,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('钱包管理'),
         itemKey: 'topup',
         to: '/topup',
+      },
+      {
+        text: t('账单管理'),
+        itemKey: 'billing',
+        to: '/billing',
+        iconKey: 'log',
       },
       {
         text: t('个人设置'),
@@ -339,7 +346,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         }
         icon={
           <div className='sidebar-icon-container flex-shrink-0'>
-            {getLucideIcon(item.itemKey, isSelected)}
+            {getLucideIcon(item.iconKey || item.itemKey, isSelected)}
           </div>
         }
         className={item.className}

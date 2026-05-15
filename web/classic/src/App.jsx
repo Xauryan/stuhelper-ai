@@ -41,6 +41,7 @@ import Token from './pages/Token';
 import Redemption from './pages/Redemption';
 import Referral from './pages/Referral';
 import TopUp from './pages/TopUp';
+import Billing from './pages/Billing';
 import Log from './pages/Log';
 import Chat from './pages/Chat';
 import Chat2Link from './pages/Chat2Link';
@@ -305,6 +306,16 @@ function App() {
             <PrivateRoute>
               <Suspense fallback={<Loading></Loading>} key={location.pathname}>
                 <TopUp />
+              </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/billing'
+          element={
+            <PrivateRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <Billing />
               </Suspense>
             </PrivateRoute>
           }

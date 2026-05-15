@@ -1303,8 +1303,60 @@ func uniqueIntSlice(values []int) []int {
 	return unique
 }
 
+type TopUpQueryOptions struct {
+	Keyword       string
+	PendingRefund bool
+}
+
+func applyPendingTopUpRefundFilter(tx *gorm.DB, query *gorm.DB) *gorm.DB {
+	pendingRefundTradeNos := tx.Model(&TopUpRefundRequest{}).
+		Select("trade_no").
+		Where("status = ?", TopUpRefundRequestStatusPending)
+	return query.Where("trade_no IN (?)", pendingRefundTradeNos)
+}
+
+func applyUserTopUpQueryOptions(tx *gorm.DB, query *gorm.DB, userId int, options TopUpQueryOptions) (*gorm.DB, error) {
+	query = query.Where("user_id = ? AND create_time >= ?", userId, topUpQueryCutoff())
+	if options.Keyword != "" {
+		pattern, err := buildTopUpContainsLikePattern(options.Keyword)
+		if err != nil {
+			return nil, err
+		}
+		query = query.Where("trade_no LIKE ? ESCAPE '!'", pattern)
+	}
+	if options.PendingRefund {
+		query = applyPendingTopUpRefundFilter(tx, query)
+	}
+	return query, nil
+}
+
+func applyAllTopUpQueryOptions(tx *gorm.DB, query *gorm.DB, options TopUpQueryOptions) (*gorm.DB, error) {
+	if options.Keyword != "" {
+		pattern, err := buildTopUpContainsLikePattern(options.Keyword)
+		if err != nil {
+			return nil, err
+		}
+		userIdKeyword, hasUserIdKeyword := parseTopUpUserIDKeyword(options.Keyword)
+		matchedUserIds, matchErr := findUserIDsByUsernamePattern(tx, pattern)
+		if matchErr != nil {
+			return nil, matchErr
+		}
+		if hasUserIdKeyword {
+			matchedUserIds = append(matchedUserIds, userIdKeyword)
+		}
+		query = query.Where("trade_no LIKE ? ESCAPE '!' OR user_id IN ?", pattern, uniqueIntSlice(matchedUserIds))
+	}
+	if options.PendingRefund {
+		query = applyPendingTopUpRefundFilter(tx, query)
+	}
+	return query, nil
+}
+
 func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
-	// Start transaction
+	return GetUserTopUpsWithOptions(userId, TopUpQueryOptions{}, pageInfo)
+}
+
+func GetUserTopUpsWithOptions(userId int, options TopUpQueryOptions, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -1315,23 +1367,26 @@ func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, tota
 		}
 	}()
 
-	cutoff := topUpQueryCutoff()
-
-	// Get total count within transaction
-	err = tx.Model(&TopUp{}).Where("user_id = ? AND create_time >= ?", userId, cutoff).Count(&total).Error
+	query, err := applyUserTopUpQueryOptions(tx, tx.Model(&TopUp{}), userId, options)
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
 
-	// Get paginated topups within same transaction
-	err = tx.Where("user_id = ? AND create_time >= ?", userId, cutoff).Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error
-	if err != nil {
+	countQuery := query
+	if options.Keyword != "" {
+		countQuery = countQuery.Limit(searchTopUpCountHardLimit)
+	}
+	if err = countQuery.Count(&total).Error; err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
 
-	// Commit transaction
+	if err = query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
+		tx.Rollback()
+		return nil, 0, err
+	}
+
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
 	}
@@ -1343,6 +1398,10 @@ func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, tota
 
 // GetAllTopUps 获取全平台的充值记录（管理员使用，不限制时间窗口）
 func GetAllTopUps(pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
+	return GetAllTopUpsWithOptions(TopUpQueryOptions{}, pageInfo)
+}
+
+func GetAllTopUpsWithOptions(options TopUpQueryOptions, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -1353,12 +1412,22 @@ func GetAllTopUps(pageInfo *common.PageInfo) (topups []*TopUp, total int64, err 
 		}
 	}()
 
-	if err = tx.Model(&TopUp{}).Count(&total).Error; err != nil {
+	query, err := applyAllTopUpQueryOptions(tx, tx.Model(&TopUp{}), options)
+	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
 
-	if err = tx.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
+	countQuery := query
+	if options.Keyword != "" {
+		countQuery = countQuery.Limit(searchTopUpCountHardLimit)
+	}
+	if err = countQuery.Count(&total).Error; err != nil {
+		tx.Rollback()
+		return nil, 0, err
+	}
+
+	if err = query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
@@ -1378,95 +1447,12 @@ const searchTopUpCountHardLimit = 10000
 
 // SearchUserTopUps 按订单号搜索某用户的充值记录
 func SearchUserTopUps(userId int, keyword string, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return nil, 0, tx.Error
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	query := tx.Model(&TopUp{}).Where("user_id = ? AND create_time >= ?", userId, topUpQueryCutoff())
-	if keyword != "" {
-		pattern, perr := buildTopUpContainsLikePattern(keyword)
-		if perr != nil {
-			tx.Rollback()
-			return nil, 0, perr
-		}
-		query = query.Where("trade_no LIKE ? ESCAPE '!'", pattern)
-	}
-
-	if err = query.Limit(searchTopUpCountHardLimit).Count(&total).Error; err != nil {
-		tx.Rollback()
-		common.SysError("failed to count search topups: " + err.Error())
-		return nil, 0, errors.New("搜索充值记录失败")
-	}
-
-	if err = query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
-		tx.Rollback()
-		common.SysError("failed to search topups: " + err.Error())
-		return nil, 0, errors.New("搜索充值记录失败")
-	}
-
-	if err = tx.Commit().Error; err != nil {
-		return nil, 0, err
-	}
-	fillTopUpUsernames(topups)
-	fillTopUpPendingRefundRequests(topups)
-	return topups, total, nil
+	return GetUserTopUpsWithOptions(userId, TopUpQueryOptions{Keyword: keyword}, pageInfo)
 }
 
 // SearchAllTopUps 按用户 ID、用户名或订单号搜索全平台充值记录（管理员使用，不限制时间窗口）
 func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return nil, 0, tx.Error
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	query := tx.Model(&TopUp{})
-	if keyword != "" {
-		pattern, perr := buildTopUpContainsLikePattern(keyword)
-		if perr != nil {
-			tx.Rollback()
-			return nil, 0, perr
-		}
-		userIdKeyword, hasUserIdKeyword := parseTopUpUserIDKeyword(keyword)
-		matchedUserIds, matchErr := findUserIDsByUsernamePattern(tx, pattern)
-		if matchErr != nil {
-			tx.Rollback()
-			return nil, 0, matchErr
-		}
-		if hasUserIdKeyword {
-			matchedUserIds = append(matchedUserIds, userIdKeyword)
-		}
-		query = query.Where("trade_no LIKE ? ESCAPE '!' OR user_id IN ?", pattern, uniqueIntSlice(matchedUserIds))
-	}
-
-	if err = query.Limit(searchTopUpCountHardLimit).Count(&total).Error; err != nil {
-		tx.Rollback()
-		common.SysError("failed to count search topups: " + err.Error())
-		return nil, 0, errors.New("搜索充值记录失败")
-	}
-
-	if err = query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
-		tx.Rollback()
-		common.SysError("failed to search topups: " + err.Error())
-		return nil, 0, errors.New("搜索充值记录失败")
-	}
-
-	if err = tx.Commit().Error; err != nil {
-		return nil, 0, err
-	}
-	fillTopUpUsernames(topups)
-	fillTopUpPendingRefundRequests(topups)
-	return topups, total, nil
+	return GetAllTopUpsWithOptions(TopUpQueryOptions{Keyword: keyword}, pageInfo)
 }
 
 // ManualCompleteTopUp 管理员手动完成订单并给用户充值

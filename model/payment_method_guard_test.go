@@ -1116,6 +1116,115 @@ func TestSearchAllTopUpsMatchesUserIdUsernameAndTradeNo(t *testing.T) {
 	assert.Equal(t, "ALIPAY_SEARCH_A", rows[0].TradeNo)
 }
 
+func TestTopUpQueryOptionsFilterPendingRefundRequests(t *testing.T) {
+	truncateTables(t)
+
+	now := time.Now().Unix()
+	require.NoError(t, DB.Create(&[]User{
+		{Id: 182, Username: "alice-refund", Status: common.UserStatusEnabled, AffCode: "alice-refund-aff"},
+		{Id: 183, Username: "bob-refund", Status: common.UserStatusEnabled, AffCode: "bob-refund-aff"},
+	}).Error)
+	require.NoError(t, DB.Create(&[]TopUp{
+		{
+			UserId:          182,
+			Amount:          10,
+			Money:           10,
+			TradeNo:         "PENDING_REFUND_ALICE",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusSuccess,
+			CreateTime:      now,
+			CompleteTime:    now,
+		},
+		{
+			UserId:          182,
+			Amount:          10,
+			Money:           10,
+			TradeNo:         "APPROVED_REFUND_ALICE",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusSuccess,
+			CreateTime:      now,
+			CompleteTime:    now,
+		},
+		{
+			UserId:          183,
+			Amount:          10,
+			Money:           10,
+			TradeNo:         "PENDING_REFUND_BOB",
+			PaymentMethod:   PaymentMethodWechatPayOfficial,
+			PaymentProvider: PaymentProviderWechatPayOfficial,
+			Status:          common.TopUpStatusSuccess,
+			CreateTime:      now,
+			CompleteTime:    now,
+		},
+	}).Error)
+
+	var topUps []TopUp
+	require.NoError(t, DB.Find(&topUps).Error)
+	topUpIdByTradeNo := make(map[string]int, len(topUps))
+	for _, topUp := range topUps {
+		topUpIdByTradeNo[topUp.TradeNo] = topUp.Id
+	}
+	require.NoError(t, DB.Create(&[]TopUpRefundRequest{
+		{
+			TopUpId:         topUpIdByTradeNo["PENDING_REFUND_ALICE"],
+			UserId:          182,
+			TradeNo:         "PENDING_REFUND_ALICE",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			RequestedAmount: 4,
+			Reason:          "alice pending",
+			Status:          TopUpRefundRequestStatusPending,
+			CreateTime:      now,
+			UpdateTime:      now,
+		},
+		{
+			TopUpId:         topUpIdByTradeNo["APPROVED_REFUND_ALICE"],
+			UserId:          182,
+			TradeNo:         "APPROVED_REFUND_ALICE",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			RequestedAmount: 4,
+			Reason:          "alice approved",
+			Status:          TopUpRefundRequestStatusApproved,
+			CreateTime:      now,
+			UpdateTime:      now,
+		},
+		{
+			TopUpId:         topUpIdByTradeNo["PENDING_REFUND_BOB"],
+			UserId:          183,
+			TradeNo:         "PENDING_REFUND_BOB",
+			PaymentMethod:   PaymentMethodWechatPayOfficial,
+			PaymentProvider: PaymentProviderWechatPayOfficial,
+			RequestedAmount: 6,
+			Reason:          "bob pending",
+			Status:          TopUpRefundRequestStatusPending,
+			CreateTime:      now,
+			UpdateTime:      now,
+		},
+	}).Error)
+
+	allRows, total, err := GetAllTopUpsWithOptions(TopUpQueryOptions{PendingRefund: true}, &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), total)
+	assert.ElementsMatch(t, []string{"PENDING_REFUND_ALICE", "PENDING_REFUND_BOB"}, []string{allRows[0].TradeNo, allRows[1].TradeNo})
+
+	aliceRows, total, err := GetUserTopUpsWithOptions(182, TopUpQueryOptions{PendingRefund: true}, &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, aliceRows, 1)
+	assert.Equal(t, "PENDING_REFUND_ALICE", aliceRows[0].TradeNo)
+	assert.Equal(t, TopUpRefundRequestStatusPending, aliceRows[0].RefundRequestStatus)
+	assert.Equal(t, "alice pending", aliceRows[0].RefundRequestReason)
+
+	searchRows, total, err := GetAllTopUpsWithOptions(TopUpQueryOptions{Keyword: "alice-refund", PendingRefund: true}, &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, searchRows, 1)
+	assert.Equal(t, "PENDING_REFUND_ALICE", searchRows[0].TradeNo)
+}
+
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {
 	testCases := []struct {
 		name                    string
