@@ -18,43 +18,118 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import React, { useMemo, useState } from 'react';
-import { Button, Empty, Space, Tag, Typography } from '@douyinfe/semi-ui';
+import {
+  Button,
+  Empty,
+  Popover,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+} from '@douyinfe/semi-ui';
 import {
   IllustrationNoResult,
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
 import CardTable from '../../common/ui/CardTable';
-import { renderQuota, timestamp2string } from '../../../helpers';
+import { renderNumber, renderQuota, timestamp2string } from '../../../helpers';
 import ReferralCommissionsModal from './ReferralCommissionsModal';
 
 const { Text } = Typography;
 
-const renderUser = (username, displayName, id) => (
-  <div className='flex flex-col'>
-    <Text strong>{displayName || username || '-'}</Text>
-    <Text type='tertiary' size='small'>
-      {username || '-'} · ID {id}
+const renderTimestamp = (text) => (text ? timestamp2string(text) : '-');
+
+const renderUser = ({ username, displayName, email, id }) => (
+  <div className='flex flex-col min-w-0'>
+    <Space spacing={4} wrap>
+      <Text strong>{displayName || username || '-'}</Text>
+      <Tag color='white' shape='circle' className='!text-xs'>
+        ID {id || '-'}
+      </Tag>
+    </Space>
+    <Text type='tertiary' size='small' ellipsis={{ showTooltip: true }}>
+      {username || '-'}
+      {email ? ` · ${email}` : ''}
     </Text>
   </div>
 );
 
 const rewardTag = (record, t) => {
   if (record.inviter_reward_quota <= 0) {
-    return <Tag size='small'>{t('无一次性奖励')}</Tag>;
+    return (
+      <Tag color='grey' shape='circle' size='small'>
+        {t('无一次性奖励')}
+      </Tag>
+    );
   }
   if (record.inviter_reward_unlocked) {
     return (
-      <Tag size='small' color='green'>
+      <Tag size='small' color='green' shape='circle'>
         {t('已解锁')}
       </Tag>
     );
   }
   return (
-    <Tag size='small' color='orange'>
+    <Tag size='small' color='orange' shape='circle'>
       {t('待首充')}
     </Tag>
   );
 };
+
+const renderInviteRewards = (record, t) => {
+  const popoverContent = (
+    <div className='text-xs p-2'>
+      <div>
+        {t('被邀请人奖励')}: {renderQuota(record.invitee_reward_quota || 0)}
+      </div>
+      <div>
+        {t('邀请人奖励')}: {renderQuota(record.inviter_reward_quota || 0)}
+      </div>
+    </div>
+  );
+
+  return (
+    <Popover content={popoverContent} position='top'>
+      <Space spacing={2} wrap>
+        <Tag color='white' shape='circle' className='!text-xs'>
+          {t('被邀请人奖励')}: {renderQuota(record.invitee_reward_quota || 0)}
+        </Tag>
+        <Tag color='white' shape='circle' className='!text-xs'>
+          {t('邀请人奖励')}: {renderQuota(record.inviter_reward_quota || 0)}
+        </Tag>
+        {rewardTag(record, t)}
+      </Space>
+    </Popover>
+  );
+};
+
+const renderPaymentState = (record, t) => {
+  const paid = record.invitee_has_paid;
+  return (
+    <Space vertical align='start' spacing={2}>
+      <Tag color={paid ? 'green' : 'grey'} shape='circle' size='small'>
+        {paid ? t('已支付') : t('未支付')}
+      </Tag>
+      <Text type='tertiary' size='small'>
+        {renderTimestamp(record.first_payment_time)}
+      </Text>
+    </Space>
+  );
+};
+
+const renderCommissionSummary = (record, t) => (
+  <Space spacing={2} wrap>
+    <Tag color='white' shape='circle' className='!text-xs'>
+      {t('收益')}: {renderQuota(record.total_commission_quota || 0)}
+    </Tag>
+    <Tag color='white' shape='circle' className='!text-xs'>
+      {t('次数')}: {renderNumber(record.commission_count || 0)}
+    </Tag>
+    <Tag color='white' shape='circle' className='!text-xs'>
+      {t('支付')}: ${Number(record.total_recharge_amount || 0).toFixed(2)}
+    </Tag>
+  </Space>
+);
 
 const ReferralsTable = ({
   records,
@@ -76,94 +151,63 @@ const ReferralsTable = ({
         dataIndex: 'inviter_username',
         key: 'inviter',
         render: (_, record) =>
-          renderUser(
-            record.inviter_username,
-            record.inviter_display_name,
-            record.inviter_id,
-          ),
+          renderUser({
+            username: record.inviter_username,
+            displayName: record.inviter_display_name,
+            id: record.inviter_id,
+          }),
       },
       {
         title: t('被邀请用户'),
         dataIndex: 'invitee_username',
         key: 'invitee',
         render: (_, record) =>
-          renderUser(
-            record.invitee_username,
-            record.invitee_display_name,
-            record.invitee_id,
-          ),
+          renderUser({
+            username: record.invitee_username,
+            displayName: record.invitee_display_name,
+            email: record.invitee_email,
+            id: record.invitee_id,
+          }),
       },
       {
         title: t('注册时间'),
         dataIndex: 'invitee_created_at',
         key: 'invitee_created_at',
-        render: (text) => (text ? timestamp2string(text) : '-'),
+        render: renderTimestamp,
       },
       {
-        title: t('被邀请人奖励'),
+        title: t('邀请奖励'),
         dataIndex: 'invitee_reward_quota',
-        key: 'invitee_reward_quota',
-        render: (text) => renderQuota(text || 0),
+        key: 'invite_rewards',
+        render: (_, record) => renderInviteRewards(record, t),
       },
       {
-        title: t('邀请人奖励'),
-        dataIndex: 'inviter_reward_quota',
-        key: 'inviter_reward_quota',
-        render: (_, record) => (
-          <Space vertical align='start' spacing={2}>
-            <Text>{renderQuota(record.inviter_reward_quota || 0)}</Text>
-            {rewardTag(record, t)}
-          </Space>
-        ),
-      },
-      {
-        title: t('首充/订阅'),
+        title: t('支付状态'),
         dataIndex: 'invitee_has_paid',
         key: 'invitee_has_paid',
-        render: (_, record) => (
-          <Space vertical align='start' spacing={2}>
-            {record.invitee_has_paid ? (
-              <Tag size='small' color='green'>
-                {t('已支付')}
-              </Tag>
-            ) : (
-              <Tag size='small'>{t('未支付')}</Tag>
-            )}
-            <Text type='tertiary' size='small'>
-              {record.first_payment_time
-                ? timestamp2string(record.first_payment_time)
-                : '-'}
-            </Text>
-          </Space>
-        ),
+        render: (_, record) => renderPaymentState(record, t),
       },
       {
         title: t('返佣汇总'),
         dataIndex: 'total_commission_quota',
         key: 'commission_summary',
-        render: (_, record) => (
-          <Space vertical align='start' spacing={2}>
-            <Text>{renderQuota(record.total_commission_quota || 0)}</Text>
-            <Text type='tertiary' size='small'>
-              {t('次数')}: {record.commission_count || 0} · {t('净支付金额')}: $
-              {Number(record.total_recharge_amount || 0).toFixed(2)}
-            </Text>
-          </Space>
-        ),
+        render: (_, record) => renderCommissionSummary(record, t),
       },
       {
-        title: t('操作'),
+        title: '',
         dataIndex: 'operate',
         key: 'operate',
         fixed: 'right',
         render: (_, record) => (
-          <Button
-            type='tertiary'
-            size='small'
-            onClick={() => setSelectedRecord(record)}
-          >
-            {t('返佣记录')}
-          </Button>
+          <Tooltip content={t('查看返佣记录')} position='top'>
+            <Button
+              type='tertiary'
+              size='small'
+              onClick={() => setSelectedRecord(record)}
+            >
+              {t('返佣记录')}
+            </Button>
+          </Tooltip>
         ),
       },
     ],

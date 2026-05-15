@@ -53,10 +53,10 @@ const ReferralsFilters = ({
       layout='horizontal'
       trigger='change'
       stopValidateWithError={false}
-      className='w-full'
+      className='w-full md:w-auto order-1 md:order-2'
     >
-      <div className='flex flex-col md:flex-row items-center gap-2 w-full md:justify-end'>
-        <div className='w-full md:w-72'>
+      <div className='flex flex-col md:flex-row items-center gap-2 w-full md:w-auto'>
+        <div className='relative w-full md:w-64'>
           <Form.Input
             field='searchKeyword'
             prefix={<IconSearch />}
@@ -66,10 +66,12 @@ const ReferralsFilters = ({
             size='small'
           />
         </div>
-        <div className='w-full md:w-40'>
+        <div className='w-full md:w-48'>
           <Form.Select
             field='rewardStatus'
             optionList={rewardStatusOptions}
+            placeholder={t('全部奖励状态')}
+            className='w-full'
             pure
             size='small'
             onChange={() => {
@@ -82,7 +84,7 @@ const ReferralsFilters = ({
             type='tertiary'
             htmlType='submit'
             loading={loading || searching}
-            className='flex-1 md:flex-initial'
+            className='flex-1 md:flex-initial md:w-auto'
             size='small'
           >
             {t('查询')}
@@ -93,7 +95,7 @@ const ReferralsFilters = ({
               formApiRef.current?.reset();
               resetFilters();
             }}
-            className='flex-1 md:flex-initial'
+            className='flex-1 md:flex-initial md:w-auto'
             size='small'
           >
             {t('重置')}
