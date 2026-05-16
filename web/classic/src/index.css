@@ -967,6 +967,15 @@ html.dark .with-pastel-balls::before {
   overflow-y: auto;
 }
 
+/* Ensure tables fill the card body width even when column content is narrow.
+ * Semi Table with `scroll: { x: 'max-content' }` sizes by content, so pages
+ * with few/narrow columns (e.g. billing) leave a large right-side gap unless
+ * we set a min-width here. Pages whose column content already exceeds the
+ * viewport (logs/users) are unaffected — they continue to overflow + scroll. */
+.table-scroll-card .semi-table {
+  min-width: 100%;
+}
+
 .table-scroll-card .semi-card-body::-webkit-scrollbar {
   width: 6px;
 }

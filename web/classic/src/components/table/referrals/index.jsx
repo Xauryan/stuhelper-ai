@@ -25,8 +25,6 @@ import ReferralsTable from './ReferralsTable';
 import { useReferralsData } from '../../../hooks/referrals/useReferralsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
-import { Button } from '@douyinfe/semi-ui';
-import { IconRefresh } from '@douyinfe/semi-icons';
 
 const ReferralsPage = () => {
   const referralsData = useReferralsData();
@@ -43,23 +41,7 @@ const ReferralsPage = () => {
         />
       }
       actionsArea={
-        <div className='flex flex-col md:flex-row justify-between items-center gap-2 w-full'>
-          <div className='flex gap-2 w-full md:w-auto order-2 md:order-1'>
-            <Button
-              className='w-full md:w-auto'
-              onClick={() =>
-                referralsData.loadReferrals(
-                  referralsData.activePage,
-                  referralsData.pageSize,
-                )
-              }
-              loading={referralsData.loading}
-              icon={<IconRefresh />}
-              size='small'
-            >
-              {referralsData.t('刷新')}
-            </Button>
-          </div>
+        <div className='flex flex-col md:flex-row justify-end items-center gap-2 w-full'>
           <ReferralsFilters
             formInitValues={referralsData.formInitValues}
             setFormApi={referralsData.setFormApi}
