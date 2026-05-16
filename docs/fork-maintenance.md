@@ -56,11 +56,18 @@ StuHelper AI 本地任务决定修改它们：
   绑定入口。GitHub、Discord、OIDC、微信、Telegram、LinuxDO 和自定义 OAuth
   等入口必须跟随对应状态开关隐藏或显示，不能把禁用入口作为“未启用”卡片展示给
   普通用户。
-- classic 管理区的邀请管理页面应持续对齐用户管理页面的 CardPro/CardTable
-  风格：标题区、紧凑模式切换、动作区、筛选条、底部分页、单行用户单元格和
-  表格标签密度要保持一致，避免返佣审计功能在同一管理菜单中形成独立视觉体系。
-  被邀请用户是否完成成功充值或订阅支付在 UI 中显示为“首充状态”，不要用
-  “支付状态”混淆为返佣或奖励入账状态。
+- classic 管理区的邀请管理和账单管理页面应持续对齐使用日志和用户管理页面的
+  CardPro/CardTable 风格：顶部容器都包 `mt-[60px] px-2`、卡片走 `table-scroll-card`、
+  统计标签使用统一 `tagBaseStyle`（`padding:13`、`!rounded-lg`、阴影、`fontWeight:500`），
+  紧凑模式切换由公共 `CompactModeToggle` 提供，标题区、动作区、筛选条、底部分页、
+  单行用户单元格和表格标签密度要保持一致，避免返佣审计或账单退款功能在同一
+  管理菜单中形成独立视觉体系。`PageLayout.jsx` 中的 `cardProPages` 列表必须
+  同时包含 `/console/log`、`/console/user`、`/console/referral` 和
+  `/console/billing`，确保这四页一致地隐藏全局 Footer。Semi Table 在
+  `scroll: { x: 'max-content' }` 下会按列内容定宽，因此 `.table-scroll-card
+  .semi-table { min-width: 100% }` 必须保留，否则账单等列内容窄的页面会出现
+  右侧空白。被邀请用户是否完成成功充值或订阅支付在 UI 中显示为"首充状态"，
+  不要用"支付状态"混淆为返佣或奖励入账状态。
 - 用户排行榜包含消耗排行和充值排行，并支持总榜、近一月、近一周、近一天
   统计周期。为避免反推出本站总消耗或总充值，用户排行榜接口和 classic 页面
   不得暴露全站周期总额或每个上榜用户的占比。充值排行包括成功在线充值、

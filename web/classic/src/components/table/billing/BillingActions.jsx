@@ -30,7 +30,6 @@ const tagBaseStyle = {
 const BillingActions = ({
   activeTab,
   compactMode,
-  pageSize,
   setCompactMode,
   total,
   t,
@@ -43,16 +42,6 @@ const BillingActions = ({
         </Tag>
         <Tag color='pink' style={tagBaseStyle} className='!rounded-lg'>
           {activeTab === 'pending_refund' ? t('待处理退款') : t('全部账单')}
-        </Tag>
-        <Tag
-          color='white'
-          style={{
-            ...tagBaseStyle,
-            border: 'none',
-          }}
-          className='!rounded-lg'
-        >
-          {t('每页')}: {pageSize}
         </Tag>
       </Space>
 

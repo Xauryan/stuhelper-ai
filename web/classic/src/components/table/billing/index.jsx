@@ -78,7 +78,6 @@ const BillingTable = () => {
         <BillingActions
           activeTab={activeTab}
           compactMode={compactMode}
-          pageSize={pagination.pageSize}
           setCompactMode={setCompactMode}
           total={pagination.total}
           t={t}

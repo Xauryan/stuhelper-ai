@@ -56,6 +56,7 @@ const PageLayout = () => {
     '/console/billing',
     '/console/redemption',
     '/console/user',
+    '/console/referral',
     '/console/token',
     '/console/midjourney',
     '/console/task',
