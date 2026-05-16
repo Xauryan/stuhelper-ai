@@ -18,15 +18,7 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import React, { useMemo, useState } from 'react';
-import {
-  Button,
-  Empty,
-  Popover,
-  Space,
-  Tag,
-  Tooltip,
-  Typography,
-} from '@douyinfe/semi-ui';
+import { Button, Empty, Popover, Space, Tag, Tooltip } from '@douyinfe/semi-ui';
 import {
   IllustrationNoResult,
   IllustrationNoResultDark,
@@ -35,23 +27,15 @@ import CardTable from '../../common/ui/CardTable';
 import { renderNumber, renderQuota, timestamp2string } from '../../../helpers';
 import ReferralCommissionsModal from './ReferralCommissionsModal';
 
-const { Text } = Typography;
-
 const renderTimestamp = (text) => (text ? timestamp2string(text) : '-');
 
 const renderUser = ({ username, displayName, email, id }) => (
-  <div className='flex flex-col min-w-0'>
-    <Space spacing={4} wrap>
-      <Text strong>{displayName || username || '-'}</Text>
-      <Tag color='white' shape='circle' className='!text-xs'>
-        ID {id || '-'}
-      </Tag>
-    </Space>
-    <Text type='tertiary' size='small' ellipsis={{ showTooltip: true }}>
-      {username || '-'}
-      {email ? ` · ${email}` : ''}
-    </Text>
-  </div>
+  <Space spacing={2} wrap>
+    <span>{username || displayName || email || '-'}</span>
+    <Tag color='white' shape='circle' className='!text-xs'>
+      ID {id || '-'}
+    </Tag>
+  </Space>
 );
 
 const rewardTag = (record, t) => {
@@ -105,15 +89,21 @@ const renderInviteRewards = (record, t) => {
 
 const renderPaymentState = (record, t) => {
   const paid = record.invitee_has_paid;
+  const content = (
+    <Tag color={paid ? 'green' : 'grey'} shape='circle' size='small'>
+      {paid ? t('已首充') : t('未首充')}
+    </Tag>
+  );
+  if (!paid) {
+    return content;
+  }
   return (
-    <Space vertical align='start' spacing={2}>
-      <Tag color={paid ? 'green' : 'grey'} shape='circle' size='small'>
-        {paid ? t('已支付') : t('未支付')}
-      </Tag>
-      <Text type='tertiary' size='small'>
-        {renderTimestamp(record.first_payment_time)}
-      </Text>
-    </Space>
+    <Tooltip
+      content={`${t('首次支付时间')}: ${renderTimestamp(record.first_payment_time)}`}
+      position='top'
+    >
+      {content}
+    </Tooltip>
   );
 };
 
@@ -182,7 +172,7 @@ const ReferralsTable = ({
         render: (_, record) => renderInviteRewards(record, t),
       },
       {
-        title: t('支付状态'),
+        title: t('首充状态'),
         dataIndex: 'invitee_has_paid',
         key: 'invitee_has_paid',
         render: (_, record) => renderPaymentState(record, t),
