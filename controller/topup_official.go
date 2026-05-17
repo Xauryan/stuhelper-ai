@@ -26,6 +26,10 @@ const (
 	officialPaymentScenePC       = "pc"
 	officialPaymentSceneH5       = "h5"
 	alipayOfficialExpireInterval = time.Minute
+	// 单次 tick 内最多花在过期清理上的总时间，避免单批关单失败链式重试拖死后台任务。
+	alipayOfficialExpireTickBudget = 30 * time.Second
+	// 单次 tick 内允许处理的批次数上限，配合 ListPendingTopUpsBefore 的 20 条/批避免长期积压。
+	alipayOfficialExpireTickMaxBatches = 5
 )
 
 var (
@@ -902,9 +906,9 @@ func AdminQueryWechatPayOfficialRefund(c *gin.Context) {
 	common.ApiSuccess(c, response)
 }
 
-func ExpireAlipayOfficialPendingTopUps(ctx context.Context) error {
+func ExpireAlipayOfficialPendingTopUps(ctx context.Context) (int, error) {
 	if !isAlipayOfficialTopUpEnabled() {
-		return nil
+		return 0, nil
 	}
 	timeoutMinutes := setting.AlipayOfficialOrderTimeoutMin
 	if timeoutMinutes <= 0 {
@@ -913,15 +917,19 @@ func ExpireAlipayOfficialPendingTopUps(ctx context.Context) error {
 	expireBefore := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute).Unix()
 	expiredTopUps, err := model.ListPendingTopUpsBefore(model.PaymentProviderAlipayOfficial, expireBefore, 20)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if len(expiredTopUps) == 0 {
-		return nil
+		return 0, nil
 	}
 	client := newAlipayOfficialClient()
+	processed := 0
 	for _, topUp := range expiredTopUps {
 		if topUp == nil {
 			continue
+		}
+		if ctx.Err() != nil {
+			return processed, nil
 		}
 		LockOrder(topUp.TradeNo)
 		currentTopUp := model.GetTopUpByTradeNo(topUp.TradeNo)
@@ -939,6 +947,7 @@ func ExpireAlipayOfficialPendingTopUps(ctx context.Context) error {
 			if service.IsAlipayOfficialTradeNotFound(closeErr) {
 				logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单交易不存在，保留本地待支付状态以避免旧支付入口后续付款造成资金悬挂 trade_no=%s", topUp.TradeNo))
 				UnlockOrder(topUp.TradeNo)
+				processed++
 				continue
 			}
 			reconciled, reconcileErr := reconcileAlipayOfficialTopUpAfterCloseFailure(ctx, client, topUp.TradeNo)
@@ -948,6 +957,7 @@ func ExpireAlipayOfficialPendingTopUps(ctx context.Context) error {
 				logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单关闭失败 trade_no=%s error=%q", topUp.TradeNo, closeErr.Error()))
 			}
 			UnlockOrder(topUp.TradeNo)
+			processed++
 			continue
 		}
 		if err := expireAlipayOfficialPendingOrder(topUp.TradeNo); err != nil &&
@@ -955,8 +965,9 @@ func ExpireAlipayOfficialPendingTopUps(ctx context.Context) error {
 			logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单本地状态更新失败 trade_no=%s response=%q error=%q", topUp.TradeNo, common.GetJsonString(response), err.Error()))
 		}
 		UnlockOrder(topUp.TradeNo)
+		processed++
 	}
-	return nil
+	return processed, nil
 }
 
 func reconcileAlipayOfficialTopUpAfterCloseFailure(ctx context.Context, client *service.AlipayOfficialClient, tradeNo string) (bool, error) {
@@ -1013,8 +1024,23 @@ func runAlipayOfficialOrderExpireTaskOnce(ctx context.Context) {
 		return
 	}
 	defer alipayOfficialExpireTaskRunning.Unlock()
-	if err := ExpireAlipayOfficialPendingTopUps(ctx); err != nil {
-		logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单维护失败 error=%q", err.Error()))
+	// 给单次清理一个总预算，防止单批连环重试把整个 ticker 间隔拖垮。
+	tickCtx, cancel := context.WithTimeout(ctx, alipayOfficialExpireTickBudget)
+	defer cancel()
+	// 单次 tick 内连续处理多批，每批 20 条，最多 alipayOfficialExpireTickMaxBatches 批；
+	// 这样高峰期同分钟内 >20 条订单过期时也能及时跟进，不至于积压到下一分钟。
+	for batch := 0; batch < alipayOfficialExpireTickMaxBatches; batch++ {
+		if tickCtx.Err() != nil {
+			return
+		}
+		processed, err := ExpireAlipayOfficialPendingTopUps(tickCtx)
+		if err != nil {
+			logger.LogWarn(tickCtx, fmt.Sprintf("支付宝官方超时订单维护失败 batch=%d error=%q", batch, err.Error()))
+			return
+		}
+		if processed == 0 {
+			return
+		}
 	}
 }
 

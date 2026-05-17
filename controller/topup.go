@@ -487,9 +487,11 @@ func GetAllTopUps(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	keyword := c.Query("keyword")
 	pendingRefund := c.Query("pending_refund") == "true"
-	expireCtx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
-	runAlipayOfficialOrderExpireTaskOnce(expireCtx)
-	cancel()
+	// 异步触发支付宝官方超时订单清理：
+	// 非 master 节点的 StartAlipayOfficialOrderExpireTask 会直接返回，
+	// 这里用 TryLock 保护的 goroutine 兜底，避免无 master 部署下本地订单永远停留在 pending；
+	// 不阻塞列表请求。
+	go runAlipayOfficialOrderExpireTaskOnce(context.Background())
 
 	topups, total, err := model.GetAllTopUpsWithOptions(model.TopUpQueryOptions{
 		Keyword:       keyword,

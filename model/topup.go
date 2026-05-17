@@ -1,6 +1,7 @@
 package model
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
@@ -15,7 +16,7 @@ import (
 
 type TopUp struct {
 	Id                  int     `json:"id"`
-	UserId              int     `json:"user_id" gorm:"index"`
+	UserId              int     `json:"user_id" gorm:"index;index:idx_topup_user_create,priority:1"`
 	Username            string  `json:"username" gorm:"-"`
 	Amount              int64   `json:"amount"`
 	Money               float64 `json:"money"`
@@ -28,7 +29,7 @@ type TopUp struct {
 	TradeNo             string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
 	PaymentMethod       string  `json:"payment_method" gorm:"type:varchar(50)"`
 	PaymentProvider     string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
-	CreateTime          int64   `json:"create_time"`
+	CreateTime          int64   `json:"create_time" gorm:"index:idx_topup_user_create,priority:2"`
 	CompleteTime        int64   `json:"complete_time"`
 	Status              string  `json:"status"`
 }
@@ -1258,9 +1259,9 @@ func parseTopUpUserIDKeyword(keyword string) (int, bool) {
 	return value, true
 }
 
-func findUserIDsByUsernamePattern(tx *gorm.DB, pattern string) ([]int, error) {
+func findUserIDsByUsernamePattern(db *gorm.DB, pattern string) ([]int, error) {
 	var users []User
-	if err := tx.Select("id").Where("username LIKE ? ESCAPE '!'", pattern).Limit(searchTopUpCountHardLimit).Find(&users).Error; err != nil {
+	if err := db.Select("id").Where("username LIKE ? ESCAPE '!'", pattern).Limit(searchTopUpCountHardLimit).Find(&users).Error; err != nil {
 		return nil, err
 	}
 	userIds := make([]int, 0, len(users))
@@ -1308,14 +1309,14 @@ type TopUpQueryOptions struct {
 	PendingRefund bool
 }
 
-func applyPendingTopUpRefundFilter(tx *gorm.DB, query *gorm.DB) *gorm.DB {
-	pendingRefundTradeNos := tx.Model(&TopUpRefundRequest{}).
+func applyPendingTopUpRefundFilter(db *gorm.DB, query *gorm.DB) *gorm.DB {
+	pendingRefundTradeNos := db.Model(&TopUpRefundRequest{}).
 		Select("trade_no").
 		Where("status = ?", TopUpRefundRequestStatusPending)
 	return query.Where("trade_no IN (?)", pendingRefundTradeNos)
 }
 
-func applyUserTopUpQueryOptions(tx *gorm.DB, query *gorm.DB, userId int, options TopUpQueryOptions) (*gorm.DB, error) {
+func applyUserTopUpQueryOptions(db *gorm.DB, query *gorm.DB, userId int, options TopUpQueryOptions) (*gorm.DB, error) {
 	query = query.Where("user_id = ? AND create_time >= ?", userId, topUpQueryCutoff())
 	if options.Keyword != "" {
 		pattern, err := buildTopUpContainsLikePattern(options.Keyword)
@@ -1325,19 +1326,19 @@ func applyUserTopUpQueryOptions(tx *gorm.DB, query *gorm.DB, userId int, options
 		query = query.Where("trade_no LIKE ? ESCAPE '!'", pattern)
 	}
 	if options.PendingRefund {
-		query = applyPendingTopUpRefundFilter(tx, query)
+		query = applyPendingTopUpRefundFilter(db, query)
 	}
 	return query, nil
 }
 
-func applyAllTopUpQueryOptions(tx *gorm.DB, query *gorm.DB, options TopUpQueryOptions) (*gorm.DB, error) {
+func applyAllTopUpQueryOptions(db *gorm.DB, query *gorm.DB, options TopUpQueryOptions) (*gorm.DB, error) {
 	if options.Keyword != "" {
 		pattern, err := buildTopUpContainsLikePattern(options.Keyword)
 		if err != nil {
 			return nil, err
 		}
 		userIdKeyword, hasUserIdKeyword := parseTopUpUserIDKeyword(options.Keyword)
-		matchedUserIds, matchErr := findUserIDsByUsernamePattern(tx, pattern)
+		matchedUserIds, matchErr := findUserIDsByUsernamePattern(db, pattern)
 		if matchErr != nil {
 			return nil, matchErr
 		}
@@ -1347,7 +1348,7 @@ func applyAllTopUpQueryOptions(tx *gorm.DB, query *gorm.DB, options TopUpQueryOp
 		query = query.Where("trade_no LIKE ? ESCAPE '!' OR user_id IN ?", pattern, uniqueIntSlice(matchedUserIds))
 	}
 	if options.PendingRefund {
-		query = applyPendingTopUpRefundFilter(tx, query)
+		query = applyPendingTopUpRefundFilter(db, query)
 	}
 	return query, nil
 }
@@ -1356,41 +1357,39 @@ func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, tota
 	return GetUserTopUpsWithOptions(userId, TopUpQueryOptions{}, pageInfo)
 }
 
+// topUpReadTxOptions 返回账单列表 COUNT/SELECT 所用的只读事务选项。
+// 使用 ReadOnly 让驱动可以走只读优化；显式 RepeatableRead 让 PostgreSQL
+// 也能在同一请求内获得稳定快照（MySQL InnoDB 默认即为 RepeatableRead）；
+// SQLite 驱动只支持 Serializable，故走默认隔离级别（WAL 模式下事务即快照）。
+func topUpReadTxOptions() *sql.TxOptions {
+	if common.UsingSQLite {
+		return &sql.TxOptions{ReadOnly: true}
+	}
+	return &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead}
+}
+
 func GetUserTopUpsWithOptions(userId int, options TopUpQueryOptions, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return nil, 0, tx.Error
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		query, qErr := applyUserTopUpQueryOptions(tx, tx.Model(&TopUp{}), userId, options)
+		if qErr != nil {
+			return qErr
 		}
-	}()
 
-	query, err := applyUserTopUpQueryOptions(tx, tx.Model(&TopUp{}), userId, options)
+		countQuery := query
+		if options.Keyword != "" {
+			countQuery = countQuery.Limit(searchTopUpCountHardLimit)
+		}
+		if cErr := countQuery.Count(&total).Error; cErr != nil {
+			return cErr
+		}
+
+		return query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error
+	}, topUpReadTxOptions())
 	if err != nil {
-		tx.Rollback()
 		return nil, 0, err
 	}
 
-	countQuery := query
-	if options.Keyword != "" {
-		countQuery = countQuery.Limit(searchTopUpCountHardLimit)
-	}
-	if err = countQuery.Count(&total).Error; err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-
-	if err = query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-
-	if err = tx.Commit().Error; err != nil {
-		return nil, 0, err
-	}
-	fillTopUpUsernames(topups)
+	// /topup/self 视图不展示用户名列，无需回填，省一次额外查询
 	fillTopUpPendingRefundRequests(topups)
 
 	return topups, total, nil
@@ -1402,39 +1401,26 @@ func GetAllTopUps(pageInfo *common.PageInfo) (topups []*TopUp, total int64, err 
 }
 
 func GetAllTopUpsWithOptions(options TopUpQueryOptions, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return nil, 0, tx.Error
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		query, qErr := applyAllTopUpQueryOptions(tx, tx.Model(&TopUp{}), options)
+		if qErr != nil {
+			return qErr
 		}
-	}()
 
-	query, err := applyAllTopUpQueryOptions(tx, tx.Model(&TopUp{}), options)
+		countQuery := query
+		if options.Keyword != "" {
+			countQuery = countQuery.Limit(searchTopUpCountHardLimit)
+		}
+		if cErr := countQuery.Count(&total).Error; cErr != nil {
+			return cErr
+		}
+
+		return query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error
+	}, topUpReadTxOptions())
 	if err != nil {
-		tx.Rollback()
 		return nil, 0, err
 	}
 
-	countQuery := query
-	if options.Keyword != "" {
-		countQuery = countQuery.Limit(searchTopUpCountHardLimit)
-	}
-	if err = countQuery.Count(&total).Error; err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-
-	if err = query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-
-	if err = tx.Commit().Error; err != nil {
-		return nil, 0, err
-	}
 	fillTopUpUsernames(topups)
 	fillTopUpPendingRefundRequests(topups)
 

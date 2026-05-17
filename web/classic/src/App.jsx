@@ -41,7 +41,6 @@ import Token from './pages/Token';
 import Redemption from './pages/Redemption';
 import Referral from './pages/Referral';
 import TopUp from './pages/TopUp';
-import Billing from './pages/Billing';
 import Log from './pages/Log';
 import Chat from './pages/Chat';
 import Chat2Link from './pages/Chat2Link';
@@ -63,6 +62,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const About = lazy(() => import('./pages/About'));
 const UserAgreement = lazy(() => import('./pages/UserAgreement'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const Billing = lazy(() => import('./pages/Billing'));
 
 function DynamicOAuth2Callback() {
   const { provider } = useParams();

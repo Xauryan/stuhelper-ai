@@ -105,7 +105,6 @@ const BillingTable = () => {
       t={t}
     >
       <TopupBillingTable
-        key={activeTab}
         active
         compactMode={compactMode}
         externalKeyword={submittedKeyword}

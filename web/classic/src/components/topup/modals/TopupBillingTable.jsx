@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@xauryan.com
 */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Table,
@@ -91,6 +91,7 @@ const TopupBillingTable = ({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [keyword, setKeyword] = useState('');
+  const [debouncedKeyword, setDebouncedKeyword] = useState('');
   const [refundVisible, setRefundVisible] = useState(false);
   const [refundRecord, setRefundRecord] = useState(null);
   const [refundAmount, setRefundAmount] = useState(0);
@@ -100,43 +101,60 @@ const TopupBillingTable = ({
   const [refundMode, setRefundMode] = useState('direct');
   const [refundFull, setRefundFull] = useState(false);
   const isPageVariant = variant === 'page';
-  const effectiveKeyword = hideFilters ? externalKeyword || '' : keyword;
+  // hideFilters 模式（独立账单页）下，关键词由父组件 submit 后传入，不需要再做内部 debounce；
+  // 否则在弹窗内是逐字输入，加 300ms debounce 避免每按一个字符就打一次 API。
+  const effectiveKeyword = hideFilters
+    ? externalKeyword || ''
+    : debouncedKeyword;
 
-  const loadTopups = async (currentPage, currentPageSize) => {
-    setLoading(true);
-    try {
-      const base = isAdmin() ? '/api/user/topup' : '/api/user/topup/self';
-      const params = new URLSearchParams({
-        p: String(currentPage),
-        page_size: String(currentPageSize),
-      });
-      if (effectiveKeyword) {
-        params.set('keyword', effectiveKeyword);
-      }
-      if (pendingRefundOnly) {
-        params.set('pending_refund', 'true');
-      }
-      const endpoint = `${base}?${params.toString()}`;
-      const res = await API.get(endpoint);
-      const { success, message, data } = res.data;
-      if (success) {
-        setTopups(data.items || []);
-        setTotal(data.total || 0);
-      } else {
-        Toast.error({ content: message || t('加载失败') });
-      }
-    } catch (error) {
-      Toast.error({ content: t('加载账单失败') });
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (hideFilters) {
+      return undefined;
     }
-  };
+    const timer = setTimeout(() => {
+      setDebouncedKeyword(keyword);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [keyword, hideFilters]);
+
+  const loadTopups = useCallback(
+    async (currentPage, currentPageSize) => {
+      setLoading(true);
+      try {
+        const base = isAdmin() ? '/api/user/topup' : '/api/user/topup/self';
+        const params = new URLSearchParams({
+          p: String(currentPage),
+          page_size: String(currentPageSize),
+        });
+        if (effectiveKeyword) {
+          params.set('keyword', effectiveKeyword);
+        }
+        if (pendingRefundOnly) {
+          params.set('pending_refund', 'true');
+        }
+        const endpoint = `${base}?${params.toString()}`;
+        const res = await API.get(endpoint);
+        const { success, message, data } = res.data;
+        if (success) {
+          setTopups(data.items || []);
+          setTotal(data.total || 0);
+        } else {
+          Toast.error({ content: message || t('加载失败') });
+        }
+      } catch (error) {
+        Toast.error({ content: t('加载账单失败') });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [effectiveKeyword, pendingRefundOnly, t],
+  );
 
   useEffect(() => {
     if (active) {
       loadTopups(page, pageSize);
     }
-  }, [active, page, pageSize, effectiveKeyword, pendingRefundOnly]);
+  }, [active, page, pageSize, loadTopups]);
 
   useEffect(() => {
     onReady?.({ setPage, setPageSize });
@@ -163,56 +181,65 @@ const TopupBillingTable = ({
   };
 
   // 管理员补单
-  const handleAdminComplete = async (tradeNo) => {
-    try {
-      const res = await API.post('/api/user/topup/complete', {
-        trade_no: tradeNo,
-      });
-      const { success, message } = res.data;
-      if (success) {
-        Toast.success({ content: t('补单成功') });
-        await loadTopups(page, pageSize);
-      } else {
-        Toast.error({ content: message || t('补单失败') });
+  const handleAdminComplete = useCallback(
+    async (tradeNo) => {
+      try {
+        const res = await API.post('/api/user/topup/complete', {
+          trade_no: tradeNo,
+        });
+        const { success, message } = res.data;
+        if (success) {
+          Toast.success({ content: t('补单成功') });
+          await loadTopups(page, pageSize);
+        } else {
+          Toast.error({ content: message || t('补单失败') });
+        }
+      } catch (e) {
+        Toast.error({ content: t('补单失败') });
       }
-    } catch (e) {
-      Toast.error({ content: t('补单失败') });
-    }
-  };
+    },
+    [loadTopups, page, pageSize, t],
+  );
 
-  const confirmAdminComplete = (tradeNo) => {
-    Modal.confirm({
-      title: t('确认补单'),
-      content: t('是否将该订单标记为成功并为用户入账？'),
-      onOk: () => handleAdminComplete(tradeNo),
-    });
-  };
-
-  const openRefundModal = async (record) => {
-    let preview = null;
-    let remaining = getRemainingRefundMoney(record);
-    try {
-      const res = await API.post('/api/user/topup/official/refund/preview', {
-        trade_no: record.trade_no,
+  const confirmAdminComplete = useCallback(
+    (tradeNo) => {
+      Modal.confirm({
+        title: t('确认补单'),
+        content: t('是否将该订单标记为成功并为用户入账？'),
+        onOk: () => handleAdminComplete(tradeNo),
       });
-      const { success, data } = res.data;
-      if (success && data) {
-        preview = data;
-        remaining = Number(data.max_refund_amount || remaining);
+    },
+    [handleAdminComplete, t],
+  );
+
+  const openRefundModal = useCallback(
+    async (record) => {
+      let preview = null;
+      let remaining = getRemainingRefundMoney(record);
+      try {
+        const res = await API.post('/api/user/topup/official/refund/preview', {
+          trade_no: record.trade_no,
+        });
+        const { success, data } = res.data;
+        if (success && data) {
+          preview = data;
+          remaining = Number(data.max_refund_amount || remaining);
+        }
+      } catch (e) {
+        // The admin can still fall back to the local remaining amount.
       }
-    } catch (e) {
-      // The admin can still fall back to the local remaining amount.
-    }
-    setRefundPreview(preview);
-    setRefundRecord(record);
-    setRefundAmount(remaining);
-    setRefundReason('');
-    setRefundMode(
-      record.refund_request_id && userIsAdmin ? 'approve' : 'direct',
-    );
-    setRefundFull(false);
-    setRefundVisible(true);
-  };
+      setRefundPreview(preview);
+      setRefundRecord(record);
+      setRefundAmount(remaining);
+      setRefundReason('');
+      setRefundMode(
+        record.refund_request_id && userIsAdmin ? 'approve' : 'direct',
+      );
+      setRefundFull(false);
+      setRefundVisible(true);
+    },
+    [userIsAdmin],
+  );
 
   const handleRefund = async () => {
     if (!refundRecord) {
@@ -280,132 +307,147 @@ const TopupBillingTable = ({
     }
   };
 
-  const handleRejectRefundRequest = (record) => {
-    let rejectReason = '';
-    Modal.confirm({
-      title: t('拒绝退款申请'),
-      content: (
-        <Input
-          placeholder={t('拒绝原因，可留空')}
-          onChange={(value) => {
-            rejectReason = value;
-          }}
-          showClear
-        />
-      ),
-      onOk: async () => {
-        try {
-          const res = await API.post(
-            '/api/user/topup/official/refund-request/reject',
-            {
-              request_id: record.refund_request_id,
-              reason: rejectReason,
-            },
-          );
-          const { success, message } = res.data;
-          if (success) {
-            Toast.success({ content: t('已拒绝退款申请') });
-            await loadTopups(page, pageSize);
-          } else {
-            Toast.error({ content: message || t('操作失败') });
+  const handleRejectRefundRequest = useCallback(
+    (record) => {
+      let rejectReason = '';
+      Modal.confirm({
+        title: t('拒绝退款申请'),
+        content: (
+          <Input
+            placeholder={t('拒绝原因，可留空')}
+            onChange={(value) => {
+              rejectReason = value;
+            }}
+            showClear
+          />
+        ),
+        onOk: async () => {
+          try {
+            const res = await API.post(
+              '/api/user/topup/official/refund-request/reject',
+              {
+                request_id: record.refund_request_id,
+                reason: rejectReason,
+              },
+            );
+            const { success, message } = res.data;
+            if (success) {
+              Toast.success({ content: t('已拒绝退款申请') });
+              await loadTopups(page, pageSize);
+            } else {
+              Toast.error({ content: message || t('操作失败') });
+            }
+          } catch (e) {
+            Toast.error({ content: t('操作失败') });
           }
-        } catch (e) {
-          Toast.error({ content: t('操作失败') });
-        }
-      },
-    });
-  };
-
-  const handleQueryAlipayOfficial = async (tradeNo) => {
-    try {
-      const res = await API.post('/api/user/topup/alipay-official/query', {
-        trade_no: tradeNo,
+        },
       });
-      const { success, message, data } = res.data;
-      if (success) {
-        Toast.success({
-          content: data?.trade_status
-            ? `${t('查询成功')}：${data.trade_status}`
-            : t('查询成功'),
-        });
-        await loadTopups(page, pageSize);
-      } else {
-        Toast.error({ content: message || t('查询失败') });
-      }
-    } catch (e) {
-      Toast.error({ content: t('查询失败') });
-    }
-  };
+    },
+    [loadTopups, page, pageSize, t],
+  );
 
-  const handleQueryWechatPayOfficial = async (tradeNo) => {
-    try {
-      const res = await API.post('/api/user/topup/wechat-pay-official/query', {
-        trade_no: tradeNo,
-      });
-      const { success, message, data } = res.data;
-      if (success) {
-        Toast.success({
-          content: data?.trade_state
-            ? `${t('查询成功')}：${data.trade_state}`
-            : t('查询成功'),
+  const handleQueryAlipayOfficial = useCallback(
+    async (tradeNo) => {
+      try {
+        const res = await API.post('/api/user/topup/alipay-official/query', {
+          trade_no: tradeNo,
         });
-        await loadTopups(page, pageSize);
-      } else {
-        Toast.error({ content: message || t('查询失败') });
-      }
-    } catch (e) {
-      Toast.error({ content: t('查询失败') });
-    }
-  };
-
-  const confirmCloseAlipayOfficial = (tradeNo) => {
-    Modal.confirm({
-      title: t('关闭订单'),
-      content: t('确认关闭该支付宝官方待支付订单？'),
-      onOk: async () => {
-        try {
-          const res = await API.post('/api/user/topup/alipay-official/close', {
-            trade_no: tradeNo,
+        const { success, message, data } = res.data;
+        if (success) {
+          Toast.success({
+            content: data?.trade_status
+              ? `${t('查询成功')}：${data.trade_status}`
+              : t('查询成功'),
           });
-          const { success, message } = res.data;
-          if (success) {
-            Toast.success({ content: t('订单已关闭') });
-            await loadTopups(page, pageSize);
-          } else {
-            Toast.error({ content: message || t('关闭订单失败') });
-          }
-        } catch (e) {
-          Toast.error({ content: t('关闭订单失败') });
+          await loadTopups(page, pageSize);
+        } else {
+          Toast.error({ content: message || t('查询失败') });
         }
-      },
-    });
-  };
+      } catch (e) {
+        Toast.error({ content: t('查询失败') });
+      }
+    },
+    [loadTopups, page, pageSize, t],
+  );
 
-  const confirmCloseWechatPayOfficial = (tradeNo) => {
-    Modal.confirm({
-      title: t('关闭订单'),
-      content: t('确认关闭该微信待支付订单？'),
-      onOk: async () => {
-        try {
-          const res = await API.post(
-            '/api/user/topup/wechat-pay-official/close',
-            {
-              trade_no: tradeNo,
-            },
-          );
-          const { success, message } = res.data;
-          if (success) {
-            Toast.success({ content: t('订单已关闭') });
-            await loadTopups(page, pageSize);
-          } else {
-            Toast.error({ content: message || t('关闭订单失败') });
-          }
-        } catch (e) {
-          Toast.error({ content: t('关闭订单失败') });
+  const handleQueryWechatPayOfficial = useCallback(
+    async (tradeNo) => {
+      try {
+        const res = await API.post('/api/user/topup/wechat-pay-official/query', {
+          trade_no: tradeNo,
+        });
+        const { success, message, data } = res.data;
+        if (success) {
+          Toast.success({
+            content: data?.trade_state
+              ? `${t('查询成功')}：${data.trade_state}`
+              : t('查询成功'),
+          });
+          await loadTopups(page, pageSize);
+        } else {
+          Toast.error({ content: message || t('查询失败') });
         }
-      },
-    });
-  };
+      } catch (e) {
+        Toast.error({ content: t('查询失败') });
+      }
+    },
+    [loadTopups, page, pageSize, t],
+  );
+
+  const confirmCloseAlipayOfficial = useCallback(
+    (tradeNo) => {
+      Modal.confirm({
+        title: t('关闭订单'),
+        content: t('确认关闭该支付宝官方待支付订单？'),
+        onOk: async () => {
+          try {
+            const res = await API.post('/api/user/topup/alipay-official/close', {
+              trade_no: tradeNo,
+            });
+            const { success, message } = res.data;
+            if (success) {
+              Toast.success({ content: t('订单已关闭') });
+              await loadTopups(page, pageSize);
+            } else {
+              Toast.error({ content: message || t('关闭订单失败') });
+            }
+          } catch (e) {
+            Toast.error({ content: t('关闭订单失败') });
+          }
+        },
+      });
+    },
+    [loadTopups, page, pageSize, t],
+  );
+
+  const confirmCloseWechatPayOfficial = useCallback(
+    (tradeNo) => {
+      Modal.confirm({
+        title: t('关闭订单'),
+        content: t('确认关闭该微信待支付订单？'),
+        onOk: async () => {
+          try {
+            const res = await API.post(
+              '/api/user/topup/wechat-pay-official/close',
+              {
+                trade_no: tradeNo,
+              },
+            );
+            const { success, message } = res.data;
+            if (success) {
+              Toast.success({ content: t('订单已关闭') });
+              await loadTopups(page, pageSize);
+            } else {
+              Toast.error({ content: message || t('关闭订单失败') });
+            }
+          } catch (e) {
+            Toast.error({ content: t('关闭订单失败') });
+          }
+        },
+      });
+    },
+    [loadTopups, page, pageSize, t],
+  );
 
   // 渲染状态徽章
   const renderStatusBadge = (status) => {
