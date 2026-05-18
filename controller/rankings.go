@@ -101,7 +101,7 @@ func GetUserRankings(c *gin.Context) {
 		return
 	}
 
-	result, err := service.GetUserRankingsSnapshot(c.DefaultQuery("period", "week"))
+	result, err := service.GetUserRankingsSnapshot(c.DefaultQuery("period", "week"), c.GetInt("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,

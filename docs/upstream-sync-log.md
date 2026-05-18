@@ -185,3 +185,28 @@ git log --oneline v1.0.0-rc.5..upstream/main
   - `electron/package-lock.json`：合入 dependabot 间接依赖更新。
 - 本地覆盖层：未改动 StuHelper AI/Xauryan 身份、classic 默认前端、classic 排行榜、
   GHCR release-only 发布策略和上游同步移植记录。
+
+## 2026-05-18 - classic 用户排行榜响应结构扩展（向后兼容增字段）
+
+- 范围：`/api/rankings/users` 响应结构、classic 主题排行榜页面。
+- 后端：
+  - `service.UserRankingsResponse.Consumption[*]` 与 `Recharge[*]` 新增
+    `total_tokens` (int64) 与 `request_count` (int64) 字段，纯增字段，向后兼容。
+  - 响应顶层新增可选 `me` 对象（仅登录且在所选周期有正消费时返回），与
+    `RankedUser` 同结构；`me.display` 优先使用 `User.DisplayName`，回退到
+    `username`，仍未取得则回退到 `"User #<id>"`。
+  - 公共 top-N 行依然走 `maskRankingUsername` 脱敏，与现有行为一致。
+  - `total_tokens` 口径：`sum(prompt_tokens + completion_tokens)`；
+    `request_count` 口径：消费榜范围 `type = LogTypeConsume AND quota > 0` 下的
+    `count(*)`，与 `total_quota` 同口径。
+  - 消费榜默认排序键改为 `total_tokens DESC, user_id ASC`；充值榜排序保持
+    `total_quota DESC`。
+- 前端：
+  - classic `pages/Rankings/index.jsx` 与 `index.css` 重写为三指标视图
+    （Token 用量 / 消费额度 / 调用次数），切换 metric 在客户端排序，无新请求。
+  - 充值榜 Tab 不再渲染，但后端响应继续保留 `recharge` 数组，便于上游同步。
+  - 浅色 / 暗色双主题通过 `body[theme-mode='dark']` 钩子；`prefers-reduced-motion`
+    全量禁用动画。
+- 影响范围：
+  - 现有匿名 + 已登录调用方读取既有字段不受影响。
+  - `web/default/src/features/rankings/` 未改动，仍展示厂商 / 模型榜。

@@ -17,29 +17,106 @@ const userRankingDefaultLimit = 20
 var adminAddQuotaContentPattern = regexp.MustCompile(`管理员增加用户额度\s*[^0-9]*([0-9]+(?:\.[0-9]+)?)`)
 
 type UserRankingTotal struct {
-	UserId     int    `json:"user_id"`
-	Username   string `json:"username"`
-	TotalQuota int64  `json:"total_quota"`
+	UserId       int    `json:"user_id"       gorm:"column:user_id"`
+	Username     string `json:"username"      gorm:"-"`
+	TotalQuota   int64  `json:"total_quota"   gorm:"column:total_quota"`
+	TotalTokens  int64  `json:"total_tokens"  gorm:"column:total_tokens"`
+	RequestCount int64  `json:"request_count" gorm:"column:request_count"`
+}
+
+func GetUserSelfDisplayNameById(userId int) string {
+	if userId <= 0 || DB == nil {
+		return ""
+	}
+	var record struct {
+		Username    string `gorm:"column:username"`
+		DisplayName string `gorm:"column:display_name"`
+	}
+	if err := DB.Model(&User{}).
+		Select("username", "display_name").
+		Where("id = ?", userId).
+		Take(&record).Error; err != nil {
+		return ""
+	}
+	if strings.TrimSpace(record.DisplayName) != "" {
+		return record.DisplayName
+	}
+	return record.Username
+}
+
+func userConsumptionRankingBaseQuery(startTime int64, endTime int64) *gorm.DB {
+	query := LOG_DB.Table("logs").
+		Select("user_id, " +
+			"sum(coalesce(quota, 0)) as total_quota, " +
+			"sum(coalesce(prompt_tokens, 0) + coalesce(completion_tokens, 0)) as total_tokens, " +
+			"count(*) as request_count").
+		Where("type = ? AND quota > 0", LogTypeConsume).
+		Group("user_id").
+		Having("sum(quota) > 0")
+	return applyUnixTimeRange(query, "created_at", startTime, endTime)
 }
 
 func GetUserConsumptionRankingTotals(startTime int64, endTime int64, limit int) ([]UserRankingTotal, int64, error) {
-	rows, total, err := scanUserRankingTotals(
-		applyUnixTimeRange(
-			LOG_DB.Table("logs").
-				Select("user_id, sum(quota) as total_quota").
-				Where("type = ? AND quota > 0", LogTypeConsume).
-				Group("user_id").
-				Having("sum(quota) > 0"),
-			"created_at",
-			startTime,
-			endTime,
-		),
-		limit,
-	)
-	if err != nil {
+	if limit <= 0 {
+		limit = userRankingDefaultLimit
+	}
+	var rows []UserRankingTotal
+	if err := userConsumptionRankingBaseQuery(startTime, endTime).
+		Order("total_tokens DESC").
+		Order("user_id ASC").
+		Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
+	sortUserConsumptionRankingRows(rows)
+	total := sumUserRankingQuota(rows)
+	if len(rows) > limit {
+		rows = rows[:limit]
+	}
+	rows = normalizeUserRankingRows(rows)
 	return rows, total, nil
+}
+
+func GetUserConsumptionRankingTotalForUser(startTime int64, endTime int64, userId int) (*UserRankingTotal, error) {
+	if userId <= 0 {
+		return nil, nil
+	}
+	var row UserRankingTotal
+	err := userConsumptionRankingBaseQuery(startTime, endTime).
+		Where("user_id = ?", userId).
+		Scan(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	if row.UserId <= 0 || row.TotalQuota <= 0 {
+		return nil, nil
+	}
+	rows := normalizeUserRankingRows([]UserRankingTotal{row})
+	return &rows[0], nil
+}
+
+func GetUserConsumptionRankingRank(startTime int64, endTime int64, me UserRankingTotal) (int, error) {
+	if me.UserId <= 0 || me.TotalQuota <= 0 {
+		return 0, nil
+	}
+	base := userConsumptionRankingBaseQuery(startTime, endTime)
+	var betterCount int64
+	err := LOG_DB.Table("(?) AS ranked", base).
+		Where("total_tokens > ? OR (total_tokens = ? AND user_id < ?)",
+			me.TotalTokens, me.TotalTokens, me.UserId).
+		Count(&betterCount).Error
+	if err != nil {
+		return 0, err
+	}
+	return int(betterCount) + 1, nil
+}
+
+func sortUserConsumptionRankingRows(rows []UserRankingTotal) {
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].TotalTokens == rows[j].TotalTokens {
+			return rows[i].UserId < rows[j].UserId
+		}
+		return rows[i].TotalTokens > rows[j].TotalTokens
+	})
 }
 
 func GetUserRechargeRankingTotals(startTime int64, endTime int64, limit int) ([]UserRankingTotal, int64, error) {
@@ -59,23 +136,6 @@ func GetUserRechargeRankingTotals(startTime int64, endTime int64, limit int) ([]
 	if limit <= 0 {
 		limit = userRankingDefaultLimit
 	}
-	if len(rows) > limit {
-		rows = rows[:limit]
-	}
-	return rows, total, nil
-}
-
-func scanUserRankingTotals(query *gorm.DB, limit int) ([]UserRankingTotal, int64, error) {
-	if limit <= 0 {
-		limit = userRankingDefaultLimit
-	}
-	var rows []UserRankingTotal
-	if err := query.Order("total_quota DESC").Find(&rows).Error; err != nil {
-		return nil, 0, err
-	}
-	rows = normalizeUserRankingRows(rows)
-	sortUserRankingRows(rows)
-	total := sumUserRankingQuota(rows)
 	if len(rows) > limit {
 		rows = rows[:limit]
 	}
@@ -189,12 +249,50 @@ func applyUnixTimeRange(query *gorm.DB, column string, startTime int64, endTime 
 }
 
 func normalizeUserRankingRows(rows []UserRankingTotal) []UserRankingTotal {
+	missing := make([]int, 0, len(rows))
+	seen := make(map[int]struct{}, len(rows))
 	for i := range rows {
 		if rows[i].Username == "" && rows[i].UserId > 0 {
-			rows[i].Username, _ = GetUsernameById(rows[i].UserId, false)
+			if _, dup := seen[rows[i].UserId]; !dup {
+				seen[rows[i].UserId] = struct{}{}
+				missing = append(missing, rows[i].UserId)
+			}
+		}
+	}
+	if len(missing) == 0 {
+		return rows
+	}
+
+	names := batchGetUsernamesByIds(missing)
+	for i := range rows {
+		if rows[i].Username == "" && rows[i].UserId > 0 {
+			if name, ok := names[rows[i].UserId]; ok {
+				rows[i].Username = name
+			}
 		}
 	}
 	return rows
+}
+
+func batchGetUsernamesByIds(ids []int) map[int]string {
+	out := make(map[int]string, len(ids))
+	if len(ids) == 0 || DB == nil {
+		return out
+	}
+	var records []struct {
+		Id       int    `gorm:"column:id"`
+		Username string `gorm:"column:username"`
+	}
+	if err := DB.Model(&User{}).
+		Select("id", "username").
+		Where("id IN ?", ids).
+		Find(&records).Error; err != nil {
+		return out
+	}
+	for _, r := range records {
+		out[r.Id] = r.Username
+	}
+	return out
 }
 
 func sumUserRankingQuota(rows []UserRankingTotal) int64 {

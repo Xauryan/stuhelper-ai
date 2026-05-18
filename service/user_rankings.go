@@ -2,24 +2,32 @@ package service
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Xauryan/stuhelper-ai/model"
 )
 
-const userRankingLimit = 20
+const (
+	userRankingLimit    = 20
+	userRankingCacheTTL = 60 * time.Second
+)
 
 type UserRankingsResponse struct {
 	Period      string       `json:"period"`
 	Consumption []RankedUser `json:"consumption"`
 	Recharge    []RankedUser `json:"recharge"`
+	Me          *RankedUser  `json:"me,omitempty"`
 	UpdatedAt   int64        `json:"updated_at"`
 }
 
 type RankedUser struct {
-	Rank       int    `json:"rank"`
-	Display    string `json:"display"`
-	TotalQuota int64  `json:"total_quota"`
+	Rank         int    `json:"rank"`
+	Display      string `json:"display"`
+	TotalQuota   int64  `json:"total_quota"`
+	TotalTokens  int64  `json:"total_tokens"`
+	RequestCount int64  `json:"request_count"`
+	IsMe         bool   `json:"is_me,omitempty"`
 }
 
 type userRankingPeriodConfig struct {
@@ -27,29 +35,139 @@ type userRankingPeriodConfig struct {
 	duration time.Duration
 }
 
-func GetUserRankingsSnapshot(period string) (*UserRankingsResponse, error) {
+type userRankingCacheItem struct {
+	expiresAt       time.Time
+	data            *UserRankingsResponse
+	consumptionRows []model.UserRankingTotal
+	startTime       int64
+	endTime         int64
+}
+
+var (
+	userRankingCacheMu sync.Mutex
+	userRankingCache   = map[string]userRankingCacheItem{}
+)
+
+func ClearUserRankingsCache() {
+	userRankingCacheMu.Lock()
+	userRankingCache = map[string]userRankingCacheItem{}
+	userRankingCacheMu.Unlock()
+}
+
+func GetUserRankingsSnapshot(period string, viewerUserId int) (*UserRankingsResponse, error) {
 	config, err := userRankingConfig(period)
 	if err != nil {
 		return nil, err
 	}
+
+	item, err := getCachedUserRankingsPublicSnapshot(config)
+	if err != nil {
+		return nil, err
+	}
+
+	out := cloneUserRankingsResponse(item.data)
+	if viewerUserId > 0 {
+		me, err := buildUserRankingMeRow(item, viewerUserId)
+		if err != nil {
+			return nil, err
+		}
+		out.Me = me
+		for i, src := range item.consumptionRows {
+			if src.UserId == viewerUserId && i < len(out.Consumption) {
+				out.Consumption[i].IsMe = true
+			}
+		}
+	}
+	return out, nil
+}
+
+func getCachedUserRankingsPublicSnapshot(config userRankingPeriodConfig) (userRankingCacheItem, error) {
 	now := time.Now()
+
+	userRankingCacheMu.Lock()
+	cached, ok := userRankingCache[config.id]
+	userRankingCacheMu.Unlock()
+	if ok && cached.expiresAt.After(now) {
+		return cached, nil
+	}
+
 	startTime, endTime := userRankingTimeRange(config, now)
 
 	consumptionRows, _, err := model.GetUserConsumptionRankingTotals(startTime, endTime, userRankingLimit)
 	if err != nil {
-		return nil, err
+		return userRankingCacheItem{}, err
 	}
 	rechargeRows, _, err := model.GetUserRechargeRankingTotals(startTime, endTime, userRankingLimit)
 	if err != nil {
-		return nil, err
+		return userRankingCacheItem{}, err
 	}
 
-	return &UserRankingsResponse{
-		Period:      config.id,
-		Consumption: buildRankedUsers(consumptionRows),
-		Recharge:    buildRankedUsers(rechargeRows),
-		UpdatedAt:   now.Unix(),
+	item := userRankingCacheItem{
+		expiresAt: now.Add(userRankingCacheTTL),
+		data: &UserRankingsResponse{
+			Period:      config.id,
+			Consumption: buildRankedUsers(consumptionRows),
+			Recharge:    buildRankedUsers(rechargeRows),
+			UpdatedAt:   now.Unix(),
+		},
+		consumptionRows: consumptionRows,
+		startTime:       startTime,
+		endTime:         endTime,
+	}
+
+	userRankingCacheMu.Lock()
+	userRankingCache[config.id] = item
+	userRankingCacheMu.Unlock()
+
+	return item, nil
+}
+
+func cloneUserRankingsResponse(src *UserRankingsResponse) *UserRankingsResponse {
+	dst := *src
+	dst.Consumption = append([]RankedUser(nil), src.Consumption...)
+	dst.Recharge = append([]RankedUser(nil), src.Recharge...)
+	dst.Me = nil
+	return &dst
+}
+
+func buildUserRankingMeRow(item userRankingCacheItem, viewerUserId int) (*RankedUser, error) {
+	for idx, row := range item.consumptionRows {
+		if row.UserId == viewerUserId {
+			return &RankedUser{
+				Rank:         idx + 1,
+				Display:      displayNameForRankingSelf(row),
+				TotalQuota:   row.TotalQuota,
+				TotalTokens:  row.TotalTokens,
+				RequestCount: row.RequestCount,
+			}, nil
+		}
+	}
+
+	row, err := model.GetUserConsumptionRankingTotalForUser(item.startTime, item.endTime, viewerUserId)
+	if err != nil || row == nil {
+		return nil, err
+	}
+	rank, err := model.GetUserConsumptionRankingRank(item.startTime, item.endTime, *row)
+	if err != nil {
+		return nil, err
+	}
+	return &RankedUser{
+		Rank:         rank,
+		Display:      displayNameForRankingSelf(*row),
+		TotalQuota:   row.TotalQuota,
+		TotalTokens:  row.TotalTokens,
+		RequestCount: row.RequestCount,
 	}, nil
+}
+
+func displayNameForRankingSelf(row model.UserRankingTotal) string {
+	if name := model.GetUserSelfDisplayNameById(row.UserId); name != "" {
+		return name
+	}
+	if row.Username != "" {
+		return row.Username
+	}
+	return fmt.Sprintf("User #%d", row.UserId)
 }
 
 func userRankingConfig(period string) (userRankingPeriodConfig, error) {
@@ -79,9 +197,11 @@ func buildRankedUsers(rows []model.UserRankingTotal) []RankedUser {
 	result := make([]RankedUser, 0, len(rows))
 	for idx, row := range rows {
 		result = append(result, RankedUser{
-			Rank:       idx + 1,
-			Display:    maskRankingUsername(row.Username, row.UserId),
-			TotalQuota: row.TotalQuota,
+			Rank:         idx + 1,
+			Display:      maskRankingUsername(row.Username, row.UserId),
+			TotalQuota:   row.TotalQuota,
+			TotalTokens:  row.TotalTokens,
+			RequestCount: row.RequestCount,
 		})
 	}
 	return result
