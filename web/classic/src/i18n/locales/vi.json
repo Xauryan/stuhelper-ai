@@ -2801,6 +2801,7 @@
     "排行榜类型": "Loại bảng xếp hạng",
     "消费榜": "Tiêu thụ",
     "充值榜": "Nạp tiền",
+    "充值额度": "Số nạp",
     "用户充值排行（按 {{metric}} 排序）": "Xếp hạng nạp tiền (theo {{metric}})",
     "立即签到": "Đăng nhập ngay",
     "立即订阅": "Đăng ký ngay",

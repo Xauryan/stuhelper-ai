@@ -38,10 +38,10 @@ func GetUserSelfDisplayNameById(userId int) string {
 		Take(&record).Error; err != nil {
 		return ""
 	}
-	if strings.TrimSpace(record.DisplayName) != "" {
-		return record.DisplayName
+	if record.Username != "" {
+		return record.Username
 	}
-	return record.Username
+	return strings.TrimSpace(record.DisplayName)
 }
 
 func userConsumptionRankingBaseQuery(startTime int64, endTime int64) *gorm.DB {

@@ -3695,6 +3695,7 @@
     "排行榜类型": "Type de classement",
     "消费榜": "Consommation",
     "充值榜": "Recharge",
+    "充值额度": "Recharge",
     "用户充值排行（按 {{metric}} 排序）": "Classement des recharges (trié par {{metric}})",
     "用户消费排行（按 {{metric}} 排序）": "Classement des utilisateurs (trié par {{metric}})",
     "暂无排行榜数据": "Aucune donnée de classement",

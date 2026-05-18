@@ -261,7 +261,15 @@ function Podium({ rows, metric, meDisplay }) {
   );
 }
 
-function RankRow({ row, displayRank, metric, rank1Value, isMe, staggerIndex }) {
+function RankRow({
+  row,
+  displayRank,
+  metric,
+  visibleMetrics,
+  rank1Value,
+  isMe,
+  staggerIndex,
+}) {
   const { t } = useTranslation();
   const value = metric.accessor(row);
   const percent =
@@ -293,7 +301,7 @@ function RankRow({ row, displayRank, metric, rank1Value, isMe, staggerIndex }) {
           </span>
         )}
       </td>
-      {METRICS.map((m) => {
+      {visibleMetrics.map((m) => {
         const active = m.key === metric.key;
         const cellValue = m.format(m.accessor(row));
         return (
@@ -429,6 +437,7 @@ const Rankings = () => {
   const isRecharge = listType === 'recharge';
   const effectiveMetric = isRecharge ? 'quota' : metric;
   const activeMetric = METRIC_BY_KEY[effectiveMetric] || METRICS[0];
+  const visibleMetrics = isRecharge ? [METRIC_BY_KEY.quota] : METRICS;
   const sourceRows = isRecharge
     ? snapshot?.recharge || []
     : snapshot?.consumption || [];
@@ -547,7 +556,7 @@ const Rankings = () => {
                       <th scope='col' className='rk-col-user'>
                         {t('用户')}
                       </th>
-                      {METRICS.map((m) => (
+                      {visibleMetrics.map((m) => (
                         <th
                           key={m.key}
                           scope='col'
@@ -557,7 +566,7 @@ const Rankings = () => {
                           }
                           data-active={m.key === effectiveMetric || undefined}
                         >
-                          {t(m.label)}
+                          {isRecharge ? t('充值额度') : t(m.label)}
                         </th>
                       ))}
                     </tr>
@@ -569,8 +578,10 @@ const Rankings = () => {
                         row={row}
                         displayRank={i + 1}
                         metric={activeMetric}
+                        visibleMetrics={visibleMetrics}
                         rank1Value={rank1Value}
                         isMe={
+                          !isRecharge &&
                           meMatch.mode === 'inline' &&
                           (row.is_me || meMatch.me?.display === row.display)
                         }
