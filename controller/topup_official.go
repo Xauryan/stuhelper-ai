@@ -30,6 +30,9 @@ const (
 	alipayOfficialExpireTickBudget = 30 * time.Second
 	// 单次 tick 内允许处理的批次数上限，配合 ListPendingTopUpsBefore 的 20 条/批避免长期积压。
 	alipayOfficialExpireTickMaxBatches = 5
+	// 支付宝侧 TradeClose/TradeQuery 均返回"交易不存在"的本地待支付订单，需要等待至少 24h
+	// 再在本地标记过期：给瞬时错误和晚到的入账通知留窗口，同时打破"永远 pending → 每分钟反复扫描刷屏"的循环。
+	alipayOfficialOrphanGraceDuration = 24 * time.Hour
 )
 
 var (
@@ -906,6 +909,30 @@ func AdminQueryWechatPayOfficialRefund(c *gin.Context) {
 	common.ApiSuccess(c, response)
 }
 
+// resolveAlipayOfficialOrphanTopUp 处理支付宝侧 TradeClose 已返回"交易不存在"的本地待支付订单：
+// 当订单创建时间已超过 alipayOfficialOrphanGraceDuration、且 TradeQuery 二次确认仍为交易不存在时，
+// 在本地标记为过期。这条路径专门用于打破"支付宝清掉了订单 → 本地永远 pending → 后台扫描器每分钟反复
+// 关单失败刷日志"的死循环。返回 true 表示已完成本地状态更新，调用方可跳过保留 pending 的告警。
+func resolveAlipayOfficialOrphanTopUp(ctx context.Context, client *service.AlipayOfficialClient, topUp *model.TopUp) bool {
+	if topUp == nil || topUp.CreateTime == 0 {
+		return false
+	}
+	graceCutoff := time.Now().Add(-alipayOfficialOrphanGraceDuration).Unix()
+	if topUp.CreateTime > graceCutoff {
+		return false
+	}
+	if _, queryErr := queryAlipayOfficialTrade(ctx, client, topUp.TradeNo); !service.IsAlipayOfficialTradeNotFound(queryErr) {
+		return false
+	}
+	if err := expireAlipayOfficialPendingOrder(topUp.TradeNo); err != nil &&
+		!errors.Is(err, model.ErrTopUpStatusInvalid) {
+		logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时孤儿订单本地状态更新失败 trade_no=%s create_time=%d error=%q", topUp.TradeNo, topUp.CreateTime, err.Error()))
+		return false
+	}
+	logger.LogInfo(ctx, fmt.Sprintf("支付宝官方超时孤儿订单本地已标记过期 trade_no=%s create_time=%d", topUp.TradeNo, topUp.CreateTime))
+	return true
+}
+
 func ExpireAlipayOfficialPendingTopUps(ctx context.Context) (int, error) {
 	if !isAlipayOfficialTopUpEnabled() {
 		return 0, nil
@@ -945,7 +972,9 @@ func ExpireAlipayOfficialPendingTopUps(ctx context.Context) (int, error) {
 		})
 		if closeErr != nil {
 			if service.IsAlipayOfficialTradeNotFound(closeErr) {
-				logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单交易不存在，保留本地待支付状态以避免旧支付入口后续付款造成资金悬挂 trade_no=%s", topUp.TradeNo))
+				if !resolveAlipayOfficialOrphanTopUp(ctx, client, topUp) {
+					logger.LogWarn(ctx, fmt.Sprintf("支付宝官方超时订单交易不存在，保留本地待支付状态以避免旧支付入口后续付款造成资金悬挂 trade_no=%s", topUp.TradeNo))
+				}
 				UnlockOrder(topUp.TradeNo)
 				processed++
 				continue
