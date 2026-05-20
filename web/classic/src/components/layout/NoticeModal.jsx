@@ -48,7 +48,15 @@ import { getNoticeNotificationKey } from '../../hooks/common/useNotifications';
 const stripHtml = (html) => {
   const div = document.createElement('div');
   div.innerHTML = html || '';
+  div.querySelectorAll('script, style, title').forEach((node) => node.remove());
   return div.textContent || div.innerText || '';
+};
+
+const getHtmlDocumentTitle = (html) => {
+  const match = String(html || '').match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return stripHtml(match?.[1] || '')
+    .replace(/\s+/g, ' ')
+    .trim();
 };
 
 const formatAbsoluteTime = (dateValue) => {
@@ -116,6 +124,7 @@ const NoticeModal = ({
 
   const processedNotifications = useMemo(() => {
     return (notifications || []).slice(0, 20).map((item) => {
+      const usesFrame = shouldRenderFrame(item.content || '');
       const htmlContent = marked.parse(item.content || '');
       const plainContent = stripHtml(htmlContent).replace(/\s+/g, ' ').trim();
       const plainExtra = stripHtml(marked.parse(item.extra || ''))
@@ -129,9 +138,12 @@ const NoticeModal = ({
         time: formatAbsoluteTime(item.publishDate),
         content: item.content,
         htmlContent,
-        usesFrame: shouldRenderFrame(item.content || ''),
+        usesFrame,
         frameHtml: buildFrameHtml(item.content || ''),
         plainContent,
+        documentTitle: usesFrame
+          ? getHtmlDocumentTitle(item.content || '')
+          : '',
         extra: item.extra,
         plainExtra,
         relative: getRelativeTime(item.publishDate),
@@ -189,15 +201,19 @@ const NoticeModal = ({
 
     const item = autoPromptItem.item;
     const htmlContent = marked.parse(item?.content || '');
+    const usesFrame = shouldRenderFrame(item?.content || '');
     return {
       kind: 'notification',
       title:
         String(item?.title || '').trim() ||
-        stripHtml(htmlContent).replace(/\s+/g, ' ').trim() ||
+        (usesFrame ? getHtmlDocumentTitle(item?.content || '') : '') ||
+        (!usesFrame
+          ? stripHtml(htmlContent).replace(/\s+/g, ' ').trim()
+          : '') ||
         t('通知内容'),
       content: item?.content || '',
       htmlContent,
-      usesFrame: shouldRenderFrame(item?.content || ''),
+      usesFrame,
       frameHtml: buildFrameHtml(item?.content || ''),
     };
   }, [autoPromptItem, t]);
@@ -315,7 +331,7 @@ const NoticeModal = ({
                     <span className='system-notification-unread-dot' />
                   )}
                   <div className='system-notification-title'>
-                    {item.title || t('通知内容')}
+                    {item.title || item.documentTitle || t('通知内容')}
                   </div>
                 </div>
                 <div className='system-notification-actions'>
@@ -410,6 +426,16 @@ const NoticeModal = ({
     return renderUpdateAnnouncementTimeline();
   };
 
+  const notificationDetailIsFrame = Boolean(selectedNotification?.usesFrame);
+  const updateAnnouncementDetailIsFrame = Boolean(
+    selectedUpdateAnnouncement?.usesFrame,
+  );
+  const autoPromptDetailIsFrame = Boolean(autoPromptDetail?.usesFrame);
+  const htmlFrameModalProps = {
+    className: 'html-announcement-modal',
+    bodyStyle: { padding: 12 },
+  };
+
   return (
     <>
       <Modal
@@ -450,9 +476,14 @@ const NoticeModal = ({
         {renderBody()}
       </Modal>
       <Modal
-        title={selectedNotification?.title || t('通知内容')}
+        title={
+          selectedNotification?.title ||
+          selectedNotification?.documentTitle ||
+          t('通知内容')
+        }
         visible={Boolean(selectedNotification)}
         onCancel={() => setSelectedNotification(null)}
+        {...(notificationDetailIsFrame ? htmlFrameModalProps : {})}
         footer={
           <Button type='primary' onClick={() => setSelectedNotification(null)}>
             {t('关闭')}
@@ -466,6 +497,7 @@ const NoticeModal = ({
         title={selectedUpdateAnnouncement?.title || t('更新公告')}
         visible={Boolean(selectedUpdateAnnouncement)}
         onCancel={() => setSelectedUpdateAnnouncement(null)}
+        {...(updateAnnouncementDetailIsFrame ? htmlFrameModalProps : {})}
         footer={
           <Button
             type='primary'
@@ -482,6 +514,7 @@ const NoticeModal = ({
         title={autoPromptDetail?.title || t('通知内容')}
         visible={Boolean(autoPromptDetail)}
         onCancel={onAutoPromptClose}
+        {...(autoPromptDetailIsFrame ? htmlFrameModalProps : {})}
         footer={
           <div className='flex items-center justify-between w-full'>
             <span className='text-xs text-semi-color-text-2'>

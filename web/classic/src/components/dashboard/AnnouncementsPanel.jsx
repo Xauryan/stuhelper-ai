@@ -170,6 +170,8 @@ const AnnouncementsPanel = ({
         title={selectedAnnouncement?.title || t('更新公告')}
         visible={Boolean(selectedAnnouncement)}
         onCancel={() => setSelectedAnnouncement(null)}
+        className='html-announcement-modal'
+        bodyStyle={{ padding: 12 }}
         footer={
           <Button type='primary' onClick={() => setSelectedAnnouncement(null)}>
             {t('关闭')}

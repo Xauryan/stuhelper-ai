@@ -1033,28 +1033,58 @@ html.dark .sbg-variant-green {
   margin: 0 0 10px;
 }
 
-.notification-detail-frame-shell {
-  margin: -24px;
-}
-
 .update-log-timeline {
   padding: 4px 16px 4px 0;
 }
 
 .update-log-html-frame-shell {
-  margin: -24px;
   background: var(--semi-color-bg-0);
-  border-radius: 0 0 8px 8px;
+  border: 1px solid var(--semi-color-border);
+  border-radius: 8px;
   overflow: hidden;
 }
 
 .update-log-html-frame {
   display: block;
   width: 100%;
-  height: min(72vh, 760px);
+  height: min(70vh, 760px);
   min-height: 520px;
   border: 0;
   background: #fff;
+}
+
+.html-announcement-modal .semi-modal-content {
+  overflow: hidden;
+}
+
+.html-announcement-modal .semi-modal-body {
+  background: linear-gradient(
+    180deg,
+    var(--semi-color-fill-0) 0%,
+    var(--semi-color-bg-0) 42%
+  );
+}
+
+.html-announcement-modal .semi-modal-footer {
+  margin-top: 0;
+  border-top: 1px solid var(--semi-color-border);
+  background: var(--semi-color-bg-0);
+}
+
+.html-announcement-modal .update-log-html-frame-shell,
+.html-announcement-modal .notification-detail-frame-shell {
+  margin: 0;
+  border-color: var(--semi-color-border);
+  border-radius: 8px;
+  background: var(--semi-color-bg-0);
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 6%),
+    0 8px 24px rgb(15 23 42 / 5%);
+}
+
+.html-announcement-modal .update-log-html-frame {
+  height: min(70vh, 760px);
+  min-height: 520px;
 }
 
 .update-log-item {
@@ -1138,11 +1168,11 @@ html.dark .sbg-variant-green {
     max-width: 100%;
   }
 
-  .update-log-html-frame-shell {
-    margin: -16px;
+  .html-announcement-modal .semi-modal-body {
+    padding: 8px !important;
   }
 
-  .update-log-html-frame {
+  .html-announcement-modal .update-log-html-frame {
     height: 72vh;
     min-height: 420px;
   }
