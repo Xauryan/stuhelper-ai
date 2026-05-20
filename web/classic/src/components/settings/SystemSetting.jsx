@@ -744,9 +744,7 @@ const SystemSetting = () => {
                     )}
                     style={{ marginBottom: 20, marginTop: 16 }}
                   />
-                  <Text>
-                    {t('仅支持兼容 StuHelper AI Worker 格式的服务')}
-                  </Text>
+                  <Text>{t('仅支持兼容 StuHelper AI Worker 格式的服务')}</Text>
                   <Row
                     gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
                   >

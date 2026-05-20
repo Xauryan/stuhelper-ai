@@ -43,7 +43,11 @@ import {
   paySubscriptionCreem,
   paySubscriptionEpay,
 } from '../../api'
-import { formatDuration, formatResetPeriod, getPlanModelLimits } from '../../lib'
+import {
+  formatDuration,
+  formatResetPeriod,
+  getPlanModelLimits,
+} from '../../lib'
 import type { PlanRecord } from '../../types'
 
 interface PaymentMethod {

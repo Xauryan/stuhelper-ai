@@ -341,9 +341,7 @@ const InvitationCard = ({
               empty={
                 <Empty
                   image={
-                    <IllustrationNoResult
-                      style={{ width: 120, height: 120 }}
-                    />
+                    <IllustrationNoResult style={{ width: 120, height: 120 }} />
                   }
                   darkModeImage={
                     <IllustrationNoResultDark

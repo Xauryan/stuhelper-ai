@@ -14,8 +14,9 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-For commercial licensing, please contact support@Xauryan.com
+For commercial licensing, please contact support@xauryan.com
 */
+
 import { useState, useEffect } from 'react';
 import { API } from '../../helpers';
 

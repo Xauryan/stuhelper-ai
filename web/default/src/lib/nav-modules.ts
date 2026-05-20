@@ -76,9 +76,10 @@ export function isSidebarModuleEnabled(
   if (!raw || String(raw).trim() === '') return true
 
   try {
-    const parsed = JSON.parse(
-      String(raw)
-    ) as Record<string, Record<string, boolean>>
+    const parsed = JSON.parse(String(raw)) as Record<
+      string,
+      Record<string, boolean>
+    >
     const sectionConfig = parsed[section]
     if (!sectionConfig) return true
     if (sectionConfig.enabled === false) return false

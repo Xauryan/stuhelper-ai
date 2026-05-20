@@ -1,10 +1,13 @@
 package claude
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/Xauryan/stuhelper-ai/common"
@@ -385,15 +388,48 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 						if err != nil {
 							return nil, fmt.Errorf("get file data failed: %s", err.Error())
 						}
+						// Prefer the MIME inferred from the original filename
+						// when available; the file source itself does not
+						// carry the filename forward.
+						if mediaMessage.Type == dto.ContentTypeFile {
+							if file := mediaMessage.GetFile(); file != nil && file.FileName != "" {
+								if ext := filepath.Ext(file.FileName); ext != "" {
+									if guessed := mime.TypeByExtension(ext); guessed != "" {
+										if idx := strings.IndexByte(guessed, ';'); idx >= 0 {
+											guessed = strings.TrimSpace(guessed[:idx])
+										}
+										mimeType = guessed
+									}
+								}
+							}
+						}
+						// Plain text files (e.g. .txt) are forwarded to Claude as
+						// inline text content rather than a base64 attachment.
+						if strings.HasPrefix(mimeType, "text/") {
+							decoded, decodeErr := base64.StdEncoding.DecodeString(base64Data)
+							if decodeErr != nil {
+								return nil, fmt.Errorf("decode text file failed: %s", decodeErr.Error())
+							}
+							claudeMediaMessages = append(claudeMediaMessages, dto.ClaudeMediaMessage{
+								Type: "text",
+								Text: common.GetPointer[string](string(decoded)),
+							})
+							continue
+						}
 						claudeMediaMessage := dto.ClaudeMediaMessage{
 							Source: &dto.ClaudeMessageSource{
 								Type: "base64",
 							},
 						}
-						if strings.HasPrefix(mimeType, "application/pdf") {
+						switch {
+						case strings.HasPrefix(mimeType, "application/pdf"):
 							claudeMediaMessage.Type = "document"
-						} else {
+						case strings.HasPrefix(mimeType, "image/"):
 							claudeMediaMessage.Type = "image"
+						default:
+							// Unsupported MIME (e.g. octet-stream) — skip
+							// silently so callers can still chat normally.
+							continue
 						}
 
 						claudeMediaMessage.Source.MediaType = mimeType
@@ -949,9 +985,7 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
-	if common.DebugEnabled {
-		println("responseBody: ", string(responseBody))
-	}
+	logger.LogDebug(c, "responseBody: %s", responseBody)
 	handleErr := HandleClaudeResponseData(c, info, claudeInfo, resp, responseBody)
 	if handleErr != nil {
 		return nil, handleErr

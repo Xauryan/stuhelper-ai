@@ -196,7 +196,9 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
           const limits = getPlanModelLimits(row.original.plan)
           if (limits.length === 0) {
             return (
-              <span className='text-muted-foreground'>{t('No restriction')}</span>
+              <span className='text-muted-foreground'>
+                {t('No restriction')}
+              </span>
             )
           }
           return (

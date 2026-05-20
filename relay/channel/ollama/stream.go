@@ -188,9 +188,7 @@ func ollamaChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 	}
 	service.CloseResponseBodyGracefully(resp)
 	raw := string(body)
-	if common.DebugEnabled {
-		println("ollama non-stream raw resp:", raw)
-	}
+	logger.LogDebug(c, "ollama non-stream raw resp: %s", raw)
 
 	lines := strings.Split(raw, "\n")
 	var (

@@ -771,6 +771,10 @@ function GroupPricingTable({
       groupRatio,
       userUsableGroups
     )
+    // Syncs internal table rows when the parent's groupRatio/userUsableGroups
+    // change from an external source (e.g., refetch). The signature guard
+    // prevents the in-progress local edits from being clobbered.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRows((currentRows) => {
       if (groupPricingSignature(currentRows) === incomingSignature) {
         return currentRows
@@ -998,7 +1002,10 @@ function SimpleGroupDialog({
   const title = type === 'groupRatio' ? t('group ratio') : t('top-up ratio')
 
   useEffect(() => {
+    // Syncs the dialog form state with the editData prop: clear on close,
+    // populate on open. A future refactor could lift this to a key= remount.
     if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setName('')
       setValue('')
       return
@@ -1086,7 +1093,9 @@ function GroupOverrideDialog({
   const [ratio, setRatio] = useState('')
 
   useEffect(() => {
+    // Same reset/populate pattern as the sibling dialog above.
     if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTargetGroup('')
       setRatio('')
       return

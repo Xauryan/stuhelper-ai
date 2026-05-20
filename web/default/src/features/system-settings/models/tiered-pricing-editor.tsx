@@ -367,7 +367,11 @@ function DraftNumberInput({
   const [focused, setFocused] = useState(false)
 
   useEffect(() => {
+    // When the input loses focus or the external value changes while
+    // unfocused, re-format the displayed draft. Touching focused state
+    // explicitly avoids overwriting the user's in-progress typing.
     if (!focused) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDraft(formatNumberDraft(value))
     }
   }, [focused, value])
@@ -594,6 +598,9 @@ function VisualTierCard({
   const [mediaOpen, setMediaOpen] = useState(hasMediaPricing)
 
   useEffect(() => {
+    // Auto-expand the media section when the row first gains media pricing,
+    // without collapsing it again if the user manually toggles it later.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hasMediaPricing) setMediaOpen(true)
   }, [hasMediaPricing])
 

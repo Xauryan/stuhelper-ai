@@ -65,7 +65,9 @@ export default function SettingsCreditLimit(props) {
       .then((res) => {
         const failedResponse = res.find((item) => !item?.data?.success);
         if (failedResponse) {
-          return showError(failedResponse.data?.message || t('保存失败，请重试'));
+          return showError(
+            failedResponse.data?.message || t('保存失败，请重试'),
+          );
         }
         showSuccess(t('保存成功'));
         props.refresh();
@@ -192,7 +194,9 @@ export default function SettingsCreditLimit(props) {
                   min={0}
                   max={100}
                   suffix={'%'}
-                  extraText={t('被邀请用户充值或购买订阅时，邀请人获得的奖励比例')}
+                  extraText={t(
+                    '被邀请用户充值或购买订阅时，邀请人获得的奖励比例',
+                  )}
                   placeholder={t('例如：10')}
                   onChange={(value) =>
                     setInputs({
@@ -209,7 +213,9 @@ export default function SettingsCreditLimit(props) {
                   step={1}
                   min={0}
                   precision={0}
-                  extraText={t('被邀请用户前 N 次充值或订阅给予返佣，0 表示不限次数')}
+                  extraText={t(
+                    '被邀请用户前 N 次充值或订阅给予返佣，0 表示不限次数',
+                  )}
                   placeholder={t('0 表示不限')}
                   onChange={(value) =>
                     setInputs({

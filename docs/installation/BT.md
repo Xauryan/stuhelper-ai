@@ -2,7 +2,7 @@
 
 本文档提供使用宝塔面板 Docker 功能部署 StuHelper AI 的图文教程。
 
-> 📖 官方文档：[宝塔面板部署](https://github.com/Xauryan/stuhelper-ai/zh/docs/installation/deployment-methods/bt-docker-installation)
+> 仓库文档：https://github.com/Xauryan/stuhelper-ai
 
 ***
 
@@ -40,7 +40,8 @@
 2. 搜索并找到 **StuHelper AI**
 3. 点击 **安装**
 4. 配置以下基本选项：
-   - **容器名称**：可自定义，默认为 `StuHelper AI`
+   - **镜像地址**：`ghcr.io/xauryan/stuhelper-ai:latest`
+   - **容器名称**：可自定义，建议使用 `stuhelper-ai`
    - **端口映射**：默认为 `3000:3000`
    - **环境变量**：
      - `SESSION_SECRET`：会话密钥（**必填**，多机部署时必须一致）
@@ -50,20 +51,22 @@
 
 ### 方法二：使用 Docker Compose
 
-1. 在宝塔面板中创建网站目录，如 `/www/wwwroot/StuHelper AI`
+1. 在宝塔面板中创建网站目录，如 `/www/wwwroot/stuhelper-ai`
 2. 创建 `docker-compose.yml` 文件：
 
 ```yaml
-version: '3'
+version: '3.4'
 services:
-  StuHelper AI:
-    image: Xauryan/stuhelper-ai:latest
-    container_name: StuHelper AI
+  stuhelper-ai:
+    image: ghcr.io/xauryan/stuhelper-ai:latest
+    container_name: stuhelper-ai
     restart: always
+    command: --log-dir /app/logs
     ports:
       - "3000:3000"
     volumes:
       - ./data:/data
+      - ./logs:/app/logs
     environment:
       - SESSION_SECRET=your_session_secret_here  # 请修改为随机字符串
       - TZ=Asia/Shanghai
@@ -72,7 +75,7 @@ services:
 1. 在终端中进入目录并启动：
 
 ```bash
-cd /www/wwwroot/StuHelper AI
+cd /www/wwwroot/stuhelper-ai
 docker-compose up -d
 ```
 
@@ -126,7 +129,7 @@ volumes:
 
 ```bash
 # 拉取最新镜像
-docker pull Xauryan/stuhelper-ai:latest
+docker pull ghcr.io/xauryan/stuhelper-ai:latest
 
 # 重启容器
 docker-compose down && docker-compose up -d
@@ -136,10 +139,8 @@ docker-compose down && docker-compose up -d
 
 ## 相关链接
 
-- [官方文档](https://github.com/Xauryan/stuhelper-ai/zh/docs/installation)
-- [环境变量配置](https://github.com/Xauryan/stuhelper-ai/zh/docs/installation/config-maintenance/environment-variables)
-- [常见问题](https://github.com/Xauryan/stuhelper-ai/zh/docs/support/faq)
 - [GitHub 仓库](https://github.com/Xauryan/stuhelper-ai)
+- [Docker Compose 示例](https://github.com/Xauryan/stuhelper-ai/blob/main/docker-compose.yml)
 
 ***
 
@@ -148,4 +149,3 @@ docker-compose down && docker-compose up -d
 ![宝塔面板 Docker 安装](https://github.com/user-attachments/assets/7a6fc03e-c457-45e4-b8f9-184508fc26b0)
 
 > ⚠️ 注意：密钥为环境变量 `SESSION_SECRET`，请务必设置！
-

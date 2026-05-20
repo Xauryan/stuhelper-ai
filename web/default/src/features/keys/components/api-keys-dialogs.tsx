@@ -31,7 +31,12 @@ export function ApiKeysDialogs() {
     open === 'create' ? 'left' : open === 'update' ? 'right' : lastMutateSide
 
   useEffect(() => {
+    // Tracks the most recently opened drawer side so that, when the drawer
+    // animates out, it slides back the way it came in. This is a "remember
+    // last value" pattern — the alternative (lifting the setter into the
+    // caller of setOpen) would require changing the useApiKeys() context.
     if (open === 'create') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLastMutateSide('left')
     } else if (open === 'update') {
       setLastMutateSide('right')

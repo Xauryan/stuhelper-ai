@@ -816,7 +816,7 @@ func SyncSubscriptionOrderRefundState(tradeNo string, expectedPaymentProvider st
 	now := common.GetTimestamp()
 	cacheGroup := ""
 	cacheUserId := 0
-	return DB.Transaction(func(tx *gorm.DB) error {
+	if err := DB.Transaction(func(tx *gorm.DB) error {
 		var order SubscriptionOrder
 		if err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(&order).Error; err != nil {
 			return ErrSubscriptionOrderNotFound
@@ -903,7 +903,9 @@ func SyncSubscriptionOrderRefundState(tradeNo string, expectedPaymentProvider st
 			return reverseInviterRewardForFullRefundTx(tx, order.UserId)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
 	if cacheGroup != "" && cacheUserId > 0 {
 		_ = UpdateUserGroupCache(cacheUserId, cacheGroup)
 	}

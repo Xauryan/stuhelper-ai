@@ -373,9 +373,12 @@ const TopupBillingTable = ({
   const handleQueryWechatPayOfficial = useCallback(
     async (tradeNo) => {
       try {
-        const res = await API.post('/api/user/topup/wechat-pay-official/query', {
-          trade_no: tradeNo,
-        });
+        const res = await API.post(
+          '/api/user/topup/wechat-pay-official/query',
+          {
+            trade_no: tradeNo,
+          },
+        );
         const { success, message, data } = res.data;
         if (success) {
           Toast.success({
@@ -401,9 +404,12 @@ const TopupBillingTable = ({
         content: t('确认关闭该支付宝官方待支付订单？'),
         onOk: async () => {
           try {
-            const res = await API.post('/api/user/topup/alipay-official/close', {
-              trade_no: tradeNo,
-            });
+            const res = await API.post(
+              '/api/user/topup/alipay-official/close',
+              {
+                trade_no: tradeNo,
+              },
+            );
             const { success, message } = res.data;
             if (success) {
               Toast.success({ content: t('订单已关闭') });

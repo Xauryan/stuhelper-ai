@@ -41,9 +41,15 @@ export function useThemeRadiusPx(
   cssVariable = '--radius-md',
   refreshKey?: string
 ): number | undefined {
-  const [radius, setRadius] = useState<number | undefined>()
+  const [radius, setRadius] = useState<number | undefined>(() =>
+    resolveThemeRadiusPx(cssVariable)
+  )
 
   useEffect(() => {
+    // Effect probes the live DOM (a true external system) for the current
+    // computed CSS value; this is the documented use case for setState in
+    // an effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRadius(resolveThemeRadiusPx(cssVariable))
   }, [cssVariable, refreshKey])
 

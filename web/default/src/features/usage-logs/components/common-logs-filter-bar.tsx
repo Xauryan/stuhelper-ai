@@ -92,6 +92,10 @@ export function CommonLogsFilterBar<TData>(
       next.upstreamRequestId = searchParams.upstreamRequestId
 
     if (Object.keys(next).length > 0) {
+      // Mirrors URL searchParams (external state) into the local filter
+      // store. A future refactor could treat searchParams as the single
+      // source of truth and drop the local copy.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFilters((prev) => ({ ...prev, ...next }))
     }
 
@@ -297,9 +301,7 @@ export function CommonLogsFilterBar<TData>(
           <Input
             placeholder={t('Upstream Request ID')}
             value={filters.upstreamRequestId || ''}
-            onChange={(e) =>
-              handleChange('upstreamRequestId', e.target.value)
-            }
+            onChange={(e) => handleChange('upstreamRequestId', e.target.value)}
             onKeyDown={handleKeyDown}
             className={inputClass}
           />

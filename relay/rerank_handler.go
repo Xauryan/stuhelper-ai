@@ -8,6 +8,7 @@ import (
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/dto"
+	"github.com/Xauryan/stuhelper-ai/logger"
 	relaycommon "github.com/Xauryan/stuhelper-ai/relay/common"
 	"github.com/Xauryan/stuhelper-ai/relay/helper"
 	"github.com/Xauryan/stuhelper-ai/service"
@@ -67,9 +68,7 @@ func RerankHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			}
 		}
 
-		if common.DebugEnabled {
-			println(fmt.Sprintf("Rerank request body: %s", string(jsonData)))
-		}
+		logger.LogDebug(c, "Rerank request body: %s", jsonData)
 		requestBody = bytes.NewBuffer(jsonData)
 	}
 

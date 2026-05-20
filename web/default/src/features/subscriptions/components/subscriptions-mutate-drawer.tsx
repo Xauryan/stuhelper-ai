@@ -30,7 +30,6 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { MultiSelect } from '@/components/multi-select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -61,6 +60,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
+import { MultiSelect } from '@/components/multi-select'
 import { createPlan, updatePlan, getGroups, getEnabledModels } from '../api'
 import { getDurationUnitOptions, getResetPeriodOptions } from '../constants'
 import {
@@ -606,7 +606,7 @@ export function SubscriptionsMutateDrawer({
                           }
                         />
                         {modelsLoading && (
-                          <Loader2 className='text-muted-foreground absolute right-3 top-3 h-4 w-4 animate-spin' />
+                          <Loader2 className='text-muted-foreground absolute top-3 right-3 h-4 w-4 animate-spin' />
                         )}
                       </div>
                     </FormControl>

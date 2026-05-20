@@ -14,8 +14,9 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-For commercial licensing, please contact support@Xauryan.com
+For commercial licensing, please contact support@xauryan.com
 */
+
 export function base64UrlToBuffer(base64url) {
   if (!base64url) return new ArrayBuffer(0);
   let padding = '='.repeat((4 - (base64url.length % 4)) % 4);

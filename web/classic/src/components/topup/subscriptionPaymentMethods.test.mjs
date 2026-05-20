@@ -69,8 +69,7 @@ assert.equal(
   1.008,
 );
 assert.equal(
-  subscriptionMethods.find((method) => method.key === 'epay:alipay')
-    ?.unitPrice,
+  subscriptionMethods.find((method) => method.key === 'epay:alipay')?.unitPrice,
   1.2,
 );
 assert.equal(

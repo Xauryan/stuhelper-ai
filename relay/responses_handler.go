@@ -10,6 +10,7 @@ import (
 	"github.com/Xauryan/stuhelper-ai/common"
 	appconstant "github.com/Xauryan/stuhelper-ai/constant"
 	"github.com/Xauryan/stuhelper-ai/dto"
+	"github.com/Xauryan/stuhelper-ai/logger"
 	relaycommon "github.com/Xauryan/stuhelper-ai/relay/common"
 	relayconstant "github.com/Xauryan/stuhelper-ai/relay/constant"
 	"github.com/Xauryan/stuhelper-ai/relay/helper"
@@ -102,9 +103,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			}
 		}
 
-		if common.DebugEnabled {
-			println("requestBody: ", string(jsonData))
-		}
+		logger.LogDebug(c, "requestBody: %s", jsonData)
 		requestBody = bytes.NewBuffer(jsonData)
 	}
 

@@ -693,9 +693,7 @@ const RechargeCard = ({
                     enableStripeTopUp={enableStripeTopUp}
                     enableCreemTopUp={enableCreemTopUp}
                     enableAlipayOfficialTopUp={enableAlipayOfficialTopUp}
-                    enableWechatPayOfficialTopUp={
-                      enableWechatPayOfficialTopUp
-                    }
+                    enableWechatPayOfficialTopUp={enableWechatPayOfficialTopUp}
                     priceRatio={priceRatio}
                     billingPreference={billingPreference}
                     onChangeBillingPreference={onChangeBillingPreference}
