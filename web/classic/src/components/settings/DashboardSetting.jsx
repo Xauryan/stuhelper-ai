@@ -25,6 +25,7 @@ import SettingsAnnouncements from '../../pages/Setting/Dashboard/SettingsAnnounc
 import SettingsFAQ from '../../pages/Setting/Dashboard/SettingsFAQ';
 import SettingsUptimeKuma from '../../pages/Setting/Dashboard/SettingsUptimeKuma';
 import SettingsDataDashboard from '../../pages/Setting/Dashboard/SettingsDataDashboard';
+import SettingsUpdateLog from '../../pages/Setting/Dashboard/SettingsUpdateLog';
 
 const DashboardSetting = () => {
   let [inputs, setInputs] = useState({
@@ -36,6 +37,7 @@ const DashboardSetting = () => {
     'console_setting.announcements_enabled': '',
     'console_setting.faq_enabled': '',
     'console_setting.uptime_kuma_enabled': '',
+    Notice: '',
 
     // 用于迁移检测的旧键，下个版本会删除
     ApiInfo: '',
@@ -146,7 +148,12 @@ const DashboardSetting = () => {
           <SettingsDataDashboard options={inputs} refresh={onRefresh} />
         </Card>
 
-        {/* 系统公告管理 */}
+        {/* 更新日志管理 */}
+        <Card style={{ marginTop: '10px' }}>
+          <SettingsUpdateLog options={inputs} refresh={onRefresh} />
+        </Card>
+
+        {/* 通知中心管理 */}
         <Card style={{ marginTop: '10px' }}>
           <SettingsAnnouncements options={inputs} refresh={onRefresh} />
         </Card>

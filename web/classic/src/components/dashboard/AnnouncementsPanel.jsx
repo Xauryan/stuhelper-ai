@@ -42,7 +42,7 @@ const AnnouncementsPanel = ({
         <div className='flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 w-full'>
           <div className='flex items-center gap-2'>
             <Bell size={16} />
-            {t('系统公告')}
+            {t('通知中心')}
             <Tag color='white' shape='circle'>
               {t('显示最新20条')}
             </Tag>
@@ -113,8 +113,8 @@ const AnnouncementsPanel = ({
               darkModeImage={
                 <IllustrationConstructionDark style={ILLUSTRATION_SIZE} />
               }
-              title={t('暂无系统公告')}
-              description={t('请联系管理员在系统设置中配置公告信息')}
+              title={t('暂无通知')}
+              description={t('请联系管理员在系统设置中配置通知信息')}
             />
           </div>
         )}

@@ -204,7 +204,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
     });
     const { success, message } = res.data;
     if (success) {
-      showSuccess('系统公告已更新');
+      showSuccess(t('通知已更新'));
       if (refresh) refresh();
     } else {
       showError(message);
@@ -218,8 +218,8 @@ const SettingsAnnouncements = ({ options, refresh }) => {
       await updateOption('console_setting.announcements', announcementsJson);
       setHasChanges(false);
     } catch (error) {
-      console.error('系统公告更新失败', error);
-      showError('系统公告更新失败');
+      console.error(t('通知更新失败'), error);
+      showError(t('通知更新失败'));
     } finally {
       setLoading(false);
     }
@@ -261,7 +261,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
       );
       setAnnouncementsList(newList);
       setHasChanges(true);
-      showSuccess('公告已删除，请及时点击“保存设置”进行保存');
+      showSuccess(t('通知已删除，请及时点击“保存设置”进行保存'));
     }
     setShowDeleteModal(false);
     setDeletingAnnouncement(null);
@@ -269,7 +269,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
 
   const handleSaveAnnouncement = async () => {
     if (!announcementForm.content || !announcementForm.publishDate) {
-      showError('请填写完整的公告信息');
+      showError(t('请填写完整的通知信息'));
       return;
     }
 
@@ -302,11 +302,11 @@ const SettingsAnnouncements = ({ options, refresh }) => {
       setShowAnnouncementModal(false);
       showSuccess(
         editingAnnouncement
-          ? '公告已更新，请及时点击“保存设置”进行保存'
-          : '公告已添加，请及时点击“保存设置”进行保存',
+          ? t('通知已更新，请及时点击“保存设置”进行保存')
+          : t('通知已添加，请及时点击“保存设置”进行保存'),
       );
     } catch (error) {
-      showError('操作失败: ' + error.message);
+      showError(t('操作失败: ') + error.message);
     } finally {
       setModalLoading(false);
     }
@@ -328,7 +328,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
       }));
       setAnnouncementsList(listWithIds);
     } catch (error) {
-      console.error('解析系统公告失败:', error);
+      console.error(t('解析通知失败'), error);
       setAnnouncementsList([]);
     }
   };
@@ -371,7 +371,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
 
   const handleBatchDelete = () => {
     if (selectedRowKeys.length === 0) {
-      showError('请先选择要删除的系统公告');
+      showError(t('请先选择要删除的通知'));
       return;
     }
 
@@ -382,7 +382,9 @@ const SettingsAnnouncements = ({ options, refresh }) => {
     setSelectedRowKeys([]);
     setHasChanges(true);
     showSuccess(
-      `已删除 ${selectedRowKeys.length} 个系统公告，请及时点击“保存设置”进行保存`,
+      t('已删除 {{count}} 个通知，请及时点击“保存设置”进行保存', {
+        count: selectedRowKeys.length,
+      }),
     );
   };
 
@@ -393,7 +395,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
           <Bell size={16} className='mr-2' />
           <Text>
             {t(
-              '系统公告管理，可以发布系统通知和重要消息（最多100个，前端显示最新20条）',
+              '通知中心管理，可以发布多条系统通知和重要消息（最多100个，前端显示最新20条）',
             )}
           </Text>
         </div>
@@ -410,7 +412,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
             className='w-full md:w-auto'
             onClick={handleAddAnnouncement}
           >
-            {t('添加公告')}
+            {t('添加通知')}
           </Button>
           <Button
             icon={<Trash2 size={14} />}
@@ -509,7 +511,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
               darkModeImage={
                 <IllustrationNoResultDark style={{ width: 150, height: 150 }} />
               }
-              description={t('暂无系统公告')}
+              description={t('暂无通知')}
               style={{ padding: 30 }}
             />
           }
@@ -518,7 +520,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
       </Form.Section>
 
       <Modal
-        title={editingAnnouncement ? t('编辑公告') : t('添加公告')}
+        title={editingAnnouncement ? t('编辑通知') : t('添加通知')}
         visible={showAnnouncementModal}
         onOk={handleSaveAnnouncement}
         onCancel={() => setShowAnnouncementModal(false)}
@@ -534,11 +536,11 @@ const SettingsAnnouncements = ({ options, refresh }) => {
         >
           <Form.TextArea
             field='content'
-            label={t('公告内容')}
-            placeholder={t('请输入公告内容（支持 Markdown/HTML）')}
+            label={t('通知内容')}
+            placeholder={t('请输入通知内容（支持 Markdown/HTML）')}
             maxCount={500}
             rows={3}
-            rules={[{ required: true, message: t('请输入公告内容') }]}
+            rules={[{ required: true, message: t('请输入通知内容') }]}
             onChange={(value) =>
               setAnnouncementForm({ ...announcementForm, content: value })
             }
@@ -564,7 +566,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
           />
           <Form.Select
             field='type'
-            label={t('公告类型')}
+            label={t('通知类型')}
             optionList={typeOptions}
             onChange={(value) =>
               setAnnouncementForm({ ...announcementForm, type: value })
@@ -573,7 +575,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
           <Form.Input
             field='extra'
             label={t('说明信息')}
-            placeholder={t('可选，公告的补充说明')}
+            placeholder={t('可选，通知的补充说明')}
             onChange={(value) =>
               setAnnouncementForm({ ...announcementForm, extra: value })
             }
@@ -597,12 +599,12 @@ const SettingsAnnouncements = ({ options, refresh }) => {
           theme: 'solid',
         }}
       >
-        <Text>{t('确定要删除此公告吗？')}</Text>
+        <Text>{t('确定要删除此通知吗？')}</Text>
       </Modal>
 
-      {/* 公告内容放大编辑 Modal */}
+      {/* 通知内容放大编辑 Modal */}
       <Modal
-        title={t('编辑公告内容')}
+        title={t('编辑通知内容')}
         visible={showContentModal}
         onOk={() => {
           // 将内容同步到表单
@@ -618,7 +620,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
       >
         <TextArea
           value={announcementForm.content}
-          placeholder={t('请输入公告内容（支持 Markdown/HTML）')}
+          placeholder={t('请输入通知内容（支持 Markdown/HTML）')}
           maxCount={500}
           rows={15}
           style={{ width: '100%' }}

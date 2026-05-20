@@ -32,7 +32,6 @@ import { StatusContext } from '../../context/Status';
 import { useActualTheme } from '../../context/Theme';
 import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
-import NoticeModal from '../../components/layout/NoticeModal';
 import QuantumHome from './QuantumHome';
 
 const Home = () => {
@@ -44,7 +43,6 @@ const Home = () => {
   const [homePageContentLoaded, setHomePageContentLoaded] = useState(false);
   const [homePageRawContent, setHomePageRawContent] = useState('');
   const [homePageContent, setHomePageContent] = useState('');
-  const [noticeVisible, setNoticeVisible] = useState(false);
   const [endpointIndex, setEndpointIndex] = useState(0);
 
   const iframeRef = useRef(null);
@@ -109,30 +107,6 @@ const Home = () => {
 
   useEffect(() => {
     let mounted = true;
-    const checkNoticeAndShow = async () => {
-      const lastCloseDate = localStorage.getItem('notice_close_date');
-      const today = new Date().toDateString();
-      if (lastCloseDate !== today) {
-        try {
-          const res = await API.get('/api/notice');
-          if (!mounted) return;
-          const { success, data } = res.data;
-          if (success && data && data.trim() !== '') {
-            setNoticeVisible(true);
-          }
-        } catch (error) {
-          if (mounted) console.error('获取公告失败:', error);
-        }
-      }
-    };
-    checkNoticeAndShow();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
     displayHomePageContent(() => mounted).then();
     return () => {
       mounted = false;
@@ -154,11 +128,6 @@ const Home = () => {
 
   return (
     <div className='w-full overflow-x-hidden'>
-      <NoticeModal
-        visible={noticeVisible}
-        onClose={() => setNoticeVisible(false)}
-        isMobile={isMobile}
-      />
       {homePageContentLoaded && homePageRawContent === '' ? (
         <QuantumHome
           t={t}

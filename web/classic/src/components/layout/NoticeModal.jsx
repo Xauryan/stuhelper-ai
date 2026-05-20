@@ -25,6 +25,7 @@ import {
   Tabs,
   TabPane,
   Timeline,
+  Tag,
 } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import { API, showError, getRelativeTime } from '../../helpers';
@@ -34,7 +35,72 @@ import {
   IllustrationNoContentDark,
 } from '@douyinfe/semi-illustrations';
 import { StatusContext } from '../../context/Status';
-import { Bell, Megaphone } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronRight, History } from 'lucide-react';
+import { getSystemNotificationKey } from '../../hooks/common/useNotifications';
+
+const stripHtml = (html) => {
+  const div = document.createElement('div');
+  div.innerHTML = html || '';
+  return div.textContent || div.innerText || '';
+};
+
+const formatAbsoluteTime = (dateValue) => {
+  const date = dateValue ? new Date(dateValue) : null;
+  if (!date || isNaN(date.getTime())) {
+    return dateValue || '';
+  }
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+};
+
+const shouldRenderUpdateLogFrame = (raw) =>
+  /<!doctype|<html[\s>]|<head[\s>]|<body[\s>]|<style[\s>]/i.test(
+    String(raw || ''),
+  );
+
+const buildUpdateLogFrameHtml = (raw) => {
+  const source = String(raw || '');
+  if (!source.trim()) {
+    return '';
+  }
+  return source;
+};
+
+const splitUpdateLogItems = (raw) => {
+  const content = String(raw || '').trim();
+  if (!content) {
+    return [];
+  }
+
+  const lines = content.split(/\r?\n/);
+  const headingIndexes = [];
+
+  lines.forEach((line, index) => {
+    if (/^#{1,3}\s+\S/.test(line.trim())) {
+      headingIndexes.push(index);
+    }
+  });
+
+  if (headingIndexes.length === 0) {
+    return [
+      {
+        id: 'update-log-0',
+        content,
+        title: stripHtml(marked.parse(content)).split('\n')[0] || content,
+      },
+    ];
+  }
+
+  return headingIndexes.map((startIndex, index) => {
+    const endIndex = headingIndexes[index + 1] ?? lines.length;
+    const block = lines.slice(startIndex, endIndex).join('\n').trim();
+    const title = lines[startIndex].replace(/^#{1,3}\s+/, '').trim();
+    return {
+      id: `update-log-${index}`,
+      content: block,
+      title,
+    };
+  });
+};
 
 const NoticeModal = ({
   visible,
@@ -44,7 +110,7 @@ const NoticeModal = ({
   unreadKeys = [],
 }) => {
   const { t } = useTranslation();
-  const [noticeContent, setNoticeContent] = useState('');
+  const [updateLogRaw, setUpdateLogRaw] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(defaultTab);
 
@@ -53,34 +119,38 @@ const NoticeModal = ({
   const announcements = statusState?.status?.announcements || [];
 
   const unreadSet = useMemo(() => new Set(unreadKeys), [unreadKeys]);
-
-  const getKeyForItem = (item) =>
-    `${item?.publishDate || ''}-${(item?.content || '').slice(0, 30)}`;
+  const updateLogUsesFrame = useMemo(
+    () => shouldRenderUpdateLogFrame(updateLogRaw),
+    [updateLogRaw],
+  );
+  const updateLogHtmlSrcDoc = useMemo(
+    () => (updateLogUsesFrame ? buildUpdateLogFrameHtml(updateLogRaw) : ''),
+    [updateLogRaw, updateLogUsesFrame],
+  );
 
   const processedAnnouncements = useMemo(() => {
     return (announcements || []).slice(0, 20).map((item) => {
-      const pubDate = item?.publishDate ? new Date(item.publishDate) : null;
-      const absoluteTime =
-        pubDate && !isNaN(pubDate.getTime())
-          ? `${pubDate.getFullYear()}-${String(pubDate.getMonth() + 1).padStart(2, '0')}-${String(pubDate.getDate()).padStart(2, '0')} ${String(pubDate.getHours()).padStart(2, '0')}:${String(pubDate.getMinutes()).padStart(2, '0')}`
-          : item?.publishDate || '';
+      const htmlContent = marked.parse(item.content || '');
+      const plainContent = stripHtml(htmlContent).replace(/\s+/g, ' ').trim();
+      const key = getSystemNotificationKey(item);
       return {
-        key: getKeyForItem(item),
+        key,
         type: item.type || 'default',
-        time: absoluteTime,
+        time: formatAbsoluteTime(item.publishDate),
         content: item.content,
+        htmlContent,
+        plainContent,
         extra: item.extra,
         relative: getRelativeTime(item.publishDate),
-        isUnread: unreadSet.has(getKeyForItem(item)),
+        isUnread: unreadSet.has(key),
       };
     });
   }, [announcements, unreadSet]);
 
-  const handleCloseTodayNotice = () => {
-    const today = new Date().toDateString();
-    localStorage.setItem('notice_close_date', today);
-    onClose();
-  };
+  const updateLogItems = useMemo(
+    () => (updateLogUsesFrame ? [] : splitUpdateLogItems(updateLogRaw)),
+    [updateLogRaw, updateLogUsesFrame],
+  );
 
   const displayNotice = async () => {
     setLoading(true);
@@ -88,12 +158,7 @@ const NoticeModal = ({
       const res = await API.get('/api/notice');
       const { success, message, data } = res.data;
       if (success) {
-        if (data !== '') {
-          const htmlNotice = marked.parse(data);
-          setNoticeContent(htmlNotice);
-        } else {
-          setNoticeContent('');
-        }
+        setUpdateLogRaw(data || '');
       } else {
         showError(message);
       }
@@ -116,40 +181,7 @@ const NoticeModal = ({
     }
   }, [defaultTab, visible]);
 
-  const renderMarkdownNotice = () => {
-    if (loading) {
-      return (
-        <div className='py-12'>
-          <Empty description={t('加载中...')} />
-        </div>
-      );
-    }
-
-    if (!noticeContent) {
-      return (
-        <div className='py-12'>
-          <Empty
-            image={
-              <IllustrationNoContent style={{ width: 150, height: 150 }} />
-            }
-            darkModeImage={
-              <IllustrationNoContentDark style={{ width: 150, height: 150 }} />
-            }
-            description={t('暂无公告')}
-          />
-        </div>
-      );
-    }
-
-    return (
-      <div
-        dangerouslySetInnerHTML={{ __html: noticeContent }}
-        className='notice-content-scroll max-h-[55vh] overflow-y-auto pr-2'
-      />
-    );
-  };
-
-  const renderAnnouncementTimeline = () => {
+  const renderNotificationList = () => {
     if (processedAnnouncements.length === 0) {
       return (
         <div className='py-12'>
@@ -160,37 +192,101 @@ const NoticeModal = ({
             darkModeImage={
               <IllustrationNoContentDark style={{ width: 150, height: 150 }} />
             }
-            description={t('暂无系统公告')}
+            description={t('暂无通知')}
           />
         </div>
       );
     }
 
     return (
-      <div className='max-h-[55vh] overflow-y-auto pr-2 card-content-scroll'>
-        <Timeline mode='left'>
-          {processedAnnouncements.map((item, idx) => {
-            const htmlContent = marked.parse(item.content || '');
-            const htmlExtra = item.extra ? marked.parse(item.extra) : '';
+      <div className='system-notification-list max-h-[58vh] overflow-y-auto'>
+        {processedAnnouncements.map((item) => (
+          <div
+            key={item.key}
+            className={`system-notification-item ${item.isUnread ? 'is-unread' : ''}`}
+          >
+            <div className='system-notification-status'>
+              <CheckCircle2 size={18} />
+            </div>
+            <div className='system-notification-main'>
+              <div className='system-notification-title'>
+                {item.plainContent || t('通知内容')}
+              </div>
+              <div className='system-notification-meta'>
+                {item.relative || item.time}
+              </div>
+              {item.extra && (
+                <div
+                  className='system-notification-extra'
+                  dangerouslySetInnerHTML={{ __html: marked.parse(item.extra) }}
+                />
+              )}
+            </div>
+            <Tag color={item.isUnread ? 'blue' : 'white'} shape='circle'>
+              {item.isUnread ? t('未读') : t('已读')}
+            </Tag>
+            <ChevronRight className='system-notification-chevron' size={20} />
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderUpdateLogTimeline = () => {
+    if (loading) {
+      return (
+        <div className='py-12'>
+          <Empty description={t('加载中...')} />
+        </div>
+      );
+    }
+
+    if (!String(updateLogRaw || '').trim()) {
+      return (
+        <div className='py-12'>
+          <Empty
+            image={
+              <IllustrationNoContent style={{ width: 150, height: 150 }} />
+            }
+            darkModeImage={
+              <IllustrationNoContentDark style={{ width: 150, height: 150 }} />
+            }
+            description={t('暂无更新日志')}
+          />
+        </div>
+      );
+    }
+
+    if (updateLogUsesFrame) {
+      return (
+        <div className='update-log-html-frame-shell'>
+          <iframe
+            className='update-log-html-frame'
+            title={t('更新日志')}
+            sandbox='allow-scripts'
+            srcDoc={updateLogHtmlSrcDoc}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className='update-log-timeline max-h-[58vh] overflow-y-auto pr-2 card-content-scroll'>
+        <Timeline mode='alternate'>
+          {updateLogItems.map((item, idx) => {
             return (
               <Timeline.Item
-                key={idx}
-                type={item.type}
-                time={`${item.relative ? item.relative + ' ' : ''}${item.time}`}
-                extra={
-                  item.extra ? (
-                    <div
-                      className='text-xs text-gray-500'
-                      dangerouslySetInnerHTML={{ __html: htmlExtra }}
-                    />
-                  ) : null
-                }
-                className={item.isUnread ? '' : ''}
+                key={item.id}
+                type={idx === 0 ? 'success' : 'default'}
+                time={idx === 0 ? t('最新') : ''}
               >
-                <div>
+                <div className='update-log-item'>
+                  <div className='update-log-title'>{item.title}</div>
                   <div
-                    className={item.isUnread ? 'shine-text' : ''}
-                    dangerouslySetInnerHTML={{ __html: htmlContent }}
+                    className='update-log-content'
+                    dangerouslySetInnerHTML={{
+                      __html: marked.parse(item.content || ''),
+                    }}
                   />
                 </div>
               </Timeline.Item>
@@ -203,16 +299,16 @@ const NoticeModal = ({
 
   const renderBody = () => {
     if (activeTab === 'inApp') {
-      return renderMarkdownNotice();
+      return renderNotificationList();
     }
-    return renderAnnouncementTimeline();
+    return renderUpdateLogTimeline();
   };
 
   return (
     <Modal
       title={
         <div className='flex items-center justify-between w-full'>
-          <span>{t('系统公告')}</span>
+          <span>{activeTab === 'inApp' ? t('公告') : t('更新日志')}</span>
           <Tabs activeKey={activeTab} onChange={setActiveTab} type='button'>
             <TabPane
               tab={
@@ -225,7 +321,7 @@ const NoticeModal = ({
             <TabPane
               tab={
                 <span className='flex items-center gap-1'>
-                  <Megaphone size={14} /> {t('系统公告')}
+                  <History size={14} /> {t('更新日志')}
                 </span>
               }
               itemKey='system'
@@ -237,11 +333,8 @@ const NoticeModal = ({
       onCancel={onClose}
       footer={
         <div className='flex justify-end'>
-          <Button type='secondary' onClick={handleCloseTodayNotice}>
-            {t('今日关闭')}
-          </Button>
           <Button type='primary' onClick={onClose}>
-            {t('关闭公告')}
+            {t('关闭')}
           </Button>
         </div>
       }
