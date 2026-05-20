@@ -148,12 +148,12 @@ const DashboardSetting = () => {
           <SettingsDataDashboard options={inputs} refresh={onRefresh} />
         </Card>
 
-        {/* 更新日志管理 */}
+        {/* 通知管理 */}
         <Card style={{ marginTop: '10px' }}>
           <SettingsUpdateLog options={inputs} refresh={onRefresh} />
         </Card>
 
-        {/* 通知中心管理 */}
+        {/* 更新公告管理 */}
         <Card style={{ marginTop: '10px' }}>
           <SettingsAnnouncements options={inputs} refresh={onRefresh} />
         </Card>

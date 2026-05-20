@@ -25,8 +25,8 @@ body.sidebar-collapsed {
 }
 
 body {
-  font-family:
-    Lato, 'Helvetica Neue', Arial, Helvetica, 'Microsoft YaHei', sans-serif;
+  font-family: Lato, 'Helvetica Neue', Arial, Helvetica, 'Microsoft YaHei',
+    sans-serif;
   color: var(--semi-color-text-0);
   background-color: var(--semi-color-bg-0);
 }
@@ -49,8 +49,8 @@ body {
 }
 
 code {
-  font-family:
-    source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
 }
 
 /* ==================== 布局相关样式 ==================== */
@@ -836,41 +836,62 @@ html.dark .sbg-variant-green {
 }
 
 .system-notification-list {
-  margin: -24px;
-  background: var(--semi-color-bg-0);
-  border-radius: 0 0 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
 }
 
 .system-notification-item {
+  position: relative;
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) auto 24px;
-  gap: 16px;
-  align-items: center;
-  min-height: 84px;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--semi-color-border);
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px 12px 12px;
+  border: 1px solid var(--semi-color-border);
+  border-radius: 8px;
   background: var(--semi-color-bg-0);
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
-.system-notification-item:last-child {
-  border-bottom: none;
+.system-notification-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--semi-color-fill-2);
+}
+
+.system-notification-item:hover {
+  border-color: var(--semi-color-primary-light-default);
+  background: var(--semi-color-fill-0);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
 }
 
 .system-notification-item.is-unread {
-  background: linear-gradient(
-    90deg,
-    rgba(var(--semi-blue-5), 0.11),
-    var(--semi-color-bg-0) 68%
-  );
+  border-color: var(--semi-color-primary-light-default);
+  background: rgba(var(--semi-blue-0), 0.42);
+}
+
+.system-notification-item.is-unread::before {
+  background: var(--semi-color-primary);
 }
 
 .system-notification-status {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   color: var(--semi-color-text-2);
   background: var(--semi-color-fill-1);
 }
@@ -884,27 +905,51 @@ html.dark .sbg-variant-green {
   min-width: 0;
 }
 
+.system-notification-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .system-notification-title {
   color: var(--semi-color-text-0);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1.45;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .system-notification-meta {
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--semi-color-text-2);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
-.system-notification-extra {
+.system-notification-content {
   margin-top: 6px;
-  color: var(--semi-color-text-2);
+  color: var(--semi-color-text-1);
   font-size: 13px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.system-notification-content p,
+.system-notification-content ul,
+.system-notification-content ol {
+  margin: 0;
+}
+
+.system-notification-extra {
+  margin-top: 4px;
+  color: var(--semi-color-text-2);
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -912,8 +957,22 @@ html.dark .sbg-variant-green {
   margin: 0;
 }
 
-.system-notification-chevron {
-  color: var(--semi-color-text-2);
+.notification-detail-content {
+  max-height: 68vh;
+  overflow-y: auto;
+  color: var(--semi-color-text-0);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.notification-detail-content p,
+.notification-detail-content ul,
+.notification-detail-content ol {
+  margin: 0 0 10px;
+}
+
+.notification-detail-frame-shell {
+  margin: -24px;
 }
 
 .update-log-timeline {
@@ -966,29 +1025,42 @@ html.dark .sbg-variant-green {
   margin: 0 0 6px;
 }
 
+.update-announcement-detail-button {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  color: var(--semi-color-primary);
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.update-announcement-detail-button:hover {
+  color: var(--semi-color-primary-hover);
+  text-decoration: underline;
+}
+
 @media (max-width: 640px) {
   .system-notification-list {
-    margin: -16px;
+    padding-right: 0;
   }
 
   .system-notification-item {
-    grid-template-columns: 44px minmax(0, 1fr) 20px;
-    gap: 12px;
-    padding: 12px 16px;
-  }
-
-  .system-notification-item .semi-tag {
-    display: none;
+    grid-template-columns: 30px minmax(0, 1fr);
+    padding: 11px 12px;
   }
 
   .system-notification-status {
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
   }
 
   .system-notification-title {
-    font-size: 15px;
+    font-size: 14px;
   }
 
   .update-log-item {
@@ -1091,8 +1163,11 @@ html:not(.dark) .blur-ball-teal {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background:
-    radial-gradient(circle at -5% -10%, var(--pb1) 0%, transparent 60%),
+  background: radial-gradient(
+      circle at -5% -10%,
+      var(--pb1) 0%,
+      transparent 60%
+    ),
     radial-gradient(circle at 105% -10%, var(--pb2) 0%, transparent 55%),
     radial-gradient(circle at 5% 110%, var(--pb3) 0%, transparent 55%),
     radial-gradient(circle at 105% 110%, var(--pb4) 0%, transparent 50%);

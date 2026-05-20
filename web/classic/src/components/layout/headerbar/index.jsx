@@ -58,6 +58,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
   const {
     noticeVisible,
     unreadCount,
+    notifications,
     handleNoticeOpen,
     handleNoticeClose,
     getUnreadKeys,
@@ -73,6 +74,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
         isMobile={isMobile}
         defaultTab='inApp'
         unreadKeys={getUnreadKeys()}
+        notifications={notifications}
       />
 
       <div className='w-full px-2'>

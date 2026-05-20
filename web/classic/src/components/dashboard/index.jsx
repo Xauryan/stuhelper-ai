@@ -218,11 +218,11 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* 通知中心和常见问答卡片 */}
+      {/* 更新公告和常见问答卡片 */}
       {dashboardData.hasInfoPanels && (
         <div className='mb-4'>
           <div className='grid grid-cols-1 lg:grid-cols-4 gap-4'>
-            {/* 通知卡片 */}
+            {/* 更新公告卡片 */}
             {dashboardData.announcementsEnabled && (
               <AnnouncementsPanel
                 announcementData={announcementData}

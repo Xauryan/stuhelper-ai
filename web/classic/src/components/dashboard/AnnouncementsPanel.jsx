@@ -17,15 +17,47 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@xauryan.com
 */
 
-import React from 'react';
-import { Card, Tag, Timeline, Empty } from '@douyinfe/semi-ui';
-import { Bell } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Button, Card, Tag, Timeline, Empty, Modal } from '@douyinfe/semi-ui';
+import { FileClock } from 'lucide-react';
 import { marked } from 'marked';
 import {
   IllustrationConstruction,
   IllustrationConstructionDark,
 } from '@douyinfe/semi-illustrations';
 import ScrollableContainer from '../common/ui/ScrollableContainer';
+
+const shouldRenderFrame = (raw) =>
+  /<!doctype|<html[\s>]|<head[\s>]|<body[\s>]|<style[\s>]|<script[\s>]/i.test(
+    String(raw || ''),
+  );
+
+const stripHtmlText = (raw) =>
+  String(raw || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<head[\s\S]*?<\/head>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&bull;/g, '·')
+    .replace(/&middot;/g, '·')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getAnnouncementContent = (item) =>
+  String(item?.content || '').trim() ||
+  String(item?.extra || '').trim() ||
+  String(item?.title || '').trim();
+
+const getAnnouncementTitle = (item) =>
+  item?.title ||
+  stripHtmlText(marked.parse(getAnnouncementContent(item))).slice(0, 80) ||
+  item?.time ||
+  '';
 
 const AnnouncementsPanel = ({
   announcementData,
@@ -34,92 +66,151 @@ const AnnouncementsPanel = ({
   ILLUSTRATION_SIZE,
   t,
 }) => {
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
+
+  const processedAnnouncementData = useMemo(
+    () =>
+      (announcementData || []).map((item, index) => {
+        const content = getAnnouncementContent(item);
+        const usesFrame = shouldRenderFrame(content);
+        return {
+          ...item,
+          id: item?.id || `dashboard-announcement-${index}`,
+          content,
+          title: getAnnouncementTitle(item),
+          usesFrame,
+          htmlExtra:
+            item.extra && !shouldRenderFrame(item.extra)
+              ? marked.parse(item.extra)
+              : '',
+        };
+      }),
+    [announcementData],
+  );
+
   return (
-    <Card
-      {...CARD_PROPS}
-      className='shadow-sm !rounded-2xl lg:col-span-2'
-      title={
-        <div className='flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 w-full'>
-          <div className='flex items-center gap-2'>
-            <Bell size={16} />
-            {t('通知中心')}
-            <Tag color='white' shape='circle'>
-              {t('显示最新20条')}
-            </Tag>
+    <>
+      <Card
+        {...CARD_PROPS}
+        className='shadow-sm !rounded-2xl lg:col-span-2'
+        title={
+          <div className='flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 w-full'>
+            <div className='flex items-center gap-2'>
+              <FileClock size={16} />
+              {t('更新公告')}
+              <Tag color='white' shape='circle'>
+                {t('显示最新20条')}
+              </Tag>
+            </div>
+            {/* 图例 */}
+            <div className='flex flex-wrap gap-3 text-xs'>
+              {announcementLegendData.map((legend, index) => (
+                <div key={index} className='flex items-center gap-1'>
+                  <div
+                    className='w-2 h-2 rounded-full'
+                    style={{
+                      backgroundColor:
+                        legend.color === 'grey'
+                          ? '#8b9aa7'
+                          : legend.color === 'blue'
+                            ? '#3b82f6'
+                            : legend.color === 'green'
+                              ? '#10b981'
+                              : legend.color === 'orange'
+                                ? '#f59e0b'
+                                : legend.color === 'red'
+                                  ? '#ef4444'
+                                  : '#8b9aa7',
+                    }}
+                  />
+                  <span className='text-gray-600'>{legend.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          {/* 图例 */}
-          <div className='flex flex-wrap gap-3 text-xs'>
-            {announcementLegendData.map((legend, index) => (
-              <div key={index} className='flex items-center gap-1'>
-                <div
-                  className='w-2 h-2 rounded-full'
-                  style={{
-                    backgroundColor:
-                      legend.color === 'grey'
-                        ? '#8b9aa7'
-                        : legend.color === 'blue'
-                          ? '#3b82f6'
-                          : legend.color === 'green'
-                            ? '#10b981'
-                            : legend.color === 'orange'
-                              ? '#f59e0b'
-                              : legend.color === 'red'
-                                ? '#ef4444'
-                                : '#8b9aa7',
-                  }}
-                />
-                <span className='text-gray-600'>{legend.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      }
-      bodyStyle={{ padding: 0 }}
-    >
-      <ScrollableContainer maxHeight='24rem'>
-        {announcementData.length > 0 ? (
-          <Timeline mode='left'>
-            {announcementData.map((item, idx) => {
-              const htmlExtra = item.extra ? marked.parse(item.extra) : '';
-              return (
+        }
+        bodyStyle={{ padding: 0 }}
+      >
+        <ScrollableContainer maxHeight='24rem'>
+          {processedAnnouncementData.length > 0 ? (
+            <Timeline mode='left'>
+              {processedAnnouncementData.map((item) => (
                 <Timeline.Item
-                  key={idx}
+                  key={item.id}
                   type={item.type || 'default'}
                   time={`${item.relative ? item.relative + ' ' : ''}${item.time}`}
                   extra={
-                    item.extra ? (
+                    item.htmlExtra ? (
                       <div
                         className='text-xs text-gray-500'
-                        dangerouslySetInnerHTML={{ __html: htmlExtra }}
+                        dangerouslySetInnerHTML={{ __html: item.htmlExtra }}
                       />
                     ) : null
                   }
                 >
-                  <div>
-                    <div
-                      dangerouslySetInnerHTML={{
-                        __html: marked.parse(item.content || ''),
-                      }}
-                    />
+                  <div className='update-log-item'>
+                    {item.usesFrame ? (
+                      <>
+                        <div className='update-log-title'>{item.title}</div>
+                        <Button
+                          theme='borderless'
+                          type='primary'
+                          size='small'
+                          className='update-announcement-detail-button'
+                          onClick={() => setSelectedAnnouncement(item)}
+                        >
+                          {t('完整 HTML 内容，点击查看详情')}
+                        </Button>
+                      </>
+                    ) : (
+                      <div
+                        className='update-log-content'
+                        dangerouslySetInnerHTML={{
+                          __html: marked.parse(item.content || ''),
+                        }}
+                      />
+                    )}
                   </div>
                 </Timeline.Item>
-              );
-            })}
-          </Timeline>
-        ) : (
-          <div className='flex justify-center items-center py-8'>
-            <Empty
-              image={<IllustrationConstruction style={ILLUSTRATION_SIZE} />}
-              darkModeImage={
-                <IllustrationConstructionDark style={ILLUSTRATION_SIZE} />
-              }
-              title={t('暂无通知')}
-              description={t('请联系管理员在系统设置中配置通知信息')}
+              ))}
+            </Timeline>
+          ) : (
+            <div className='flex justify-center items-center py-8'>
+              <Empty
+                image={<IllustrationConstruction style={ILLUSTRATION_SIZE} />}
+                darkModeImage={
+                  <IllustrationConstructionDark style={ILLUSTRATION_SIZE} />
+                }
+                title={t('暂无更新公告')}
+                description={t('请联系管理员在系统设置中配置更新公告')}
+              />
+            </div>
+          )}
+        </ScrollableContainer>
+      </Card>
+      <Modal
+        title={selectedAnnouncement?.title || t('更新公告')}
+        visible={Boolean(selectedAnnouncement)}
+        onCancel={() => setSelectedAnnouncement(null)}
+        footer={
+          <Button type='primary' onClick={() => setSelectedAnnouncement(null)}>
+            {t('关闭')}
+          </Button>
+        }
+        size='large'
+      >
+        {selectedAnnouncement && (
+          <div className='update-log-html-frame-shell notification-detail-frame-shell'>
+            <iframe
+              className='update-log-html-frame'
+              title={selectedAnnouncement.title || t('更新公告')}
+              sandbox='allow-scripts'
+              srcDoc={selectedAnnouncement.content}
             />
           </div>
         )}
-      </ScrollableContainer>
-    </Card>
+      </Modal>
+    </>
   );
 };
 

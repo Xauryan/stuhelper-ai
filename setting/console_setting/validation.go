@@ -1,13 +1,14 @@
 package console_setting
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Xauryan/stuhelper-ai/common"
 )
 
 var (
@@ -24,7 +25,7 @@ var (
 
 func parseJSONArray(jsonStr string, typeName string) ([]map[string]interface{}, error) {
 	var list []map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &list); err != nil {
+	if err := common.UnmarshalJsonStr(jsonStr, &list); err != nil {
 		return nil, fmt.Errorf("%s格式错误：%s", typeName, err.Error())
 	}
 	return list, nil
@@ -55,7 +56,7 @@ func getJSONList(jsonStr string) []map[string]interface{} {
 		return []map[string]interface{}{}
 	}
 	var list []map[string]interface{}
-	json.Unmarshal([]byte(jsonStr), &list)
+	_ = common.UnmarshalJsonStr(jsonStr, &list)
 	return list
 }
 
@@ -139,12 +140,12 @@ func GetApiInfo() []map[string]interface{} {
 }
 
 func validateAnnouncements(announcementsStr string) error {
-	list, err := parseJSONArray(announcementsStr, "系统公告")
+	list, err := parseJSONArray(announcementsStr, "更新公告")
 	if err != nil {
 		return err
 	}
 	if len(list) > 100 {
-		return fmt.Errorf("系统公告数量不能超过100个")
+		return fmt.Errorf("更新公告数量不能超过100个")
 	}
 	validTypes := map[string]bool{
 		"default": true, "ongoing": true, "success": true, "warning": true, "error": true,
@@ -152,32 +153,32 @@ func validateAnnouncements(announcementsStr string) error {
 	for i, ann := range list {
 		content, ok := ann["content"].(string)
 		if !ok || content == "" {
-			return fmt.Errorf("第%d个公告缺少内容字段", i+1)
+			return fmt.Errorf("第%d个更新公告缺少内容字段", i+1)
 		}
 		publishDateAny, exists := ann["publishDate"]
 		if !exists {
-			return fmt.Errorf("第%d个公告缺少发布日期字段", i+1)
+			return fmt.Errorf("第%d个更新公告缺少发布日期字段", i+1)
 		}
 		publishDateStr, ok := publishDateAny.(string)
 		if !ok || publishDateStr == "" {
-			return fmt.Errorf("第%d个公告的发布日期不能为空", i+1)
+			return fmt.Errorf("第%d个更新公告的发布日期不能为空", i+1)
 		}
 		if _, err := time.Parse(time.RFC3339, publishDateStr); err != nil {
-			return fmt.Errorf("第%d个公告的发布日期格式错误", i+1)
+			return fmt.Errorf("第%d个更新公告的发布日期格式错误", i+1)
 		}
 		if t, exists := ann["type"]; exists {
 			if typeStr, ok := t.(string); ok {
 				if !validTypes[typeStr] {
-					return fmt.Errorf("第%d个公告的类型值不合法", i+1)
+					return fmt.Errorf("第%d个更新公告的类型值不合法", i+1)
 				}
 			}
 		}
-		if len(content) > 500 {
-			return fmt.Errorf("第%d个公告的内容长度不能超过500字符", i+1)
+		if len(content) > 20000 {
+			return fmt.Errorf("第%d个更新公告的内容长度不能超过20000字符", i+1)
 		}
 		if extra, exists := ann["extra"]; exists {
 			if extraStr, ok := extra.(string); ok && len(extraStr) > 200 {
-				return fmt.Errorf("第%d个公告的说明长度不能超过200字符", i+1)
+				return fmt.Errorf("第%d个更新公告的说明长度不能超过200字符", i+1)
 			}
 		}
 	}

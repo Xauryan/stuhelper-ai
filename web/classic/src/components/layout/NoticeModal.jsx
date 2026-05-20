@@ -28,15 +28,15 @@ import {
   Tag,
 } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
-import { API, showError, getRelativeTime } from '../../helpers';
+import { getRelativeTime } from '../../helpers';
 import { marked } from 'marked';
 import {
   IllustrationNoContent,
   IllustrationNoContentDark,
 } from '@douyinfe/semi-illustrations';
 import { StatusContext } from '../../context/Status';
-import { Bell, CheckCircle2, ChevronRight, History } from 'lucide-react';
-import { getSystemNotificationKey } from '../../hooks/common/useNotifications';
+import { Bell, CheckCircle2, FileClock } from 'lucide-react';
+import { getNoticeNotificationKey } from '../../hooks/common/useNotifications';
 
 const stripHtml = (html) => {
   const div = document.createElement('div');
@@ -52,12 +52,12 @@ const formatAbsoluteTime = (dateValue) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 };
 
-const shouldRenderUpdateLogFrame = (raw) =>
-  /<!doctype|<html[\s>]|<head[\s>]|<body[\s>]|<style[\s>]/i.test(
+const shouldRenderFrame = (raw) =>
+  /<!doctype|<html[\s>]|<head[\s>]|<body[\s>]|<style[\s>]|<script[\s>]/i.test(
     String(raw || ''),
   );
 
-const buildUpdateLogFrameHtml = (raw) => {
+const buildFrameHtml = (raw) => {
   const source = String(raw || '');
   if (!source.trim()) {
     return '';
@@ -65,42 +65,28 @@ const buildUpdateLogFrameHtml = (raw) => {
   return source;
 };
 
-const splitUpdateLogItems = (raw) => {
-  const content = String(raw || '').trim();
-  if (!content) {
-    return [];
-  }
+const getTimelineContent = (item) =>
+  String(item?.content || '').trim() ||
+  String(item?.extra || '').trim() ||
+  String(item?.title || '').trim();
 
-  const lines = content.split(/\r?\n/);
-  const headingIndexes = [];
-
-  lines.forEach((line, index) => {
-    if (/^#{1,3}\s+\S/.test(line.trim())) {
-      headingIndexes.push(index);
-    }
-  });
-
-  if (headingIndexes.length === 0) {
-    return [
-      {
-        id: 'update-log-0',
-        content,
-        title: stripHtml(marked.parse(content)).split('\n')[0] || content,
-      },
-    ];
-  }
-
-  return headingIndexes.map((startIndex, index) => {
-    const endIndex = headingIndexes[index + 1] ?? lines.length;
-    const block = lines.slice(startIndex, endIndex).join('\n').trim();
-    const title = lines[startIndex].replace(/^#{1,3}\s+/, '').trim();
-    return {
-      id: `update-log-${index}`,
-      content: block,
-      title,
-    };
-  });
-};
+const splitUpdateAnnouncementItems = (items) =>
+  (items || []).map((item, index) => ({
+    id: item?.id || `update-announcement-${index}`,
+    title:
+      item?.title ||
+      stripHtml(marked.parse(getTimelineContent(item))).split('\n')[0] ||
+      item?.publishDate ||
+      '',
+    content: getTimelineContent(item),
+    usesFrame: shouldRenderFrame(getTimelineContent(item)),
+    frameHtml: buildFrameHtml(getTimelineContent(item)),
+    type: item?.type || (index === 0 ? 'success' : 'default'),
+    time:
+      getRelativeTime(item?.publishDate) ||
+      formatAbsoluteTime(item?.publishDate) ||
+      '',
+  }));
 
 const NoticeModal = ({
   visible,
@@ -108,72 +94,100 @@ const NoticeModal = ({
   isMobile,
   defaultTab = 'inApp',
   unreadKeys = [],
+  notifications = [],
 }) => {
   const { t } = useTranslation();
-  const [updateLogRaw, setUpdateLogRaw] = useState('');
-  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(defaultTab);
+  const [selectedNotification, setSelectedNotification] = useState(null);
+  const [selectedUpdateAnnouncement, setSelectedUpdateAnnouncement] =
+    useState(null);
 
   const [statusState] = useContext(StatusContext);
 
-  const announcements = statusState?.status?.announcements || [];
+  const updateAnnouncements = statusState?.status?.announcements || [];
 
   const unreadSet = useMemo(() => new Set(unreadKeys), [unreadKeys]);
-  const updateLogUsesFrame = useMemo(
-    () => shouldRenderUpdateLogFrame(updateLogRaw),
-    [updateLogRaw],
-  );
-  const updateLogHtmlSrcDoc = useMemo(
-    () => (updateLogUsesFrame ? buildUpdateLogFrameHtml(updateLogRaw) : ''),
-    [updateLogRaw, updateLogUsesFrame],
-  );
 
-  const processedAnnouncements = useMemo(() => {
-    return (announcements || []).slice(0, 20).map((item) => {
+  const processedNotifications = useMemo(() => {
+    return (notifications || []).slice(0, 20).map((item) => {
       const htmlContent = marked.parse(item.content || '');
       const plainContent = stripHtml(htmlContent).replace(/\s+/g, ' ').trim();
-      const key = getSystemNotificationKey(item);
+      const key = getNoticeNotificationKey(item);
       return {
         key,
+        title: item.title || '',
         type: item.type || 'default',
         time: formatAbsoluteTime(item.publishDate),
         content: item.content,
         htmlContent,
+        usesFrame: shouldRenderFrame(item.content || ''),
+        frameHtml: buildFrameHtml(item.content || ''),
         plainContent,
         extra: item.extra,
         relative: getRelativeTime(item.publishDate),
         isUnread: unreadSet.has(key),
       };
     });
-  }, [announcements, unreadSet]);
+  }, [notifications, unreadSet]);
 
-  const updateLogItems = useMemo(
-    () => (updateLogUsesFrame ? [] : splitUpdateLogItems(updateLogRaw)),
-    [updateLogRaw, updateLogUsesFrame],
-  );
-
-  const displayNotice = async () => {
-    setLoading(true);
-    try {
-      const res = await API.get('/api/notice');
-      const { success, message, data } = res.data;
-      if (success) {
-        setUpdateLogRaw(data || '');
-      } else {
-        showError(message);
-      }
-    } catch (error) {
-      showError(error.message);
-    } finally {
-      setLoading(false);
+  const renderNotificationDetail = () => {
+    if (!selectedNotification) {
+      return null;
     }
+
+    if (selectedNotification.usesFrame) {
+      return (
+        <div className='update-log-html-frame-shell notification-detail-frame-shell'>
+          <iframe
+            className='update-log-html-frame'
+            title={selectedNotification.title || t('通知内容')}
+            sandbox='allow-scripts'
+            srcDoc={selectedNotification.frameHtml}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className='notification-detail-content card-content-scroll'
+        dangerouslySetInnerHTML={{ __html: selectedNotification.htmlContent }}
+      />
+    );
   };
 
-  useEffect(() => {
-    if (visible) {
-      displayNotice();
+  const updateAnnouncementItems = useMemo(
+    () => splitUpdateAnnouncementItems(updateAnnouncements),
+    [updateAnnouncements],
+  );
+
+  const renderUpdateAnnouncementDetail = () => {
+    if (!selectedUpdateAnnouncement) {
+      return null;
     }
-  }, [visible]);
+
+    if (selectedUpdateAnnouncement.usesFrame) {
+      return (
+        <div className='update-log-html-frame-shell notification-detail-frame-shell'>
+          <iframe
+            className='update-log-html-frame'
+            title={selectedUpdateAnnouncement.title || t('更新公告')}
+            sandbox='allow-scripts'
+            srcDoc={selectedUpdateAnnouncement.frameHtml}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className='notification-detail-content card-content-scroll'
+        dangerouslySetInnerHTML={{
+          __html: marked.parse(selectedUpdateAnnouncement.content || ''),
+        }}
+      />
+    );
+  };
 
   useEffect(() => {
     if (visible) {
@@ -182,7 +196,7 @@ const NoticeModal = ({
   }, [defaultTab, visible]);
 
   const renderNotificationList = () => {
-    if (processedAnnouncements.length === 0) {
+    if (processedNotifications.length === 0) {
       return (
         <div className='py-12'>
           <Empty
@@ -199,22 +213,46 @@ const NoticeModal = ({
     }
 
     return (
-      <div className='system-notification-list max-h-[58vh] overflow-y-auto'>
-        {processedAnnouncements.map((item) => (
+      <div className='system-notification-list max-h-[58vh] overflow-y-auto card-content-scroll'>
+        {processedNotifications.map((item) => (
           <div
             key={item.key}
             className={`system-notification-item ${item.isUnread ? 'is-unread' : ''}`}
+            role='button'
+            tabIndex={0}
+            onClick={() => setSelectedNotification(item)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setSelectedNotification(item);
+              }
+            }}
           >
             <div className='system-notification-status'>
               <CheckCircle2 size={18} />
             </div>
             <div className='system-notification-main'>
-              <div className='system-notification-title'>
-                {item.plainContent || t('通知内容')}
+              <div className='system-notification-heading'>
+                <div className='system-notification-title'>
+                  {item.title || item.plainContent || t('通知内容')}
+                </div>
+                <Tag color={item.isUnread ? 'blue' : 'white'} shape='circle'>
+                  {item.isUnread ? t('未读') : t('已读')}
+                </Tag>
               </div>
               <div className='system-notification-meta'>
                 {item.relative || item.time}
               </div>
+              {item.usesFrame ? (
+                <div className='system-notification-content'>
+                  {item.plainContent || t('完整 HTML 内容，点击查看详情')}
+                </div>
+              ) : (
+                <div
+                  className='system-notification-content'
+                  dangerouslySetInnerHTML={{ __html: item.htmlContent }}
+                />
+              )}
               {item.extra && (
                 <div
                   className='system-notification-extra'
@@ -222,26 +260,14 @@ const NoticeModal = ({
                 />
               )}
             </div>
-            <Tag color={item.isUnread ? 'blue' : 'white'} shape='circle'>
-              {item.isUnread ? t('未读') : t('已读')}
-            </Tag>
-            <ChevronRight className='system-notification-chevron' size={20} />
           </div>
         ))}
       </div>
     );
   };
 
-  const renderUpdateLogTimeline = () => {
-    if (loading) {
-      return (
-        <div className='py-12'>
-          <Empty description={t('加载中...')} />
-        </div>
-      );
-    }
-
-    if (!String(updateLogRaw || '').trim()) {
+  const renderUpdateAnnouncementTimeline = () => {
+    if (!updateAnnouncements.length) {
       return (
         <div className='py-12'>
           <Empty
@@ -251,20 +277,7 @@ const NoticeModal = ({
             darkModeImage={
               <IllustrationNoContentDark style={{ width: 150, height: 150 }} />
             }
-            description={t('暂无更新日志')}
-          />
-        </div>
-      );
-    }
-
-    if (updateLogUsesFrame) {
-      return (
-        <div className='update-log-html-frame-shell'>
-          <iframe
-            className='update-log-html-frame'
-            title={t('更新日志')}
-            sandbox='allow-scripts'
-            srcDoc={updateLogHtmlSrcDoc}
+            description={t('暂无更新公告')}
           />
         </div>
       );
@@ -273,21 +286,31 @@ const NoticeModal = ({
     return (
       <div className='update-log-timeline max-h-[58vh] overflow-y-auto pr-2 card-content-scroll'>
         <Timeline mode='alternate'>
-          {updateLogItems.map((item, idx) => {
+          {updateAnnouncementItems.map((item, idx) => {
             return (
               <Timeline.Item
                 key={item.id}
-                type={idx === 0 ? 'success' : 'default'}
-                time={idx === 0 ? t('最新') : ''}
+                type={item.type}
+                time={idx === 0 ? t('最新') : item.time}
               >
                 <div className='update-log-item'>
                   <div className='update-log-title'>{item.title}</div>
-                  <div
-                    className='update-log-content'
-                    dangerouslySetInnerHTML={{
-                      __html: marked.parse(item.content || ''),
-                    }}
-                  />
+                  {item.usesFrame ? (
+                    <button
+                      className='update-announcement-detail-button'
+                      type='button'
+                      onClick={() => setSelectedUpdateAnnouncement(item)}
+                    >
+                      {t('完整 HTML 内容，点击查看详情')}
+                    </button>
+                  ) : (
+                    <div
+                      className='update-log-content'
+                      dangerouslySetInnerHTML={{
+                        __html: marked.parse(item.content || ''),
+                      }}
+                    />
+                  )}
                 </div>
               </Timeline.Item>
             );
@@ -301,47 +324,78 @@ const NoticeModal = ({
     if (activeTab === 'inApp') {
       return renderNotificationList();
     }
-    return renderUpdateLogTimeline();
+    return renderUpdateAnnouncementTimeline();
   };
 
   return (
-    <Modal
-      title={
-        <div className='flex items-center justify-between w-full'>
-          <span>{activeTab === 'inApp' ? t('公告') : t('更新日志')}</span>
-          <Tabs activeKey={activeTab} onChange={setActiveTab} type='button'>
-            <TabPane
-              tab={
-                <span className='flex items-center gap-1'>
-                  <Bell size={14} /> {t('通知')}
-                </span>
-              }
-              itemKey='inApp'
-            />
-            <TabPane
-              tab={
-                <span className='flex items-center gap-1'>
-                  <History size={14} /> {t('更新日志')}
-                </span>
-              }
-              itemKey='system'
-            />
-          </Tabs>
-        </div>
-      }
-      visible={visible}
-      onCancel={onClose}
-      footer={
-        <div className='flex justify-end'>
-          <Button type='primary' onClick={onClose}>
+    <>
+      <Modal
+        title={
+          <div className='flex items-center justify-between w-full'>
+            <span>{activeTab === 'inApp' ? t('通知') : t('更新公告')}</span>
+            <Tabs activeKey={activeTab} onChange={setActiveTab} type='button'>
+              <TabPane
+                tab={
+                  <span className='flex items-center gap-1'>
+                    <Bell size={14} /> {t('通知')}
+                  </span>
+                }
+                itemKey='inApp'
+              />
+              <TabPane
+                tab={
+                  <span className='flex items-center gap-1'>
+                    <FileClock size={14} /> {t('更新公告')}
+                  </span>
+                }
+                itemKey='system'
+              />
+            </Tabs>
+          </div>
+        }
+        visible={visible}
+        onCancel={onClose}
+        footer={
+          <div className='flex justify-end'>
+            <Button type='primary' onClick={onClose}>
+              {t('关闭')}
+            </Button>
+          </div>
+        }
+        size={isMobile ? 'full-width' : 'large'}
+      >
+        {renderBody()}
+      </Modal>
+      <Modal
+        title={selectedNotification?.title || t('通知内容')}
+        visible={Boolean(selectedNotification)}
+        onCancel={() => setSelectedNotification(null)}
+        footer={
+          <Button type='primary' onClick={() => setSelectedNotification(null)}>
             {t('关闭')}
           </Button>
-        </div>
-      }
-      size={isMobile ? 'full-width' : 'large'}
-    >
-      {renderBody()}
-    </Modal>
+        }
+        size={isMobile ? 'full-width' : 'large'}
+      >
+        {renderNotificationDetail()}
+      </Modal>
+      <Modal
+        title={selectedUpdateAnnouncement?.title || t('更新公告')}
+        visible={Boolean(selectedUpdateAnnouncement)}
+        onCancel={() => setSelectedUpdateAnnouncement(null)}
+        footer={
+          <Button
+            type='primary'
+            onClick={() => setSelectedUpdateAnnouncement(null)}
+          >
+            {t('关闭')}
+          </Button>
+        }
+        size={isMobile ? 'full-width' : 'large'}
+      >
+        {renderUpdateAnnouncementDetail()}
+      </Modal>
+    </>
   );
 };
 
