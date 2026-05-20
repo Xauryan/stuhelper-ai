@@ -32,32 +32,10 @@ const shouldRenderFrame = (raw) =>
     String(raw || ''),
   );
 
-const stripHtmlText = (raw) =>
-  String(raw || '')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<head[\s\S]*?<\/head>/gi, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&bull;/g, '·')
-    .replace(/&middot;/g, '·')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim();
-
 const getAnnouncementContent = (item) =>
   String(item?.content || '').trim() ||
   String(item?.extra || '').trim() ||
   String(item?.title || '').trim();
-
-const getAnnouncementTitle = (item) =>
-  item?.title ||
-  stripHtmlText(marked.parse(getAnnouncementContent(item))).slice(0, 80) ||
-  item?.time ||
-  '';
 
 const AnnouncementsPanel = ({
   announcementData,
@@ -77,7 +55,7 @@ const AnnouncementsPanel = ({
           ...item,
           id: item?.id || `dashboard-announcement-${index}`,
           content,
-          title: getAnnouncementTitle(item),
+          title: String(item?.title || '').trim(),
           usesFrame,
           htmlExtra:
             item.extra && !shouldRenderFrame(item.extra)
@@ -149,19 +127,19 @@ const AnnouncementsPanel = ({
                   }
                 >
                   <div className='update-log-item'>
+                    {item.title && (
+                      <div className='update-log-title'>{item.title}</div>
+                    )}
                     {item.usesFrame ? (
-                      <>
-                        <div className='update-log-title'>{item.title}</div>
-                        <Button
-                          theme='borderless'
-                          type='primary'
-                          size='small'
-                          className='update-announcement-detail-button'
-                          onClick={() => setSelectedAnnouncement(item)}
-                        >
-                          {t('完整 HTML 内容，点击查看详情')}
-                        </Button>
-                      </>
+                      <Button
+                        theme='borderless'
+                        type='primary'
+                        size='small'
+                        className='update-announcement-detail-button'
+                        onClick={() => setSelectedAnnouncement(item)}
+                      >
+                        {t('完整 HTML 内容，点击查看详情')}
+                      </Button>
                     ) : (
                       <div
                         className='update-log-content'

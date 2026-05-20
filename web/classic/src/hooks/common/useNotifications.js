@@ -21,7 +21,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { API } from '../../helpers';
 
 const NOTIFICATION_READ_KEYS = 'notice_notification_read_keys';
+const UPDATE_ANNOUNCEMENT_READ_KEYS = 'update_announcement_read_keys';
 const LEGACY_NOTICE_READ_KEYS = 'notice_read_keys';
+const LEGACY_SYSTEM_NOTIFICATION_READ_KEYS = 'system_notification_read_keys';
 
 const readStoredKeys = (storageKey) => {
   try {
@@ -92,22 +94,85 @@ export const getNoticeNotificationKey = (item) => {
 
 export const getSystemNotificationKey = getNoticeNotificationKey;
 
+export const getUpdateAnnouncementKey = (item) => {
+  const signature = [
+    item?.id || '',
+    item?.publishDate || '',
+    item?.title || '',
+    item?.content || '',
+    item?.extra || '',
+    item?.type || '',
+  ].join('|');
+  return `update-announcement:${item?.id || 'no-id'}:${item?.publishDate || 'no-date'}:${hashText(signature)}`;
+};
+
 const getLegacyNoticeKey = (item) =>
   `${item?.publishDate || ''}-${(item?.content || '').slice(0, 30)}`;
+
+const getLegacySystemAnnouncementKey = (item) => {
+  const signature = [
+    item?.id || '',
+    item?.publishDate || '',
+    item?.content || '',
+    item?.extra || '',
+    item?.type || '',
+  ].join('|');
+  return `system-notification:${item?.id || 'no-id'}:${item?.publishDate || 'no-date'}:${hashText(signature)}`;
+};
+
+const getPublishTime = (item) => {
+  const time = item?.publishDate ? new Date(item.publishDate).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+};
 
 const getReadKeySet = (notifications) => {
   const currentKeys = readStoredKeys(NOTIFICATION_READ_KEYS);
   const legacyKeys = readStoredKeys(LEGACY_NOTICE_READ_KEYS);
   const readSet = new Set(currentKeys);
 
-  if (currentKeys.length === 0 && legacyKeys.length > 0) {
+  if (legacyKeys.length > 0) {
     const legacySet = new Set(legacyKeys);
     const migratedKeys = notifications
       .filter((item) => legacySet.has(getLegacyNoticeKey(item)))
       .map(getNoticeNotificationKey);
     if (migratedKeys.length > 0) {
-      migratedKeys.forEach((key) => readSet.add(key));
-      writeStoredKeys(NOTIFICATION_READ_KEYS, Array.from(readSet));
+      let changed = false;
+      migratedKeys.forEach((key) => {
+        if (!readSet.has(key)) {
+          readSet.add(key);
+          changed = true;
+        }
+      });
+      if (changed) {
+        writeStoredKeys(NOTIFICATION_READ_KEYS, Array.from(readSet));
+      }
+    }
+  }
+
+  return readSet;
+};
+
+const getUpdateAnnouncementReadKeySet = (announcements) => {
+  const currentKeys = readStoredKeys(UPDATE_ANNOUNCEMENT_READ_KEYS);
+  const legacyKeys = readStoredKeys(LEGACY_SYSTEM_NOTIFICATION_READ_KEYS);
+  const readSet = new Set(currentKeys);
+
+  if (legacyKeys.length > 0) {
+    const legacySet = new Set(legacyKeys);
+    const migratedKeys = announcements
+      .filter((item) => legacySet.has(getLegacySystemAnnouncementKey(item)))
+      .map(getUpdateAnnouncementKey);
+    if (migratedKeys.length > 0) {
+      let changed = false;
+      migratedKeys.forEach((key) => {
+        if (!readSet.has(key)) {
+          readSet.add(key);
+          changed = true;
+        }
+      });
+      if (changed) {
+        writeStoredKeys(UPDATE_ANNOUNCEMENT_READ_KEYS, Array.from(readSet));
+      }
     }
   }
 
@@ -116,8 +181,8 @@ const getReadKeySet = (notifications) => {
 
 export const useNotifications = (statusState) => {
   const [noticeVisible, setNoticeVisible] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
+  const [readVersion, setReadVersion] = useState(0);
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -133,13 +198,56 @@ export const useNotifications = (statusState) => {
     loadNotifications();
   }, [loadNotifications, statusState?.status]);
 
-  const calculateUnreadCount = () => {
-    if (!notifications.length) return 0;
+  const updateAnnouncements = useMemo(
+    () => (statusState?.status?.announcements || []).slice(0, 20),
+    [statusState?.status?.announcements],
+  );
+
+  const unreadNotificationItems = useMemo(() => {
+    if (!notifications.length) return [];
     const readSet = getReadKeySet(notifications);
-    return notifications.filter(
-      (item) => !readSet.has(getNoticeNotificationKey(item)),
-    ).length;
-  };
+    return notifications
+      .map((item, index) => {
+        const key = getNoticeNotificationKey(item);
+        return {
+          kind: 'notification',
+          key,
+          item,
+          publishTime: getPublishTime(item),
+          order: index,
+        };
+      })
+      .filter((entry) => !readSet.has(entry.key));
+  }, [notifications, readVersion]);
+
+  const unreadUpdateAnnouncementItems = useMemo(() => {
+    if (!updateAnnouncements.length) return [];
+    const readSet = getUpdateAnnouncementReadKeySet(updateAnnouncements);
+    return updateAnnouncements
+      .map((item, index) => {
+        const key = getUpdateAnnouncementKey(item);
+        return {
+          kind: 'updateAnnouncement',
+          key,
+          item,
+          publishTime: getPublishTime(item),
+          order: notifications.length + index,
+        };
+      })
+      .filter((entry) => !readSet.has(entry.key));
+  }, [notifications.length, readVersion, updateAnnouncements]);
+
+  const promptQueue = useMemo(
+    () =>
+      [...unreadNotificationItems, ...unreadUpdateAnnouncementItems].sort(
+        (a, b) => a.publishTime - b.publishTime || a.order - b.order,
+      ),
+    [unreadNotificationItems, unreadUpdateAnnouncementItems],
+  );
+
+  const unreadCount = promptQueue.length;
+  const autoPromptItem = noticeVisible ? null : promptQueue[0] || null;
+  const autoPromptRemainingCount = noticeVisible ? 0 : promptQueue.length;
 
   const getUnreadKeys = () => {
     if (!notifications.length) return [];
@@ -148,16 +256,6 @@ export const useNotifications = (statusState) => {
       .filter((item) => !readSet.has(getNoticeNotificationKey(item)))
       .map(getNoticeNotificationKey);
   };
-
-  useEffect(() => {
-    setUnreadCount(calculateUnreadCount());
-  }, [notifications]);
-
-  useEffect(() => {
-    if (unreadCount > 0 && !noticeVisible) {
-      setNoticeVisible(true);
-    }
-  }, [noticeVisible, unreadCount]);
 
   const handleNoticeOpen = () => {
     setNoticeVisible(true);
@@ -173,16 +271,42 @@ export const useNotifications = (statusState) => {
       );
       writeStoredKeys(NOTIFICATION_READ_KEYS, mergedKeys);
     }
-    setUnreadCount(0);
-    setNotifications((current) => [...current]);
+    if (updateAnnouncements.length) {
+      const readKeys = readStoredKeys(UPDATE_ANNOUNCEMENT_READ_KEYS);
+      const mergedKeys = Array.from(
+        new Set([
+          ...readKeys,
+          ...updateAnnouncements.map(getUpdateAnnouncementKey),
+        ]),
+      );
+      writeStoredKeys(UPDATE_ANNOUNCEMENT_READ_KEYS, mergedKeys);
+    }
+    setReadVersion((version) => version + 1);
+  };
+
+  const handleAutoPromptClose = () => {
+    if (!autoPromptItem) {
+      return;
+    }
+
+    const storageKey =
+      autoPromptItem.kind === 'updateAnnouncement'
+        ? UPDATE_ANNOUNCEMENT_READ_KEYS
+        : NOTIFICATION_READ_KEYS;
+    const readKeys = readStoredKeys(storageKey);
+    writeStoredKeys(storageKey, [...readKeys, autoPromptItem.key]);
+    setReadVersion((version) => version + 1);
   };
 
   return {
     noticeVisible,
     unreadCount,
     notifications,
+    autoPromptItem,
+    autoPromptRemainingCount,
     handleNoticeOpen,
     handleNoticeClose,
+    handleAutoPromptClose,
     getUnreadKeys,
   };
 };

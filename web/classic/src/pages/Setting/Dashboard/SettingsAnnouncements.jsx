@@ -61,6 +61,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
   const [loading, setLoading] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [announcementForm, setAnnouncementForm] = useState({
+    title: '',
     content: '',
     publishDate: new Date(),
     type: 'default',
@@ -95,6 +96,26 @@ const SettingsAnnouncements = ({ options, refresh }) => {
   };
 
   const columns = [
+    {
+      title: t('更新公告标题'),
+      dataIndex: 'title',
+      key: 'title',
+      width: 180,
+      render: (text) => (
+        <Tooltip content={text || '-'} position='topLeft' showArrow>
+          <div
+            style={{
+              maxWidth: '180px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {text || '-'}
+          </div>
+        </Tooltip>
+      ),
+    },
     {
       title: t('内容'),
       dataIndex: 'content',
@@ -228,6 +249,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
   const handleAddAnnouncement = () => {
     setEditingAnnouncement(null);
     setAnnouncementForm({
+      title: '',
       content: '',
       publishDate: new Date(),
       type: 'default',
@@ -239,6 +261,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
   const handleEditAnnouncement = (announcement) => {
     setEditingAnnouncement(announcement);
     setAnnouncementForm({
+      title: announcement.title || '',
       content: announcement.content,
       publishDate: announcement.publishDate
         ? new Date(announcement.publishDate)
@@ -325,6 +348,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
       const listWithIds = list.map((item, index) => ({
         ...item,
         id: item.id || index + 1,
+        title: item.title || '',
       }));
       setAnnouncementsList(listWithIds);
     } catch (error) {
@@ -534,6 +558,14 @@ const SettingsAnnouncements = ({ options, refresh }) => {
           key={editingAnnouncement ? editingAnnouncement.id : 'new'}
           getFormApi={(api) => (formApiRef.current = api)}
         >
+          <Form.Input
+            field='title'
+            label={t('更新公告标题')}
+            placeholder={t('可选，更新公告标题')}
+            onChange={(value) =>
+              setAnnouncementForm({ ...announcementForm, title: value })
+            }
+          />
           <Form.TextArea
             field='content'
             label={t('更新公告内容')}

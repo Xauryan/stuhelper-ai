@@ -59,8 +59,11 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     noticeVisible,
     unreadCount,
     notifications,
+    autoPromptItem,
+    autoPromptRemainingCount,
     handleNoticeOpen,
     handleNoticeClose,
+    handleAutoPromptClose,
     getUnreadKeys,
   } = useNotifications(statusState);
 
@@ -75,6 +78,9 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
         defaultTab='inApp'
         unreadKeys={getUnreadKeys()}
         notifications={notifications}
+        autoPromptItem={autoPromptItem}
+        autoPromptRemainingCount={autoPromptRemainingCount}
+        onAutoPromptClose={handleAutoPromptClose}
       />
 
       <div className='w-full px-2'>

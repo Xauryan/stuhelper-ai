@@ -4430,6 +4430,10 @@
     "编辑更新公告内容": "Sua noi dung thong bao cap nhat",
     "通知管理，可以发布多条通知；用户已读后不会重复弹窗，新通知或内容变更会重新提示。": "Quan ly thong bao. Co the dang nhieu thong bao; thong bao da doc se khong bat lai, thong bao moi hoac da thay doi se hien lai.",
     "可选，通知标题": "Tieu de thong bao tuy chon",
-    "完整 HTML 内容，点击查看详情": "Noi dung HTML day du. Bam de xem chi tiet."
+    "完整 HTML 内容，点击查看详情": "Noi dung HTML day du. Bam de xem chi tiet.",
+    "更新公告标题": "Tieu de thong bao cap nhat",
+    "可选，更新公告标题": "Tieu de thong bao cap nhat tuy chon",
+    "下一条": "Tiep theo",
+    "关闭后继续显示下一条": "Muc tiep theo se hien thi sau khi dong"
   }
 }

@@ -4110,6 +4110,10 @@
     "编辑更新公告内容": "Edit Update Announcement Content",
     "通知管理，可以发布多条通知；用户已读后不会重复弹窗，新通知或内容变更会重新提示。": "Notification management. Publish multiple notifications; read notifications will not pop up repeatedly, and new or changed notifications will prompt users again.",
     "可选，通知标题": "Optional notification title",
-    "完整 HTML 内容，点击查看详情": "Full HTML content. Click to view details."
+    "完整 HTML 内容，点击查看详情": "Full HTML content. Click to view details.",
+    "更新公告标题": "Update Announcement Title",
+    "可选，更新公告标题": "Optional update announcement title",
+    "下一条": "Next",
+    "关闭后继续显示下一条": "The next item will be shown after closing"
   }
 }

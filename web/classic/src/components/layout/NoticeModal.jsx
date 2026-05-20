@@ -35,7 +35,14 @@ import {
   IllustrationNoContentDark,
 } from '@douyinfe/semi-illustrations';
 import { StatusContext } from '../../context/Status';
-import { Bell, CheckCircle2, FileClock } from 'lucide-react';
+import {
+  Bell,
+  CheckCircle2,
+  ChevronRight,
+  CircleDot,
+  Clock3,
+  FileClock,
+} from 'lucide-react';
 import { getNoticeNotificationKey } from '../../hooks/common/useNotifications';
 
 const stripHtml = (html) => {
@@ -73,11 +80,7 @@ const getTimelineContent = (item) =>
 const splitUpdateAnnouncementItems = (items) =>
   (items || []).map((item, index) => ({
     id: item?.id || `update-announcement-${index}`,
-    title:
-      item?.title ||
-      stripHtml(marked.parse(getTimelineContent(item))).split('\n')[0] ||
-      item?.publishDate ||
-      '',
+    title: String(item?.title || '').trim(),
     content: getTimelineContent(item),
     usesFrame: shouldRenderFrame(getTimelineContent(item)),
     frameHtml: buildFrameHtml(getTimelineContent(item)),
@@ -95,6 +98,9 @@ const NoticeModal = ({
   defaultTab = 'inApp',
   unreadKeys = [],
   notifications = [],
+  autoPromptItem = null,
+  autoPromptRemainingCount = 0,
+  onAutoPromptClose,
 }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(defaultTab);
@@ -112,10 +118,13 @@ const NoticeModal = ({
     return (notifications || []).slice(0, 20).map((item) => {
       const htmlContent = marked.parse(item.content || '');
       const plainContent = stripHtml(htmlContent).replace(/\s+/g, ' ').trim();
+      const plainExtra = stripHtml(marked.parse(item.extra || ''))
+        .replace(/\s+/g, ' ')
+        .trim();
       const key = getNoticeNotificationKey(item);
       return {
         key,
-        title: item.title || '',
+        title: String(item.title || '').trim(),
         type: item.type || 'default',
         time: formatAbsoluteTime(item.publishDate),
         content: item.content,
@@ -124,6 +133,7 @@ const NoticeModal = ({
         frameHtml: buildFrameHtml(item.content || ''),
         plainContent,
         extra: item.extra,
+        plainExtra,
         relative: getRelativeTime(item.publishDate),
         isUnread: unreadSet.has(key),
       };
@@ -161,6 +171,37 @@ const NoticeModal = ({
     [updateAnnouncements],
   );
 
+  const autoPromptDetail = useMemo(() => {
+    if (!autoPromptItem) {
+      return null;
+    }
+
+    if (autoPromptItem.kind === 'updateAnnouncement') {
+      const item = autoPromptItem.item;
+      return {
+        kind: 'updateAnnouncement',
+        title: String(item?.title || '').trim() || t('更新公告'),
+        content: getTimelineContent(item),
+        usesFrame: shouldRenderFrame(getTimelineContent(item)),
+        frameHtml: buildFrameHtml(getTimelineContent(item)),
+      };
+    }
+
+    const item = autoPromptItem.item;
+    const htmlContent = marked.parse(item?.content || '');
+    return {
+      kind: 'notification',
+      title:
+        String(item?.title || '').trim() ||
+        stripHtml(htmlContent).replace(/\s+/g, ' ').trim() ||
+        t('通知内容'),
+      content: item?.content || '',
+      htmlContent,
+      usesFrame: shouldRenderFrame(item?.content || ''),
+      frameHtml: buildFrameHtml(item?.content || ''),
+    };
+  }, [autoPromptItem, t]);
+
   const renderUpdateAnnouncementDetail = () => {
     if (!selectedUpdateAnnouncement) {
       return null;
@@ -184,6 +225,37 @@ const NoticeModal = ({
         className='notification-detail-content card-content-scroll'
         dangerouslySetInnerHTML={{
           __html: marked.parse(selectedUpdateAnnouncement.content || ''),
+        }}
+      />
+    );
+  };
+
+  const renderAutoPromptDetail = () => {
+    if (!autoPromptDetail) {
+      return null;
+    }
+
+    if (autoPromptDetail.usesFrame) {
+      return (
+        <div className='update-log-html-frame-shell notification-detail-frame-shell'>
+          <iframe
+            className='update-log-html-frame'
+            title={autoPromptDetail.title}
+            sandbox='allow-scripts'
+            srcDoc={autoPromptDetail.frameHtml}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className='notification-detail-content card-content-scroll'
+        dangerouslySetInnerHTML={{
+          __html:
+            autoPromptDetail.kind === 'updateAnnouncement'
+              ? marked.parse(autoPromptDetail.content || '')
+              : autoPromptDetail.htmlContent,
         }}
       />
     );
@@ -220,6 +292,7 @@ const NoticeModal = ({
             className={`system-notification-item ${item.isUnread ? 'is-unread' : ''}`}
             role='button'
             tabIndex={0}
+            aria-label={`${item.title || item.plainContent || t('通知内容')} ${item.isUnread ? t('未读') : t('已读')}`}
             onClick={() => setSelectedNotification(item)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
@@ -228,36 +301,44 @@ const NoticeModal = ({
               }
             }}
           >
-            <div className='system-notification-status'>
-              <CheckCircle2 size={18} />
+            <div className='system-notification-status' aria-hidden='true'>
+              {item.isUnread ? (
+                <CircleDot size={16} />
+              ) : (
+                <CheckCircle2 size={16} />
+              )}
             </div>
             <div className='system-notification-main'>
               <div className='system-notification-heading'>
-                <div className='system-notification-title'>
-                  {item.title || item.plainContent || t('通知内容')}
+                <div className='system-notification-title-wrap'>
+                  {item.isUnread && (
+                    <span className='system-notification-unread-dot' />
+                  )}
+                  <div className='system-notification-title'>
+                    {item.title || t('通知内容')}
+                  </div>
                 </div>
-                <Tag color={item.isUnread ? 'blue' : 'white'} shape='circle'>
-                  {item.isUnread ? t('未读') : t('已读')}
-                </Tag>
+                <div className='system-notification-actions'>
+                  <Tag color={item.isUnread ? 'blue' : 'white'} shape='circle'>
+                    {item.isUnread ? t('未读') : t('已读')}
+                  </Tag>
+                  <ChevronRight
+                    size={16}
+                    className='system-notification-chevron'
+                  />
+                </div>
               </div>
               <div className='system-notification-meta'>
-                {item.relative || item.time}
+                <Clock3 size={13} />
+                <span>{item.relative || item.time}</span>
               </div>
-              {item.usesFrame ? (
-                <div className='system-notification-content'>
-                  {item.plainContent || t('完整 HTML 内容，点击查看详情')}
+              <div className='system-notification-content'>
+                {item.plainContent || t('完整 HTML 内容，点击查看详情')}
+              </div>
+              {item.plainExtra && (
+                <div className='system-notification-extra'>
+                  {item.plainExtra}
                 </div>
-              ) : (
-                <div
-                  className='system-notification-content'
-                  dangerouslySetInnerHTML={{ __html: item.htmlContent }}
-                />
-              )}
-              {item.extra && (
-                <div
-                  className='system-notification-extra'
-                  dangerouslySetInnerHTML={{ __html: marked.parse(item.extra) }}
-                />
               )}
             </div>
           </div>
@@ -294,7 +375,9 @@ const NoticeModal = ({
                 time={idx === 0 ? t('最新') : item.time}
               >
                 <div className='update-log-item'>
-                  <div className='update-log-title'>{item.title}</div>
+                  {item.title && (
+                    <div className='update-log-title'>{item.title}</div>
+                  )}
                   {item.usesFrame ? (
                     <button
                       className='update-announcement-detail-button'
@@ -394,6 +477,24 @@ const NoticeModal = ({
         size={isMobile ? 'full-width' : 'large'}
       >
         {renderUpdateAnnouncementDetail()}
+      </Modal>
+      <Modal
+        title={autoPromptDetail?.title || t('通知内容')}
+        visible={Boolean(autoPromptDetail)}
+        onCancel={onAutoPromptClose}
+        footer={
+          <div className='flex items-center justify-between w-full'>
+            <span className='text-xs text-semi-color-text-2'>
+              {autoPromptRemainingCount > 1 ? t('关闭后继续显示下一条') : ''}
+            </span>
+            <Button type='primary' onClick={onAutoPromptClose}>
+              {autoPromptRemainingCount > 1 ? t('下一条') : t('关闭')}
+            </Button>
+          </div>
+        }
+        size={isMobile ? 'full-width' : 'large'}
+      >
+        {renderAutoPromptDetail()}
       </Modal>
     </>
   );

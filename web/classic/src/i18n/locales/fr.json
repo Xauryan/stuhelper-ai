@@ -3898,6 +3898,10 @@
     "编辑更新公告内容": "Modifier le contenu de l annonce de mise a jour",
     "通知管理，可以发布多条通知；用户已读后不会重复弹窗，新通知或内容变更会重新提示。": "Gestion des notifications. Publiez plusieurs notifications ; celles deja lues ne reapparaissent pas, les nouvelles ou modifiees seront affichees a nouveau.",
     "可选，通知标题": "Titre de notification facultatif",
-    "完整 HTML 内容，点击查看详情": "Contenu HTML complet. Cliquez pour voir les details."
+    "完整 HTML 内容，点击查看详情": "Contenu HTML complet. Cliquez pour voir les details.",
+    "更新公告标题": "Titre de l annonce de mise a jour",
+    "可选，更新公告标题": "Titre facultatif de l annonce de mise a jour",
+    "下一条": "Suivant",
+    "关闭后继续显示下一条": "L element suivant sera affiche apres la fermeture"
   }
 }
