@@ -13,6 +13,7 @@
 - `历史已处理`：此前同步日志已记录处理结果，本轮不重复评估。
 - `本地提交`：本地为覆盖上游同步、保留分叉覆盖层或实现本地需求产生的 commit。
 - `origin 合入`：推送前合入本仓库 `origin/main` 的依赖或维护提交。
+- `发布提交`：本地同步结果已经形成 commit/tag 并推送到 `origin`。
 - `merge-only`：合并提交本身不单独移植，按其实际内容所在提交处理。
 
 | Commit | 处理时间 | 处理方式 | 提交时间 | 内容 | 处理说明 |
@@ -70,3 +71,4 @@
 | `0d4b25795` | 2026-05-20 | 合入 | 2026-05-19 18:28:03 +0800 | fix: expose param override audits for sensitive message fields (#4974) | 移植 `relay/common/override.go` 和测试。参数覆写审计扩展到 `messages`、`input`、`instructions`、`system`、Gemini contents / systemInstruction 等敏感正文路径，并按字段边界匹配；default log details 展示忽略，本地 `audit_admin` 脱敏逻辑保留。 |
 | `2d1ca1538` | 2026-05-20 | 忽略 | 2026-05-19 18:46:21 +0800 | fix: respect dashboard content visibility settings (#4975) | default-only，按本轮要求不移植。 |
 | `20d3e7373` | 2026-05-20 | 合入 | 2026-05-20 11:38:09 +0800 | fix: filter perf metrics summary by active groups (#4976) | 移植性能指标 summary 的 active groups 过滤。数据库聚合和内存 hot bucket 均只统计当前分组倍率中存在的分组以及 `auto`，并补充测试迁移 `PerfMetric` 表。 |
+| `e272ad0e1` | 2026-05-20 | 发布提交 | 2026-05-20 23:14:39 +0800 | chore: sync upstream rc7 updates | 本地 rc7 同步落地提交已推送到 `origin/main`。发布 tag 改用无后缀 `v1.0.0-rc.7`；删除 `v1.0.0-rc.7-stuhelper.1`，并将 `v1.0.0-rc.7` 指向本地最新 `main` 后推送到 `origin`。 |
