@@ -30,6 +30,7 @@ import ScrollableContainer from '../common/ui/ScrollableContainer';
 
 const FaqPanel = ({
   faqData,
+  className = 'lg:col-span-1',
   CARD_PROPS,
   FLEX_CENTER_GAP2,
   ILLUSTRATION_SIZE,
@@ -38,7 +39,7 @@ const FaqPanel = ({
   return (
     <Card
       {...CARD_PROPS}
-      className='shadow-sm !rounded-2xl lg:col-span-1'
+      className={`shadow-sm !rounded-2xl ${className}`}
       title={
         <div className={FLEX_CENTER_GAP2}>
           <HelpCircle size={16} />

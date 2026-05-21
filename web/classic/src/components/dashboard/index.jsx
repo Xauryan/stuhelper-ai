@@ -50,6 +50,45 @@ import {
   renderMonitorList,
 } from '../../helpers/dashboard';
 
+const INFO_PANEL_SPAN_CLASS = {
+  1: 'lg:col-span-1',
+  2: 'lg:col-span-2',
+  3: 'lg:col-span-3',
+  4: 'lg:col-span-4',
+};
+
+const getInfoPanelSpanClass = (span) =>
+  INFO_PANEL_SPAN_CLASS[span] || INFO_PANEL_SPAN_CLASS[1];
+
+const getInfoPanelSpans = ({
+  announcementsEnabled,
+  faqEnabled,
+  uptimeEnabled,
+}) => {
+  if (announcementsEnabled) {
+    const sidePanelCount = Number(faqEnabled) + Number(uptimeEnabled);
+    return {
+      announcements: 4 - sidePanelCount,
+      faq: faqEnabled ? 1 : 0,
+      uptime: uptimeEnabled ? 1 : 0,
+    };
+  }
+
+  if (faqEnabled && uptimeEnabled) {
+    return {
+      announcements: 0,
+      faq: 2,
+      uptime: 2,
+    };
+  }
+
+  return {
+    announcements: 0,
+    faq: faqEnabled ? 4 : 0,
+    uptime: uptimeEnabled ? 4 : 0,
+  };
+};
+
 const Dashboard = () => {
   // ========== Context ==========
   const [userState, userDispatch] = useContext(UserContext);
@@ -120,6 +159,11 @@ const Dashboard = () => {
   const apiInfoData = statusState?.status?.api_info || [];
   const announcementData = statusState?.status?.announcements || [];
   const faqData = statusState?.status?.faq || [];
+  const infoPanelSpans = getInfoPanelSpans({
+    announcementsEnabled: dashboardData.announcementsEnabled,
+    faqEnabled: dashboardData.faqEnabled,
+    uptimeEnabled: dashboardData.uptimeEnabled,
+  });
 
   const uptimeLegendData = Object.entries(UPTIME_STATUS_MAP).map(
     ([status, info]) => ({
@@ -210,6 +254,7 @@ const Dashboard = () => {
             {dashboardData.announcementsEnabled && (
               <AnnouncementsPanel
                 announcementData={announcementData}
+                className={getInfoPanelSpanClass(infoPanelSpans.announcements)}
                 CARD_PROPS={CARD_PROPS}
                 ILLUSTRATION_SIZE={ILLUSTRATION_SIZE}
                 t={dashboardData.t}
@@ -220,6 +265,7 @@ const Dashboard = () => {
             {dashboardData.faqEnabled && (
               <FaqPanel
                 faqData={faqData}
+                className={getInfoPanelSpanClass(infoPanelSpans.faq)}
                 CARD_PROPS={CARD_PROPS}
                 FLEX_CENTER_GAP2={FLEX_CENTER_GAP2}
                 ILLUSTRATION_SIZE={ILLUSTRATION_SIZE}
@@ -231,6 +277,7 @@ const Dashboard = () => {
             {dashboardData.uptimeEnabled && (
               <UptimePanel
                 uptimeData={dashboardData.uptimeData}
+                className={getInfoPanelSpanClass(infoPanelSpans.uptime)}
                 uptimeLoading={dashboardData.uptimeLoading}
                 activeUptimeTab={dashboardData.activeUptimeTab}
                 setActiveUptimeTab={dashboardData.setActiveUptimeTab}
