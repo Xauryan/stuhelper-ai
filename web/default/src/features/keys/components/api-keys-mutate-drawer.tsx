@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@Xauryan.com
 */
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery } from '@tanstack/react-query'
@@ -63,7 +63,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { DateTimePicker } from '@/components/datetime-picker'
 import { MultiSelect } from '@/components/multi-select'
 import { createApiKey, updateApiKey, getApiKey } from '../api'
-import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
+import { DEFAULT_GROUP, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import {
   apiKeyFormSchema,
   type ApiKeyFormValues,
@@ -142,15 +142,24 @@ export function ApiKeysMutateDrawer({
   })
 
   const models = modelsData?.data || []
-  const groupsRaw = groupsData?.data || {}
-  const groups: ApiKeyGroupOption[] = Object.entries(groupsRaw).map(
-    ([key, info]) => ({
+  const groupsRaw = groupsData?.data
+  const groupsLoaded = groupsData?.data !== undefined
+  const groups: ApiKeyGroupOption[] = useMemo(() => {
+    const tokenGroups = Object.entries(groupsRaw ?? {}).map(([key, info]) => ({
       value: key,
       label: key,
       desc: info.desc || key,
       ratio: info.ratio,
-    })
-  )
+    }))
+
+    return [
+      {
+        value: DEFAULT_GROUP,
+        label: t('User Group'),
+      },
+      ...tokenGroups.filter((group) => group.value !== DEFAULT_GROUP),
+    ]
+  }, [groupsRaw, t])
   const backendHasAuto = groups.some((g) => g.value === 'auto')
 
   const form = useForm<ApiKeyFormValues>({
@@ -174,7 +183,7 @@ export function ApiKeysMutateDrawer({
   }, [open, isUpdate, currentRow, form, defaultUseAutoGroup, backendHasAuto])
 
   useEffect(() => {
-    if (groups.length === 0) return
+    if (!groupsLoaded) return
     const currentGroup = form.getValues('group')
     if (currentGroup && !groups.some((g) => g.value === currentGroup)) {
       const fallback =
@@ -186,7 +195,7 @@ export function ApiKeysMutateDrawer({
         form.setValue('cross_group_retry', false)
       }
     }
-  }, [groups, form])
+  }, [groupsLoaded, groups, form])
 
   const onSubmit = async (data: ApiKeyFormValues) => {
     setIsSubmitting(true)
