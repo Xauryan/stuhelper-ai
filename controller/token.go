@@ -164,6 +164,13 @@ func GetTokenUsage(c *gin.Context) {
 	})
 }
 
+func normalizeTokenGroup(group string) string {
+	if group == "" {
+		return "auto"
+	}
+	return group
+}
+
 func AddToken(c *gin.Context) {
 	token := model.Token{}
 	err := c.ShouldBindJSON(&token)
@@ -219,7 +226,7 @@ func AddToken(c *gin.Context) {
 		ModelLimitsEnabled: token.ModelLimitsEnabled,
 		ModelLimits:        token.ModelLimits,
 		AllowIps:           token.AllowIps,
-		Group:              token.Group,
+		Group:              normalizeTokenGroup(token.Group),
 		CrossGroupRetry:    token.CrossGroupRetry,
 	}
 	err = cleanToken.Insert()
@@ -297,7 +304,7 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.ModelLimitsEnabled = token.ModelLimitsEnabled
 		cleanToken.ModelLimits = token.ModelLimits
 		cleanToken.AllowIps = token.AllowIps
-		cleanToken.Group = token.Group
+		cleanToken.Group = normalizeTokenGroup(token.Group)
 		cleanToken.CrossGroupRetry = token.CrossGroupRetry
 	}
 	err = cleanToken.Update()

@@ -33,7 +33,7 @@ export const apiKeySchema = z.object({
   expired_time: z.number(), // -1 for never expires
   created_time: z.number(),
   accessed_time: z.number(),
-  group: z.string().nullish().default(''),
+  group: z.string().nullish().default('auto'),
   cross_group_retry: z
     .preprocess((v) => {
       if (v === 1) return true

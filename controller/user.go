@@ -15,7 +15,6 @@ import (
 	"github.com/Xauryan/stuhelper-ai/logger"
 	"github.com/Xauryan/stuhelper-ai/model"
 	"github.com/Xauryan/stuhelper-ai/service"
-	"github.com/Xauryan/stuhelper-ai/setting"
 
 	"github.com/Xauryan/stuhelper-ai/constant"
 
@@ -255,9 +254,7 @@ func Register(c *gin.Context) {
 			RemainQuota:        500000, // 示例额度
 			UnlimitedQuota:     true,
 			ModelLimitsEnabled: false,
-		}
-		if setting.DefaultUseAutoGroup {
-			token.Group = "auto"
+			Group:              "auto",
 		}
 		if err := token.Insert(); err != nil {
 			common.ApiErrorI18n(c, i18n.MsgCreateDefaultTokenErr)

@@ -76,10 +76,6 @@ function getRatioBadgeClassName(ratio: ApiKeyGroupOption['ratio']) {
   return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300'
 }
 
-function getCommandItemValue(option: ApiKeyGroupOption): string {
-  return option.value === '' ? '__user_group__' : option.value
-}
-
 function GroupRatioBadge({ ratio }: { ratio: ApiKeyGroupOption['ratio'] }) {
   const { t } = useTranslation()
   const label = formatGroupRatio(ratio, t('Ratio'))
@@ -181,7 +177,7 @@ export function ApiKeyGroupCombobox({
               {filteredOptions.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={getCommandItemValue(option)}
+                  value={option.value}
                   onSelect={() => handleSelect(option.value)}
                   className='data-[selected=true]:bg-muted items-start gap-3 rounded-lg px-3 py-3 transition-colors'
                 >

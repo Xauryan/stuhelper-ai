@@ -89,7 +89,8 @@ const renderStatus = (text, record, t) => {
 
 // Render group column
 const renderGroupColumn = (text, record, t, groupRatios = {}) => {
-  if (text === 'auto') {
+  const group = text || 'auto';
+  if (group === 'auto') {
     return (
       <Tooltip
         content={t(
@@ -104,10 +105,10 @@ const renderGroupColumn = (text, record, t, groupRatios = {}) => {
       </Tooltip>
     );
   }
-  const ratio = groupRatios[text];
+  const ratio = groupRatios[group];
   return (
     <span className='flex items-center gap-1'>
-      {renderGroup(text)}
+      {renderGroup(group)}
       {ratio !== undefined && (
         <Tag size='small' color='green' shape='circle'>
           {ratio}x

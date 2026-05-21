@@ -451,6 +451,30 @@ func TestTokenAuthAllowsAutoPseudoGroup(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `"using_group":"auto"`)
 }
 
+func TestTokenAuthTreatsEmptyGroupAsAuto(t *testing.T) {
+	db := setupTokenAuthTestDB(t)
+	createTokenAuthTestToken(t, db, "emptygrouptestkey", "")
+
+	router := gin.New()
+	router.Use(TokenAuth())
+	router.GET("/v1/models", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"token_group": common.GetContextKeyString(c, constant.ContextKeyTokenGroup),
+			"using_group": common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
+		})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer sk-emptygrouptestkey")
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	require.Contains(t, recorder.Body.String(), `"token_group":"auto"`)
+	require.Contains(t, recorder.Body.String(), `"using_group":"auto"`)
+}
+
 func TestTokenAuthRejectsUnavailableExplicitGroup(t *testing.T) {
 	db := setupTokenAuthTestDB(t)
 	createTokenAuthTestToken(t, db, "blockedgrouptestkey", "blocked")

@@ -43,7 +43,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { GroupRatioVisualEditor } from './group-ratio-visual-editor'
 import { GroupSpecialUsableRulesEditor } from './group-special-usable-editor'
@@ -130,31 +129,6 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               onChange={(value) =>
                 handleFieldChange('GroupSpecialUsableGroup', value)
               }
-            />
-
-            <FormField
-              control={form.control}
-              name='DefaultUseAutoGroup'
-              render={({ field }) => (
-                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
-                  <div className='space-y-0.5'>
-                    <FormLabel className='text-base'>
-                      {t('Default to auto groups')}
-                    </FormLabel>
-                    <FormDescription>
-                      {t(
-                        'When enabled, newly created tokens start in the first auto group.'
-                      )}
-                    </FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
             />
 
             <Button onClick={form.handleSubmit(onSave)} disabled={isSaving}>
@@ -280,31 +254,6 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name='DefaultUseAutoGroup'
-              render={({ field }) => (
-                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
-                  <div className='space-y-0.5'>
-                    <FormLabel className='text-base'>
-                      {t('Default to auto groups')}
-                    </FormLabel>
-                    <FormDescription>
-                      {t(
-                        'When enabled, newly created tokens start in the first auto group.'
-                      )}
-                    </FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-
             <Button type='submit' disabled={isSaving}>
               {isSaving ? t('Saving...') : t('Save group ratios')}
             </Button>
@@ -419,9 +368,7 @@ vip          0.5     ${t('No')}                ${t('Assigned by administrator on
                 </p>
                 <GuideCodeBlock>{`["default", "vip"]`}</GuideCodeBlock>
                 <p className='text-muted-foreground text-sm leading-6'>
-                  {t(
-                    'If default auto group is enabled, newly created tokens start with auto instead of an empty group.'
-                  )}
+                  {t('Newly created tokens start with auto group by default.')}
                 </p>
               </AccordionContent>
             </AccordionItem>

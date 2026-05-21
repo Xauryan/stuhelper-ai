@@ -44,6 +44,7 @@
   "https://example.com/topup": "https://example.com/topup",
   "https://example.com/webhook": "https://example.com/webhook",
   "https://gateway.example.com": "https://gateway.example.com",
+  "https://github.com/Xauryan/stuhelper-ai": "https://github.com/Xauryan/stuhelper-ai",
   "https://gotify.example.com": "https://gotify.example.com",
   "https://pay.example.com": "https://pay.example.com",
   "https://provider.com/.well-known/openid-configuration": "https://provider.com/.well-known/openid-configuration",
@@ -79,6 +80,9 @@
   "smtp.example.com": "smtp.example.com",
   "socks5://user:pass@host:port": "socks5://user:pass@host:port",
   "Stripe": "Stripe",
+  "StuHelper AI": "StuHelper AI",
+  "StuHelper AI &lt;noreply@example.com&gt;": "StuHelper AI &lt;noreply@example.com&gt;",
+  "stuhelper-ai": "stuhelper-ai",
   "Submodel": "Submodel",
   "SunoAPI": "SunoAPI",
   "Telegram": "Telegram",
@@ -92,10 +96,6 @@
   "Well-Known URL": "Well-Known URL",
   "whsec_xxx": "whsec_xxx",
   "Worker URL": "Worker URL",
-  "Xinference": "Xinference",
-  "https://github.com/Xauryan/stuhelper-ai": "https://github.com/Xauryan/stuhelper-ai",
-  "StuHelper AI": "StuHelper AI",
-  "StuHelper AI &lt;noreply@example.com&gt;": "StuHelper AI &lt;noreply@example.com&gt;",
-  "stuhelper-ai": "stuhelper-ai",
-  "Xauryan": "Xauryan"
+  "Xauryan": "Xauryan",
+  "Xinference": "Xinference"
 }

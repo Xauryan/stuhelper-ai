@@ -32,7 +32,6 @@ import { toast } from 'sonner'
 import { getUserModels, getUserGroups } from '@/lib/api'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { cn } from '@/lib/utils'
-import { useStatus } from '@/hooks/use-status'
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,
@@ -122,10 +121,8 @@ export function ApiKeysMutateDrawer({
   const { t } = useTranslation()
   const isUpdate = !!currentRow
   const { triggerRefresh } = useApiKeys()
-  const { status } = useStatus()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const defaultUseAutoGroup = status?.default_use_auto_group === true
 
   // Fetch models
   const { data: modelsData } = useQuery({
@@ -151,20 +148,32 @@ export function ApiKeysMutateDrawer({
       desc: info.desc || key,
       ratio: info.ratio,
     }))
+    const optionsByValue = new Map<string, ApiKeyGroupOption>(
+      tokenGroups.map((group) => [group.value, group])
+    )
+    const autoOption: ApiKeyGroupOption = {
+      value: DEFAULT_GROUP,
+      label: t('Auto'),
+    }
+    const backendAuto = groupsRaw?.[DEFAULT_GROUP]
+    if (backendAuto?.desc) {
+      autoOption.desc = backendAuto.desc
+    }
+    if (backendAuto?.ratio !== undefined) {
+      autoOption.ratio = backendAuto.ratio
+    }
+    optionsByValue.set(DEFAULT_GROUP, autoOption)
 
-    return [
-      {
-        value: DEFAULT_GROUP,
-        label: t('User Group'),
-      },
-      ...tokenGroups.filter((group) => group.value !== DEFAULT_GROUP),
-    ]
+    return Array.from(optionsByValue.values()).sort((a, b) => {
+      if (a.value === DEFAULT_GROUP) return -1
+      if (b.value === DEFAULT_GROUP) return 1
+      return 0
+    })
   }, [groupsRaw, t])
-  const backendHasAuto = groups.some((g) => g.value === 'auto')
 
   const form = useForm<ApiKeyFormValues>({
     resolver: zodResolver(apiKeyFormSchema),
-    defaultValues: getApiKeyFormDefaultValues(defaultUseAutoGroup),
+    defaultValues: getApiKeyFormDefaultValues(),
   })
 
   // Load existing data when updating
@@ -176,20 +185,19 @@ export function ApiKeysMutateDrawer({
         }
       })
     } else if (open && !isUpdate) {
-      form.reset(
-        getApiKeyFormDefaultValues(defaultUseAutoGroup && backendHasAuto)
-      )
+      form.reset(getApiKeyFormDefaultValues())
     }
-  }, [open, isUpdate, currentRow, form, defaultUseAutoGroup, backendHasAuto])
+  }, [open, isUpdate, currentRow, form])
 
   useEffect(() => {
     if (!groupsLoaded) return
     const currentGroup = form.getValues('group')
     if (currentGroup && !groups.some((g) => g.value === currentGroup)) {
       const fallback =
+        groups.find((g) => g.value === DEFAULT_GROUP)?.value ??
         groups.find((g) => g.value === 'default')?.value ??
         groups[0]?.value ??
-        ''
+        DEFAULT_GROUP
       form.setValue('group', fallback)
       if (currentGroup === 'auto') {
         form.setValue('cross_group_retry', false)

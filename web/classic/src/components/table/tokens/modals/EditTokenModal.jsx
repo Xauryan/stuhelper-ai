@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@xauryan.com
 */
 
-import React, { useEffect, useState, useContext, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   API,
   showError,
@@ -55,13 +55,12 @@ import {
   IconKey,
 } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
-import { StatusContext } from '../../../../context/Status';
 
 const { Text, Title } = Typography;
+const DEFAULT_TOKEN_GROUP = 'auto';
 
 const EditTokenModal = (props) => {
   const { t } = useTranslation();
-  const [statusState, statusDispatch] = useContext(StatusContext);
   const [loading, setLoading] = useState(false);
   const isMobile = useIsMobile();
   const formApiRef = useRef(null);
@@ -79,8 +78,8 @@ const EditTokenModal = (props) => {
     model_limits_enabled: false,
     model_limits: [],
     allow_ips: '',
-    group: '',
-    cross_group_retry: false,
+    group: DEFAULT_TOKEN_GROUP,
+    cross_group_retry: true,
     tokenCount: 1,
   });
 
@@ -142,15 +141,21 @@ const EditTokenModal = (props) => {
         value: group,
         ratio: info.ratio,
       }));
-      if (statusState?.status?.default_use_auto_group) {
-        if (localGroupOptions.some((group) => group.value === 'auto')) {
-          localGroupOptions.sort((a, b) => (a.value === 'auto' ? -1 : 1));
-        }
-      }
+      const backendAuto = localGroupOptions.find(
+        (group) => group.value === DEFAULT_TOKEN_GROUP,
+      );
+      const autoOption = {
+        label: backendAuto?.label || t('自动'),
+        value: DEFAULT_TOKEN_GROUP,
+        ratio: backendAuto?.ratio,
+      };
+      localGroupOptions = [
+        autoOption,
+        ...localGroupOptions.filter(
+          (group) => group.value !== DEFAULT_TOKEN_GROUP,
+        ),
+      ];
       setGroups(localGroupOptions);
-      // if (statusState?.status?.default_use_auto_group && formApiRef.current) {
-      //   formApiRef.current.setValue('group', 'auto');
-      // }
     } else {
       showError(t(message));
     }
@@ -172,6 +177,9 @@ const EditTokenModal = (props) => {
       data.remain_amount = Number(
         quotaToDisplayAmount(data.remain_quota || 0).toFixed(6),
       );
+      data.group = data.group || DEFAULT_TOKEN_GROUP;
+      data.cross_group_retry =
+        data.group === DEFAULT_TOKEN_GROUP ? !!data.cross_group_retry : false;
       if (formApiRef.current) {
         formApiRef.current.setValues({ ...getInitValues(), ...data });
       }
@@ -238,6 +246,11 @@ const EditTokenModal = (props) => {
       }
       localInputs.model_limits = localInputs.model_limits.join(',');
       localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
+      localInputs.group = localInputs.group || DEFAULT_TOKEN_GROUP;
+      localInputs.cross_group_retry =
+        localInputs.group === DEFAULT_TOKEN_GROUP
+          ? !!localInputs.cross_group_retry
+          : false;
       let res = await API.put(`/api/token/`, {
         ...localInputs,
         id: parseInt(props.editingToken.id),
@@ -282,6 +295,11 @@ const EditTokenModal = (props) => {
         }
         localInputs.model_limits = localInputs.model_limits.join(',');
         localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
+        localInputs.group = localInputs.group || DEFAULT_TOKEN_GROUP;
+        localInputs.cross_group_retry =
+          localInputs.group === DEFAULT_TOKEN_GROUP
+            ? !!localInputs.cross_group_retry
+            : false;
         let res = await API.post(`/api/token/`, localInputs);
         const { success, message } = res.data;
         if (success) {
@@ -387,7 +405,7 @@ const EditTokenModal = (props) => {
                       <Form.Select
                         field='group'
                         label={t('令牌分组')}
-                        placeholder={t('令牌分组，默认为用户的分组')}
+                        placeholder={t('令牌分组，默认 auto')}
                         optionList={groups}
                         renderOptionItem={renderGroupOption}
                         filter={(input, option) => {

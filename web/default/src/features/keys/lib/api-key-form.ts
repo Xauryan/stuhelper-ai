@@ -55,13 +55,11 @@ export const API_KEY_FORM_DEFAULT_VALUES: ApiKeyFormValues = {
   tokenCount: 1,
 }
 
-export function getApiKeyFormDefaultValues(
-  defaultUseAutoGroup: boolean
-): ApiKeyFormValues {
+export function getApiKeyFormDefaultValues(): ApiKeyFormValues {
   return {
     ...API_KEY_FORM_DEFAULT_VALUES,
-    group: defaultUseAutoGroup ? 'auto' : DEFAULT_GROUP,
-    cross_group_retry: defaultUseAutoGroup,
+    group: DEFAULT_GROUP,
+    cross_group_retry: true,
   }
 }
 
@@ -75,6 +73,8 @@ export function getApiKeyFormDefaultValues(
 export function transformFormDataToPayload(
   data: ApiKeyFormValues
 ): ApiKeyFormData {
+  const group = data.group || DEFAULT_GROUP
+
   return {
     name: data.name,
     remain_quota: data.unlimited_quota
@@ -87,9 +87,20 @@ export function transformFormDataToPayload(
     model_limits_enabled: data.model_limits.length > 0,
     model_limits: data.model_limits.join(','),
     allow_ips: data.allow_ips || '',
-    group: data.group || '',
-    cross_group_retry: data.group === 'auto' ? !!data.cross_group_retry : false,
+    group,
+    cross_group_retry:
+      group === DEFAULT_GROUP ? !!data.cross_group_retry : false,
   }
+}
+
+function getCrossGroupRetryDefault(apiKey: ApiKey, group: string): boolean {
+  if (group !== DEFAULT_GROUP) {
+    return false
+  }
+  if (!apiKey.group) {
+    return true
+  }
+  return !!apiKey.cross_group_retry
 }
 
 /**
@@ -98,6 +109,8 @@ export function transformFormDataToPayload(
 export function transformApiKeyToFormDefaults(
   apiKey: ApiKey
 ): ApiKeyFormValues {
+  const group = apiKey.group || DEFAULT_GROUP
+
   return {
     name: apiKey.name,
     remain_quota_dollars: quotaUnitsToDollars(apiKey.remain_quota),
@@ -110,8 +123,8 @@ export function transformApiKeyToFormDefaults(
       ? apiKey.model_limits.split(',').filter(Boolean)
       : [],
     allow_ips: apiKey.allow_ips || '',
-    group: apiKey.group || DEFAULT_GROUP,
-    cross_group_retry: !!apiKey.cross_group_retry,
+    group,
+    cross_group_retry: getCrossGroupRetryDefault(apiKey, group),
     tokenCount: 1,
   }
 }
