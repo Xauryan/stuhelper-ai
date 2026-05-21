@@ -124,7 +124,19 @@ api.interceptors.response.use(
 function getUserId(): string | null {
   try {
     if (typeof window !== 'undefined') {
-      return window.localStorage.getItem('uid')
+      const uid = window.localStorage.getItem('uid')
+      if (uid) return uid
+
+      const savedUser = window.localStorage.getItem('user')
+      if (!savedUser) return null
+
+      const user = JSON.parse(savedUser) as { id?: unknown }
+      if (typeof user.id === 'number' && Number.isFinite(user.id)) {
+        return String(user.id)
+      }
+      if (typeof user.id === 'string' && user.id.trim()) {
+        return user.id
+      }
     }
   } catch {
     /* empty */

@@ -50,6 +50,26 @@ export interface AuthUser {
   permissions?: UserPermissions
 }
 
+const USER_STORAGE_KEY = 'user'
+const USER_ID_STORAGE_KEY = 'uid'
+
+function persistUser(user: AuthUser | null): void {
+  if (typeof window === 'undefined') return
+
+  if (user) {
+    window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user))
+    if (user.id != null) {
+      window.localStorage.setItem(USER_ID_STORAGE_KEY, String(user.id))
+    } else {
+      window.localStorage.removeItem(USER_ID_STORAGE_KEY)
+    }
+    return
+  }
+
+  window.localStorage.removeItem(USER_STORAGE_KEY)
+  window.localStorage.removeItem(USER_ID_STORAGE_KEY)
+}
+
 interface AuthState {
   auth: {
     user: AuthUser | null
@@ -63,13 +83,14 @@ export const useAuthStore = create<AuthState>()((set) => {
   const initUser = (() => {
     try {
       if (typeof window !== 'undefined') {
-        const saved = window.localStorage.getItem('user')
+        const saved = window.localStorage.getItem(USER_STORAGE_KEY)
         return saved ? JSON.parse(saved) : null
       }
     } catch {
       // Clear dirty data when parsing fails
       if (typeof window !== 'undefined') {
-        window.localStorage.removeItem('user')
+        window.localStorage.removeItem(USER_STORAGE_KEY)
+        window.localStorage.removeItem(USER_ID_STORAGE_KEY)
       }
     }
     return null
@@ -80,21 +101,12 @@ export const useAuthStore = create<AuthState>()((set) => {
       user: initUser,
       setUser: (user) =>
         set((state) => {
-          // Persist user to localStorage
-          if (typeof window !== 'undefined') {
-            if (user) {
-              window.localStorage.setItem('user', JSON.stringify(user))
-            } else {
-              window.localStorage.removeItem('user')
-            }
-          }
+          persistUser(user)
           return { ...state, auth: { ...state.auth, user } }
         }),
       reset: () =>
         set((state) => {
-          if (typeof window !== 'undefined') {
-            window.localStorage.removeItem('user')
-          }
+          persistUser(null)
           return {
             ...state,
             auth: { ...state.auth, user: null },

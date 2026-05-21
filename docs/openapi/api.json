@@ -7566,10 +7566,10 @@
         "name": "Authorization",
         "description": "Access Token认证，格式: Bearer {access_token}，通过 /api/user/token 接口生成"
       },
-      "NewApiUser1": {
+      "StuHelperAIUser1": {
         "type": "apiKey",
         "in": "header",
-        "name": "New-Api-User",
+        "name": "StuHelper-AI-User",
         "description": "用户ID请求头，必须与当前登录用户ID匹配，使用Session或AccessToken认证时必须提供"
       },
       "Combination222": {
@@ -7600,7 +7600,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7611,7 +7611,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7622,7 +7622,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7633,7 +7633,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7644,7 +7644,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7655,7 +7655,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7666,7 +7666,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7677,7 +7677,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7688,7 +7688,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7699,7 +7699,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7710,7 +7710,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7721,7 +7721,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7732,7 +7732,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7743,7 +7743,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7754,7 +7754,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7765,7 +7765,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7776,7 +7776,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7787,7 +7787,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7798,7 +7798,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7809,7 +7809,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7820,7 +7820,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7831,7 +7831,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7842,7 +7842,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7853,7 +7853,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7864,7 +7864,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7875,7 +7875,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7886,7 +7886,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7897,7 +7897,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7908,7 +7908,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7919,7 +7919,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7930,7 +7930,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7941,7 +7941,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7952,7 +7952,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7963,7 +7963,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7974,7 +7974,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7985,7 +7985,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -7996,7 +7996,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8007,7 +8007,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8018,7 +8018,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8029,7 +8029,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8040,7 +8040,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8051,7 +8051,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8062,7 +8062,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8073,7 +8073,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8084,7 +8084,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8095,7 +8095,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8106,7 +8106,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8117,7 +8117,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8128,7 +8128,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8139,7 +8139,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8150,7 +8150,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8161,7 +8161,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8172,7 +8172,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8183,7 +8183,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8194,7 +8194,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8205,7 +8205,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8216,7 +8216,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8227,7 +8227,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8238,7 +8238,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8249,7 +8249,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8260,7 +8260,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8271,7 +8271,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8282,7 +8282,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8293,7 +8293,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8304,7 +8304,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8315,7 +8315,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8326,7 +8326,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8337,7 +8337,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8348,7 +8348,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8359,7 +8359,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8370,7 +8370,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8381,7 +8381,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8392,7 +8392,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8403,7 +8403,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8414,7 +8414,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8425,7 +8425,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8436,7 +8436,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8447,7 +8447,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8458,7 +8458,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8469,7 +8469,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8480,7 +8480,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8491,7 +8491,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8502,7 +8502,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8513,7 +8513,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8524,7 +8524,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8535,7 +8535,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8546,7 +8546,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8557,7 +8557,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8568,7 +8568,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8579,7 +8579,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8590,7 +8590,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8601,7 +8601,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8612,7 +8612,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8623,7 +8623,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8634,7 +8634,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8645,7 +8645,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8656,7 +8656,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8667,7 +8667,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8678,7 +8678,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8689,7 +8689,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8700,7 +8700,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8711,7 +8711,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8722,7 +8722,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8733,7 +8733,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8744,7 +8744,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8755,7 +8755,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8766,7 +8766,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8777,7 +8777,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8788,7 +8788,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8799,7 +8799,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8810,7 +8810,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8821,7 +8821,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8832,7 +8832,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8843,7 +8843,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8854,7 +8854,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8865,7 +8865,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8876,7 +8876,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8887,7 +8887,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8898,7 +8898,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8909,7 +8909,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8920,7 +8920,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8931,7 +8931,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8942,7 +8942,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8953,7 +8953,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8964,7 +8964,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8975,7 +8975,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8986,7 +8986,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -8997,7 +8997,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9008,7 +9008,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9019,7 +9019,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9030,7 +9030,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9041,7 +9041,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9052,7 +9052,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9063,7 +9063,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9074,7 +9074,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9085,7 +9085,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9096,7 +9096,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9107,7 +9107,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9118,7 +9118,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9129,7 +9129,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9140,7 +9140,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9151,7 +9151,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9162,7 +9162,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9173,7 +9173,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9184,7 +9184,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9195,7 +9195,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9206,7 +9206,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9217,7 +9217,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9228,7 +9228,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9239,7 +9239,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9250,7 +9250,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9261,7 +9261,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9272,7 +9272,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9283,7 +9283,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9294,7 +9294,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9305,7 +9305,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9316,7 +9316,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9327,7 +9327,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9338,7 +9338,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9349,7 +9349,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9360,7 +9360,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9371,7 +9371,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9382,7 +9382,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9393,7 +9393,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9404,7 +9404,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9415,7 +9415,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9426,7 +9426,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9437,7 +9437,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9448,7 +9448,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9459,7 +9459,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9470,7 +9470,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9481,7 +9481,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9492,7 +9492,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9503,7 +9503,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9514,7 +9514,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9525,7 +9525,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9536,7 +9536,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9547,7 +9547,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9558,7 +9558,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9569,7 +9569,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9580,7 +9580,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9591,7 +9591,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9602,7 +9602,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9613,7 +9613,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9624,7 +9624,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9635,7 +9635,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9646,7 +9646,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9657,7 +9657,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9668,7 +9668,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9679,7 +9679,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9690,7 +9690,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9701,7 +9701,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9712,7 +9712,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9723,7 +9723,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9734,7 +9734,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9745,7 +9745,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9756,7 +9756,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9767,7 +9767,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9778,7 +9778,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9789,7 +9789,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9800,7 +9800,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9811,7 +9811,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9822,7 +9822,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9833,7 +9833,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9844,7 +9844,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9855,7 +9855,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9866,7 +9866,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9877,7 +9877,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9888,7 +9888,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9899,7 +9899,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9910,7 +9910,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9921,7 +9921,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9932,7 +9932,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9943,7 +9943,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9954,7 +9954,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9965,7 +9965,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9976,7 +9976,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9987,7 +9987,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -9998,7 +9998,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10009,7 +10009,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10020,7 +10020,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10031,7 +10031,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10042,7 +10042,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10053,7 +10053,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10064,7 +10064,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10075,7 +10075,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10086,7 +10086,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10097,7 +10097,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10108,7 +10108,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10119,7 +10119,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10130,7 +10130,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10141,7 +10141,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10152,7 +10152,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10163,7 +10163,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10174,7 +10174,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10185,7 +10185,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10196,7 +10196,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10207,7 +10207,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10218,7 +10218,7 @@
             "id": "SessionAuth"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
@@ -10229,7 +10229,7 @@
             "id": "AccessToken"
           },
           {
-            "id": "NewApiUser"
+            "id": "StuHelperAIUser"
           }
         ],
         "type": "combination"
