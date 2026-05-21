@@ -15,7 +15,7 @@ ghcr.io/xauryan/stuhelper-ai:latest
 
 ## Development
 
-Backend code is written in Go. The product frontend defaults to `web/classic` and uses Bun.
+Backend code is written in Go. The product frontend is `web/classic` and uses Bun.
 
 ```powershell
 cd web/classic

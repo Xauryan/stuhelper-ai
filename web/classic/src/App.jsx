@@ -49,7 +49,6 @@ import Pricing from './pages/Pricing';
 import Rankings from './pages/Rankings';
 import Task from './pages/Task';
 import ModelPage from './pages/Model';
-import ModelDeploymentPage from './pages/ModelDeployment';
 import Playground from './pages/Playground';
 import Subscription from './pages/Subscription';
 import OAuth2Callback from './components/auth/OAuth2Callback';
@@ -138,14 +137,6 @@ function App() {
             <AuditAdminRoute>
               <ModelPage />
             </AuditAdminRoute>
-          }
-        />
-        <Route
-          path='/console/deployment'
-          element={
-            <AdminRoute>
-              <ModelDeploymentPage />
-            </AdminRoute>
           }
         />
         <Route

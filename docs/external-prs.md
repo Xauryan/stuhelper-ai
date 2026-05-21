@@ -200,7 +200,7 @@ git diff --check
 - PR #3288 的总体思路可取：新增全局返佣配置、邀请人单用户比例覆盖、支付完成
   时写返佣记录、邀请人获得可划转的 `aff_quota`。
 - 未照搬上游代码，主要原因是当前 StuHelper AI 已有本地支付网关、订阅、
-  classic/default 双前端和 fork 维护规则，需要按本地结构重写。
+  classic 前端和 fork 维护规则，需要按本地结构重写。
 - 采纳 CodeRabbit 对 #3288 的有效反馈：
   - 支付完成后的邀请人一次性奖励解锁和充值返佣不能作为 best-effort 写入；
     本地在各充值和订阅完成事务内调用 `CreditInviteRewardsAfterPaymentTx`，
@@ -285,7 +285,7 @@ Set-Location web/classic; bun run build
 - 相关参考 PR：https://github.com/QuantumNous/new-api/pull/4246
 - 审查时的上游状态：open，尚未合并。
 - 本地导入日期：2026-05-13
-- 导入方式：手工移植核心行为，并按 StuHelper AI 当前后端与 default / classic 双前端结构重写。
+- 导入方式：手工移植核心行为，并按 StuHelper AI 当前后端与 classic 前端结构重写。
 - 本地涉及文件：
   - `model/subscription.go`
   - `model/main.go`
@@ -295,9 +295,6 @@ Set-Location web/classic; bun run build
   - `controller/subscription_test.go`
   - `service/task_billing_test.go`
   - `model/task_cas_test.go`
-  - `web/default/src/features/subscriptions/**`
-  - `web/default/src/features/wallet/components/subscription-plans-card.tsx`
-  - `web/default/src/i18n/locales/*.json`
   - `web/classic/src/components/table/subscriptions/**`
   - `web/classic/src/components/topup/SubscriptionPlansCard.jsx`
   - `web/classic/src/helpers/subscription.js`
@@ -312,8 +309,8 @@ Set-Location web/classic; bun run build
 ### 审查记录
 
 - PR #4564 的原始实现覆盖了后端字段、预扣费过滤和 classic 前端配置入口，但
-  本地没有直接套用 diff，而是按当前 StuHelper AI 结构补齐 default / classic
-  双前端和本地测试。
+  本地没有直接套用 diff，而是按当前 StuHelper AI 结构补齐 classic 前端和
+  本地测试。
 - 采纳 CodeRabbit 对 #4564 的有效反馈：
   - 保存前统一 trim、去空值、去重，避免 UI 数量和后端实际限制不一致。
   - 编辑表单只有在 `model_limits_enabled=true` 时回填模型列表，避免残留 CSV
@@ -335,7 +332,7 @@ Set-Location web/classic; bun run build
   - 如果存在活跃订阅但没有任何套餐允许该模型，返回
     `no subscription allows model <model>`，并在服务层归类为额度不足 / 不可用，
     使 `subscription_first` 能回退钱包，`subscription_only` 返回 403。
-- default 与 classic 管理界面新增模型限制配置和列表展示；用户购买视图展示
+- classic 管理界面新增模型限制配置和列表展示；用户购买视图展示
   该套餐的可用模型数量。
 
 ### 验证
@@ -344,8 +341,6 @@ Set-Location web/classic; bun run build
 
 ```powershell
 go test ./model ./controller ./service -count=1
-Set-Location web/default; bun run typecheck
-Set-Location web/default; bun run i18n:sync
 Set-Location web/classic; bun run build
 ```
 
@@ -357,22 +352,17 @@ Set-Location web/classic; bun run build
 - 如果上游合并 #4246 的允许分组功能，单独评估是否需要移植；不要把本地模型
   限制补丁和分组限制补丁混在同一次同步里。
 - 对比上游错误消息、字段名和前端模型来源，确保本地保留加载失败阻止保存、
-  规范化保存和双前端展示行为。
+  规范化保存和 classic 展示行为。
 
 ## QuantumNous/new-api#2787 - 密码登录和密码注册开关前台生效
 
 - 来源 PR：https://github.com/QuantumNous/new-api/pull/2787
 - 审查时的上游状态：closed，未合并。
 - 本地导入日期：2026-05-13
-- 导入方式：手工移植并适配 StuHelper AI 当前 default / classic 双前端结构。
+- 导入方式：手工移植并适配 StuHelper AI 当前 classic 前端结构。
 - 本地涉及文件：
   - `controller/misc.go`
   - `controller/misc_test.go`
-  - `web/default/src/features/auth/components/oauth-providers.tsx`
-  - `web/default/src/features/auth/sign-in/components/user-auth-form.tsx`
-  - `web/default/src/features/auth/sign-up/components/sign-up-form.tsx`
-  - `web/default/src/features/auth/types.ts`
-  - `web/default/src/i18n/locales/*.json`
   - `web/classic/src/components/auth/LoginForm.jsx`
   - `web/classic/src/components/auth/RegisterForm.jsx`
   - `web/classic/src/i18n/locales/*.json`
@@ -381,36 +371,34 @@ Set-Location web/classic; bun run build
 
 现有后端已经有 `PasswordLoginEnabled` 和 `PasswordRegisterEnabled` 管理项，
 并在登录、注册接口上执行最终拦截；后台设置页也能修改这两个选项。但
-`/api/status` 未向前台暴露对应开关，default 和 classic 前台登录 / 注册页
+`/api/status` 未向前台暴露对应开关，classic 前台登录 / 注册页
 也没有根据开关隐藏密码表单入口。
 
 ### 审查记录
 
 - PR #2787 的原始 diff 面向旧 `web/src` 前端路径，不能直接套用到当前
-  StuHelper AI 的 `web/default` 和 `web/classic` 双前端结构。
+  StuHelper AI 的 `web/classic` 前端结构。
 - 本地保留现有后端接口拦截作为最终安全边界，只新增状态字段和前端展示逻辑。
 - 状态接口使用 `password_login` / `password_register` 字段；前端对缺失字段按
   启用处理，以兼容旧缓存或旧服务端状态。
-- default 前端在没有任何可见登录 / 注册方式时显示空状态文案；classic 前端
-  在相同场景显示联系管理员文案，避免空白认证页。
+- classic 前端在没有任何可见登录 / 注册方式时显示联系管理员文案，避免空白
+  认证页。
 
 ### 本地行为
 
 - `PasswordLoginEnabled=false` 时：
   - `/api/status` 返回 `password_login: false`。
-  - default 与 classic 登录页隐藏密码登录表单和密码登录入口。
+  - classic 登录页隐藏密码登录表单和密码登录入口。
   - Passkey、OAuth、WeChat、Telegram 等登录方式继续按各自开关显示。
 - `PasswordRegisterEnabled=false` 时：
   - `/api/status` 返回 `password_register: false`。
-  - default 与 classic 注册页隐藏用户名 / 密码注册表单和密码注册入口。
+  - classic 注册页隐藏用户名 / 密码注册表单和密码注册入口。
   - 第三方注册入口继续按各自开关显示。
 
 ### 验证
 
 ```powershell
 go test ./controller -run TestGetStatusIncludesPasswordAuthSwitches -count=1
-Set-Location web/default; bun run typecheck
-Set-Location web/default; bun run build
 Set-Location web/classic; bun run build
 ```
 

@@ -77,9 +77,9 @@ git merge <upstream-tag>
 
 1. 先查 `docs/local-overlays.md`，确认本地覆盖层是否受影响。
 2. 再查 `docs/external-prs.md`，确认外部补丁是否已被上游吸收或冲突。
-3. 纯 `web/default` 的视觉、布局、暗色模式、分页、文案和表单交互修复，
-   默认不进入 classic 产品线候选；如果同时影响后端接口、安全边界、共享构建
-   链路或 classic 实际用户路径，再单独评估。
+3. `web/default` 已从 StuHelper AI 中移除；涉及该目录的上游前端改动默认跳过。
+   如果同时影响后端接口、安全边界、共享构建链路或 classic 实际用户路径，再
+   单独评估并按 classic 结构重写。
 4. 上游运营策略类改动必须先判断是否符合 StuHelper AI 产品基线；跳过原因记录到
    `docs/upstream-sync-log.md`，避免后续重复评估。
 
@@ -122,9 +122,6 @@ git merge <upstream-tag>
 ```powershell
 go test ./...
 go test ./middleware -count=1
-Set-Location web/default; bun run typecheck
-Set-Location web/default; bun run build
-Set-Location web/default; bun run i18n:sync
 Set-Location web/classic; bun run build
 Set-Location web/classic; bun run i18n:status
 ```

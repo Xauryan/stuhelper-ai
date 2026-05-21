@@ -210,7 +210,7 @@ func TestRootManageUserPromotesAndDemotesThroughAuditAdmin(t *testing.T) {
 	require.True(t, sidebarModules["admin"]["channel"])
 	require.True(t, sidebarModules["admin"]["referral"])
 	require.False(t, sidebarModules["admin"]["setting"])
-	require.False(t, sidebarModules["admin"]["deployment"])
+	require.NotContains(t, sidebarModules["admin"], "deployment")
 
 	recorder = performUserAuditAdminControllerRequest(
 		t,

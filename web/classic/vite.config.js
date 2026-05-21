@@ -18,7 +18,7 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import react from '@vitejs/plugin-react';
-import { defineConfig, transformWithEsbuild } from 'vite';
+import { defineConfig, transformWithOxc } from 'vite';
 import pkg from '@douyinfe/vite-plugin-semi';
 import path from 'path';
 import { codeInspectorPlugin } from 'code-inspector-plugin';
@@ -80,11 +80,8 @@ export default defineConfig({
           return null;
         }
 
-        // Use the exposed transform from vite, instead of directly
-        // transforming with esbuild
-        return transformWithEsbuild(code, id, {
-          loader: 'jsx',
-          jsx: 'automatic',
+        return transformWithOxc(code, id, {
+          lang: 'jsx',
         });
       },
     },
@@ -95,8 +92,8 @@ export default defineConfig({
   ],
   optimizeDeps: {
     force: true,
-    esbuildOptions: {
-      loader: {
+    rolldownOptions: {
+      moduleTypes: {
         '.js': 'jsx',
         '.json': 'json',
       },

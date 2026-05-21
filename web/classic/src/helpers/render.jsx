@@ -78,7 +78,6 @@ import {
   Settings,
   CircleUser,
   Package,
-  Server,
   CalendarClock,
 } from 'lucide-react';
 import {
@@ -146,8 +145,6 @@ export function getLucideIcon(key, selected = false) {
       return <User {...commonProps} color={iconColor} />;
     case 'models':
       return <Package {...commonProps} color={iconColor} />;
-    case 'deployment':
-      return <Server {...commonProps} color={iconColor} />;
     case 'subscription':
       return <CalendarClock {...commonProps} color={iconColor} />;
     case 'setting':
