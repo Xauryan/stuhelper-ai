@@ -31,6 +31,261 @@ body {
   background-color: var(--semi-color-bg-0);
 }
 
+/* ==================== 顶栏主题切换 ==================== */
+.classic-theme-switch {
+  position: relative;
+  display: block;
+  isolation: isolate;
+  width: 60px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 28px;
+  outline: none;
+  cursor: pointer;
+  background: #60a5fa;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.15);
+  transition:
+    box-shadow 1.05s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.18s ease;
+  touch-action: manipulation;
+}
+
+.classic-theme-switch__sky {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  transition: opacity 1.05s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.classic-theme-switch__sky--light {
+  background: linear-gradient(135deg, #7dd3fc, #60a5fa 55%, #93c5fd);
+  opacity: 1;
+}
+
+.classic-theme-switch__sky--dark {
+  background: linear-gradient(135deg, #20243b, #2b2e4a 55%, #31385b);
+  opacity: 0;
+}
+
+.classic-theme-switch:hover {
+  transform: translateY(-1px);
+}
+
+.classic-theme-switch:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.classic-theme-switch:focus-visible {
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.15),
+    0 0 0 3px rgba(var(--semi-blue-5), 0.28);
+}
+
+.classic-theme-switch--dark {
+  background: #2b2e4a;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.classic-theme-switch--dark .classic-theme-switch__sky--light {
+  opacity: 0;
+}
+
+.classic-theme-switch--dark .classic-theme-switch__sky--dark {
+  opacity: 1;
+}
+
+.classic-theme-switch--dark:focus-visible {
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.3),
+    0 0 0 3px rgba(147, 197, 253, 0.32);
+}
+
+.classic-theme-switch__handle {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: #ffda51;
+  box-shadow:
+    inset -2px -2px 4px rgba(0, 0, 0, 0.1),
+    0 1px 3px rgba(0, 0, 0, 0.2),
+    0 0 0 6px rgba(255, 255, 255, 0.2),
+    0 0 0 12px rgba(255, 255, 255, 0.15),
+    0 0 0 20px rgba(255, 255, 255, 0.08);
+  transition:
+    transform 1.05s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 1.05s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 1.05s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.classic-theme-switch--dark .classic-theme-switch__handle {
+  transform: translateX(32px);
+  background-color: #d1d5e0;
+  box-shadow:
+    inset -2px -2px 4px rgba(0, 0, 0, 0.2),
+    0 1px 3px rgba(0, 0, 0, 0.4),
+    0 0 0 6px rgba(255, 255, 255, 0.05),
+    0 0 0 12px rgba(255, 255, 255, 0.03),
+    0 0 0 20px rgba(255, 255, 255, 0.016);
+}
+
+.classic-theme-switch__crater {
+  position: absolute;
+  border-radius: 50%;
+  background-color: #aeb5c7;
+  opacity: 0;
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.15);
+  transition: opacity 0.6s ease 0s;
+}
+
+.classic-theme-switch--dark .classic-theme-switch__crater {
+  opacity: 1;
+  transition-duration: 0.7s;
+  transition-delay: 0.24s;
+}
+
+.classic-theme-switch__crater--1 {
+  top: 4px;
+  left: 5px;
+  width: 6px;
+  height: 6px;
+}
+
+.classic-theme-switch__crater--2 {
+  top: 11px;
+  left: 12px;
+  width: 4px;
+  height: 4px;
+}
+
+.classic-theme-switch__crater--3 {
+  top: 13px;
+  left: 3px;
+  width: 7px;
+  height: 7px;
+}
+
+.classic-theme-switch__clouds,
+.classic-theme-switch__stars {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  transition:
+    transform 1.05s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 1.05s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.classic-theme-switch__clouds {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.classic-theme-switch--dark .classic-theme-switch__clouds {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.classic-theme-switch__cloud {
+  position: absolute;
+  border-radius: 50px;
+  background-color: #fff;
+}
+
+.classic-theme-switch__cloud--1 {
+  top: 16px;
+  left: 16px;
+  width: 50px;
+  height: 20px;
+}
+
+.classic-theme-switch__cloud--2 {
+  top: 8px;
+  left: 26px;
+  width: 22px;
+  height: 22px;
+}
+
+.classic-theme-switch__cloud--3 {
+  top: 12px;
+  left: 42px;
+  width: 16px;
+  height: 16px;
+}
+
+.classic-theme-switch__stars {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.classic-theme-switch--dark .classic-theme-switch__stars {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.classic-theme-switch__star {
+  position: absolute;
+  background-color: #fff;
+  clip-path: polygon(
+    50% 0%,
+    60% 40%,
+    100% 50%,
+    60% 60%,
+    50% 100%,
+    40% 60%,
+    0% 50%,
+    40% 40%
+  );
+}
+
+.classic-theme-switch__star--1 {
+  top: 4px;
+  left: 12px;
+  width: 7px;
+  height: 7px;
+  opacity: 0.9;
+}
+
+.classic-theme-switch__star--2 {
+  top: 15px;
+  left: 6px;
+  width: 4px;
+  height: 4px;
+  opacity: 0.7;
+}
+
+.classic-theme-switch__star--3 {
+  top: 11px;
+  left: 26px;
+  width: 5px;
+  height: 5px;
+  opacity: 0.8;
+}
+
+.classic-theme-switch__star--4 {
+  top: 6px;
+  left: 32px;
+  width: 4px;
+  height: 4px;
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .classic-theme-switch,
+  .classic-theme-switch *,
+  .classic-theme-switch::before,
+  .classic-theme-switch::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
 /* 桌面端禁止 body 纵向滚动 - 防止 VChart tooltip 触发页面滚动条 */
 @media (min-width: 768px) {
   body {
