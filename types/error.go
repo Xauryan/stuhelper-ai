@@ -26,13 +26,13 @@ type ClaudeError struct {
 type ErrorType string
 
 const (
-	ErrorTypeStuHelperAIError     ErrorType = "new_api_error"
-	ErrorTypeOpenAIError     ErrorType = "openai_error"
-	ErrorTypeClaudeError     ErrorType = "claude_error"
-	ErrorTypeMidjourneyError ErrorType = "midjourney_error"
-	ErrorTypeGeminiError     ErrorType = "gemini_error"
-	ErrorTypeRerankError     ErrorType = "rerank_error"
-	ErrorTypeUpstreamError   ErrorType = "upstream_error"
+	ErrorTypeStuHelperAIError ErrorType = "new_api_error"
+	ErrorTypeOpenAIError      ErrorType = "openai_error"
+	ErrorTypeClaudeError      ErrorType = "claude_error"
+	ErrorTypeMidjourneyError  ErrorType = "midjourney_error"
+	ErrorTypeGeminiError      ErrorType = "gemini_error"
+	ErrorTypeRerankError      ErrorType = "rerank_error"
+	ErrorTypeUpstreamError    ErrorType = "upstream_error"
 )
 
 type ErrorCode string
@@ -59,6 +59,7 @@ const (
 	ErrorCodeChannelAwsClientError        ErrorCode = "channel:aws_client_error"
 	ErrorCodeChannelInvalidKey            ErrorCode = "channel:invalid_key"
 	ErrorCodeChannelResponseTimeExceeded  ErrorCode = "channel:response_time_exceeded"
+	ErrorCodeChannelRelayLoop             ErrorCode = "channel:relay_loop"
 
 	// client request error
 	ErrorCodeReadRequestBodyFailed ErrorCode = "read_request_body_failed"
@@ -365,6 +366,9 @@ func WithClaudeError(claudeError ClaudeError, statusCode int, ops ...StuHelperAI
 
 func IsChannelError(err *StuHelperAIError) bool {
 	if err == nil {
+		return false
+	}
+	if err.errorCode == ErrorCodeChannelRelayLoop {
 		return false
 	}
 	return strings.HasPrefix(string(err.errorCode), "channel:")

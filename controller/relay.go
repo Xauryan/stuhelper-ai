@@ -196,6 +196,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 
+		if relayLoopErr := service.CheckRelayLoopForChannel(c, channel.Id); relayLoopErr != nil {
+			newAPIError = relayLoopErr
+			break
+		}
+
 		addUsedChannel(c, channel.Id)
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
 		if bodyErr != nil {
@@ -308,6 +313,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
 
 	if err != nil {
+		if errors.Is(err, service.ErrRelayLoopNoAvailableChannel) {
+			return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeChannelRelayLoop, http.StatusLoopDetected, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+		}
 		return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, info.OriginModelName, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 	if channel == nil {
@@ -532,6 +540,11 @@ func RelayTask(c *gin.Context) {
 				taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "get_channel_failed", http.StatusInternalServerError)
 				break
 			}
+		}
+
+		if relayLoopErr := service.CheckRelayLoopForChannel(c, channel.Id); relayLoopErr != nil {
+			taskErr = service.TaskErrorWrapperLocal(relayLoopErr.Err, string(relayLoopErr.GetErrorCode()), relayLoopErr.StatusCode)
+			break
 		}
 
 		addUsedChannel(c, channel.Id)
