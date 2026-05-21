@@ -177,7 +177,7 @@ func RequestAlipayOfficialPay(c *gin.Context) {
 		OutTradeNo:       tradeNo,
 		TotalAmount:      formatOfficialPayMoney(payMoney),
 		Subject:          fmt.Sprintf("StuHelper AI 充值 %d", req.Amount),
-		TimeoutExpress:   formatAlipayOfficialTimeoutExpress(setting.AlipayOfficialOrderTimeoutMin),
+		TimeoutExpress:   formatAlipayOfficialTimeoutExpress(setting.AlipayOfficialOrderTimeoutSec),
 	})
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方支付 生成表单失败 user_id=%d trade_no=%s error=%q", id, tradeNo, err.Error()))
@@ -211,6 +211,10 @@ func RequestWechatPayOfficialPay(c *gin.Context) {
 		return
 	}
 	scene := normalizeOfficialPaymentScene(req.Scene)
+	if scene == officialPaymentSceneH5 {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "当前移动端不支持使用微信支付，请使用电脑端或选择其他支付方式"})
+		return
+	}
 	if req.Amount < int64(setting.WechatPayOfficialMinTopUp) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", setting.WechatPayOfficialMinTopUp)})
 		return
@@ -263,6 +267,7 @@ func RequestWechatPayOfficialPay(c *gin.Context) {
 		WapURL:      wapURL,
 		WapName:     "StuHelper AI",
 		TradeType:   scene,
+		TimeExpire:  formatWechatPayOfficialTimeExpire(setting.WechatPayOfficialOrderTimeoutSec),
 	})
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("微信支付官方 创建预支付订单失败 user_id=%d trade_no=%s scene=%s error=%q", id, tradeNo, scene, err.Error()))
@@ -274,8 +279,9 @@ func RequestWechatPayOfficialPay(c *gin.Context) {
 
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f scene=%s", id, tradeNo, req.Amount, payMoney, prepay.Scene))
 	data := gin.H{
-		"order_id": tradeNo,
-		"scene":    prepay.Scene,
+		"order_id":              tradeNo,
+		"scene":                 prepay.Scene,
+		"order_timeout_seconds": getWechatPayOfficialOrderTimeoutSeconds(),
 	}
 	if prepay.Scene == officialPaymentSceneH5 {
 		data["payment_type"] = "redirect"
@@ -321,6 +327,18 @@ func QueryWechatPayOfficialTopUpStatus(c *gin.Context) {
 		common.ApiSuccess(c, gin.H{
 			"trade_no": tradeNo,
 			"status":   topUp.Status,
+		})
+		return
+	}
+	if isWechatPayOfficialOrderExpired(topUp.CreateTime) {
+		if err := expireWechatPayOfficialPendingOrder(tradeNo); err != nil &&
+			!errors.Is(err, model.ErrTopUpStatusInvalid) {
+			common.ApiError(c, err)
+			return
+		}
+		common.ApiSuccess(c, gin.H{
+			"trade_no": tradeNo,
+			"status":   common.TopUpStatusExpired,
 		})
 		return
 	}
@@ -937,11 +955,7 @@ func ExpireAlipayOfficialPendingTopUps(ctx context.Context) (int, error) {
 	if !isAlipayOfficialTopUpEnabled() {
 		return 0, nil
 	}
-	timeoutMinutes := setting.AlipayOfficialOrderTimeoutMin
-	if timeoutMinutes <= 0 {
-		timeoutMinutes = 10
-	}
-	expireBefore := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute).Unix()
+	expireBefore := time.Now().Add(-time.Duration(getAlipayOfficialOrderTimeoutSeconds()) * time.Second).Unix()
 	expiredTopUps, err := model.ListPendingTopUpsBefore(model.PaymentProviderAlipayOfficial, expireBefore, 20)
 	if err != nil {
 		return 0, err
@@ -997,6 +1011,43 @@ func ExpireAlipayOfficialPendingTopUps(ctx context.Context) (int, error) {
 		processed++
 	}
 	return processed, nil
+}
+
+func ExpireOfficialPaymentPendingTopUpsByTimeout(ctx context.Context, userId int) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	now := time.Now()
+	officialProviders := []struct {
+		paymentProvider string
+		timeoutSeconds  int
+	}{
+		{
+			paymentProvider: model.PaymentProviderAlipayOfficial,
+			timeoutSeconds:  getAlipayOfficialOrderTimeoutSeconds(),
+		},
+		{
+			paymentProvider: model.PaymentProviderWechatPayOfficial,
+			timeoutSeconds:  getWechatPayOfficialOrderTimeoutSeconds(),
+		},
+	}
+	total := 0
+	for _, provider := range officialProviders {
+		if ctx.Err() != nil {
+			return total, ctx.Err()
+		}
+		timeoutSeconds := provider.timeoutSeconds
+		if timeoutSeconds <= 0 {
+			timeoutSeconds = 600
+		}
+		expireBefore := now.Add(-time.Duration(timeoutSeconds) * time.Second).Unix()
+		affected, err := model.ExpireOfficialPaymentPendingTopUpsBefore(ctx, provider.paymentProvider, expireBefore, now.Unix(), userId)
+		if err != nil {
+			return total, err
+		}
+		total += int(affected)
+	}
+	return total, nil
 }
 
 func reconcileAlipayOfficialTopUpAfterCloseFailure(ctx context.Context, client *service.AlipayOfficialClient, tradeNo string) (bool, error) {
@@ -1493,11 +1544,46 @@ func formatOfficialPayMoney(payMoney float64) string {
 	return formatPayMoneyToCents(payMoney)
 }
 
-func formatAlipayOfficialTimeoutExpress(timeoutMinutes int) string {
+func getAlipayOfficialOrderTimeoutSeconds() int {
+	if setting.AlipayOfficialOrderTimeoutSec > 0 {
+		return setting.AlipayOfficialOrderTimeoutSec
+	}
+	if setting.AlipayOfficialOrderTimeoutMin > 0 {
+		return setting.AlipayOfficialOrderTimeoutMin * 60
+	}
+	return 600
+}
+
+func getWechatPayOfficialOrderTimeoutSeconds() int {
+	if setting.WechatPayOfficialOrderTimeoutSec > 0 {
+		return setting.WechatPayOfficialOrderTimeoutSec
+	}
+	return 600
+}
+
+func isWechatPayOfficialOrderExpired(createTime int64) bool {
+	if createTime <= 0 {
+		return false
+	}
+	return createTime <= time.Now().Add(-time.Duration(getWechatPayOfficialOrderTimeoutSeconds())*time.Second).Unix()
+}
+
+func formatAlipayOfficialTimeoutExpress(timeoutSeconds int) string {
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 600
+	}
+	timeoutMinutes := (timeoutSeconds + 59) / 60
 	if timeoutMinutes <= 0 {
 		timeoutMinutes = 10
 	}
 	return fmt.Sprintf("%dm", timeoutMinutes)
+}
+
+func formatWechatPayOfficialTimeExpire(timeoutSeconds int) string {
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 600
+	}
+	return time.Now().Add(time.Duration(timeoutSeconds) * time.Second).UTC().Format(time.RFC3339)
 }
 
 func shouldExpireAlipayOfficialOrderAfterClose(err error) bool {

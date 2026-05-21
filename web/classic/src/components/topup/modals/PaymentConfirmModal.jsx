@@ -21,6 +21,10 @@ import React from 'react';
 import { Modal, Typography, Card, Skeleton } from '@douyinfe/semi-ui';
 import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
 import { CreditCard } from 'lucide-react';
+import {
+  formatOfficialPaymentOrderValidity,
+  normalizeOfficialPaymentOrderTimeoutSeconds,
+} from '../wechatOfficialPaymentStatus.mjs';
 
 const { Text } = Typography;
 
@@ -39,11 +43,16 @@ const PaymentConfirmModal = ({
   // 新增：用于显示折扣明细
   amountNumber,
   discountRate,
+  orderTimeoutSeconds,
 }) => {
   const hasDiscount =
     discountRate && discountRate > 0 && discountRate < 1 && amountNumber > 0;
   const originalAmount = hasDiscount ? amountNumber / discountRate : 0;
   const discountAmount = hasDiscount ? originalAmount - amountNumber : 0;
+  const normalizedOrderTimeout =
+    normalizeOfficialPaymentOrderTimeoutSeconds(orderTimeoutSeconds);
+  const shouldShowOrderValidity =
+    payWay === 'alipay_official' || payWay === 'wxpay_official';
   return (
     <Modal
       title={
@@ -213,6 +222,15 @@ const PaymentConfirmModal = ({
                 })()}
               </div>
             </div>
+            {shouldShowOrderValidity && (
+              <div className='rounded-md bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700 dark:bg-amber-950 dark:text-amber-200'>
+                {t('订单创建后 {{duration}}内有效，超时无效。', {
+                  duration: formatOfficialPaymentOrderValidity(
+                    normalizedOrderTimeout,
+                  ),
+                })}
+              </div>
+            )}
           </div>
         </Card>
       </div>

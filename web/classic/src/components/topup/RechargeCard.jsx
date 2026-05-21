@@ -105,6 +105,7 @@ const RechargeCard = ({
   getPaymentUnitPrice,
   statusLoading,
   topupInfo,
+  getPaymentOrderTimeoutSeconds,
   onOpenHistory,
   enableWaffoTopUp,
   enableWaffoPancakeTopUp,
@@ -700,6 +701,9 @@ const RechargeCard = ({
                     activeSubscriptions={activeSubscriptions}
                     allSubscriptions={allSubscriptions}
                     reloadSubscriptionSelf={reloadSubscriptionSelf}
+                    getPaymentOrderTimeoutSeconds={
+                      getPaymentOrderTimeoutSeconds
+                    }
                     withCard={false}
                   />
                 </div>

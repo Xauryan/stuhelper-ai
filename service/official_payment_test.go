@@ -383,6 +383,9 @@ func TestWechatPayOfficialPrepayVerifiesPlatformResponseSignature(t *testing.T) 
 		PrivateKey:        merchantPrivateKey,
 		PlatformPublicKey: platformPublicKey,
 		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			body, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			require.Contains(t, string(body), `"time_expire":"2026-05-22T10:00:00Z"`)
 			resp := &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     http.Header{},
@@ -401,6 +404,7 @@ func TestWechatPayOfficialPrepayVerifiesPlatformResponseSignature(t *testing.T) 
 		NotifyURL:   "https://example.com/api/wechat-pay/official/notify",
 		AmountTotal: 100,
 		TradeType:   "pc",
+		TimeExpire:  "2026-05-22T10:00:00Z",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "weixin://wxpay/bizpayurl?pr=test", result.CodeURL)

@@ -140,7 +140,7 @@ func InitOptionMap() {
 	common.OptionMap["AlipayOfficialReturnURL"] = setting.AlipayOfficialReturnURL
 	common.OptionMap["AlipayOfficialUnitPrice"] = strconv.FormatFloat(setting.AlipayOfficialUnitPrice, 'f', -1, 64)
 	common.OptionMap["AlipayOfficialMinTopUp"] = strconv.Itoa(setting.AlipayOfficialMinTopUp)
-	common.OptionMap["AlipayOfficialOrderTimeoutMin"] = strconv.Itoa(setting.AlipayOfficialOrderTimeoutMin)
+	common.OptionMap["AlipayOfficialOrderTimeoutSec"] = strconv.Itoa(setting.AlipayOfficialOrderTimeoutSec)
 	common.OptionMap["WechatPayOfficialEnabled"] = strconv.FormatBool(setting.WechatPayOfficialEnabled)
 	common.OptionMap["WechatPayOfficialAppID"] = setting.WechatPayOfficialAppID
 	common.OptionMap["WechatPayOfficialMchID"] = setting.WechatPayOfficialMchID
@@ -152,6 +152,7 @@ func InitOptionMap() {
 	common.OptionMap["WechatPayOfficialReturnURL"] = setting.WechatPayOfficialReturnURL
 	common.OptionMap["WechatPayOfficialUnitPrice"] = strconv.FormatFloat(setting.WechatPayOfficialUnitPrice, 'f', -1, 64)
 	common.OptionMap["WechatPayOfficialMinTopUp"] = strconv.Itoa(setting.WechatPayOfficialMinTopUp)
+	common.OptionMap["WechatPayOfficialOrderTimeoutSec"] = strconv.Itoa(setting.WechatPayOfficialOrderTimeoutSec)
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
 	common.OptionMap["AutoGroups"] = setting.AutoGroups2JsonString()
@@ -228,10 +229,24 @@ func InitOptionMap() {
 
 func loadOptionsFromDatabase() {
 	options, _ := AllOption()
+	hasAlipayTimeoutSec := false
+	legacyAlipayTimeoutMin := ""
 	for _, option := range options {
+		switch option.Key {
+		case "AlipayOfficialOrderTimeoutSec":
+			hasAlipayTimeoutSec = true
+		case "AlipayOfficialOrderTimeoutMin":
+			legacyAlipayTimeoutMin = option.Value
+			continue
+		}
 		err := updateOptionMap(option.Key, option.Value)
 		if err != nil {
 			common.SysLog("failed to update option map: " + err.Error())
+		}
+	}
+	if !hasAlipayTimeoutSec && legacyAlipayTimeoutMin != "" {
+		if err := updateOptionMap("AlipayOfficialOrderTimeoutMin", legacyAlipayTimeoutMin); err != nil {
+			common.SysLog("failed to update legacy alipay official order timeout: " + err.Error())
 		}
 	}
 }
@@ -521,8 +536,14 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.AlipayOfficialUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "AlipayOfficialMinTopUp":
 		setting.AlipayOfficialMinTopUp, _ = strconv.Atoi(value)
+	case "AlipayOfficialOrderTimeoutSec":
+		setting.AlipayOfficialOrderTimeoutSec, _ = strconv.Atoi(value)
 	case "AlipayOfficialOrderTimeoutMin":
 		setting.AlipayOfficialOrderTimeoutMin, _ = strconv.Atoi(value)
+		if setting.AlipayOfficialOrderTimeoutMin > 0 {
+			setting.AlipayOfficialOrderTimeoutSec = setting.AlipayOfficialOrderTimeoutMin * 60
+			common.OptionMap["AlipayOfficialOrderTimeoutSec"] = strconv.Itoa(setting.AlipayOfficialOrderTimeoutSec)
+		}
 	case "WechatPayOfficialEnabled":
 		setting.WechatPayOfficialEnabled = value == "true"
 	case "WechatPayOfficialAppID":
@@ -545,6 +566,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WechatPayOfficialUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "WechatPayOfficialMinTopUp":
 		setting.WechatPayOfficialMinTopUp, _ = strconv.Atoi(value)
+	case "WechatPayOfficialOrderTimeoutSec":
+		setting.WechatPayOfficialOrderTimeoutSec, _ = strconv.Atoi(value)
 	case "TopupGroupRatio":
 		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":

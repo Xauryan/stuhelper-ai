@@ -22,7 +22,7 @@ import { Button, Form, Radio } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
 
 import { DATE_RANGE_PRESETS } from '../../../constants/console.constants';
-import { TOPUP_PAYMENT_METHODS } from '../../topup/modals/topupHistoryUtils.mjs';
+import { BILLING_PAYMENT_METHOD_FILTERS } from '../../topup/modals/topupHistoryUtils.mjs';
 
 const BillingFilters = ({
   formApi,
@@ -110,7 +110,7 @@ const BillingFilters = ({
               }, 0);
             }}
           >
-            {TOPUP_PAYMENT_METHODS.map((method) => (
+            {BILLING_PAYMENT_METHOD_FILTERS.map((method) => (
               <Radio value={method.value} key={method.value || 'all'}>
                 {t(method.key)}
               </Radio>

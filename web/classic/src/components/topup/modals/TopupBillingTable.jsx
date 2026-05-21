@@ -40,6 +40,7 @@ import { API, timestamp2string } from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
 import CardTable from '../../common/ui/CardTable';
 import {
+  canAdminCompleteTopup,
   formatCurrency,
   getRemainingRefundMoney,
   isOfficialRefundable,
@@ -73,6 +74,11 @@ const isOfficialTopupRefundable = (record) =>
   isOfficialRefundable(record) && !record.refund_request_id;
 
 const EMPTY_TOPUP_FILTERS = {};
+
+const ACTIONABLE_PAYMENT_STATUSES = ['pending', 'expired'];
+
+const isPendingOrExpired = (record) =>
+  ACTIONABLE_PAYMENT_STATUSES.includes(record?.status);
 
 const TopupBillingTable = ({
   active = true,
@@ -602,7 +608,8 @@ const TopupBillingTable = ({
       render: (_, record) => {
         const actions = [];
         const subscriptionTopup = isSubscriptionTopup(record);
-        if (userIsAdmin && record.status === 'pending' && !subscriptionTopup) {
+        const isActionablePayment = isPendingOrExpired(record);
+        if (userIsAdmin && canAdminCompleteTopup(record)) {
           actions.push(
             <Button
               key='complete'
@@ -617,9 +624,8 @@ const TopupBillingTable = ({
         }
         if (
           userIsAdmin &&
-          record.status === 'pending' &&
-          record.payment_provider === 'alipay_official' &&
-          !subscriptionTopup
+          isActionablePayment &&
+          record.payment_provider === 'alipay_official'
         ) {
           actions.push(
             <Button
@@ -630,22 +636,25 @@ const TopupBillingTable = ({
             >
               {t('查询')}
             </Button>,
-            <Button
-              key='close'
-              size='small'
-              type='danger'
-              theme='outline'
-              onClick={() => confirmCloseAlipayOfficial(record.trade_no)}
-            >
-              {t('关闭')}
-            </Button>,
           );
+          if (record.status === 'pending' && !subscriptionTopup) {
+            actions.push(
+              <Button
+                key='close'
+                size='small'
+                type='danger'
+                theme='outline'
+                onClick={() => confirmCloseAlipayOfficial(record.trade_no)}
+              >
+                {t('关闭')}
+              </Button>,
+            );
+          }
         }
         if (
           userIsAdmin &&
-          record.status === 'pending' &&
-          record.payment_provider === 'wxpay_official' &&
-          !subscriptionTopup
+          isActionablePayment &&
+          record.payment_provider === 'wxpay_official'
         ) {
           actions.push(
             <Button
@@ -656,16 +665,20 @@ const TopupBillingTable = ({
             >
               {t('查询')}
             </Button>,
-            <Button
-              key='wx-close'
-              size='small'
-              type='danger'
-              theme='outline'
-              onClick={() => confirmCloseWechatPayOfficial(record.trade_no)}
-            >
-              {t('关闭')}
-            </Button>,
           );
+          if (record.status === 'pending' && !subscriptionTopup) {
+            actions.push(
+              <Button
+                key='wx-close'
+                size='small'
+                type='danger'
+                theme='outline'
+                onClick={() => confirmCloseWechatPayOfficial(record.trade_no)}
+              >
+                {t('关闭')}
+              </Button>,
+            );
+          }
         }
         if (
           isOfficialTopupRefundable(record) &&

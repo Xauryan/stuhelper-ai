@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -52,6 +53,11 @@ const (
 	PaymentProviderAlipayOfficial    = "alipay_official"
 	PaymentProviderWechatPayOfficial = "wxpay_official"
 )
+
+func IsOfficialPaymentProvider(paymentProvider string) bool {
+	return paymentProvider == PaymentProviderAlipayOfficial ||
+		paymentProvider == PaymentProviderWechatPayOfficial
+}
 
 var (
 	ErrPaymentMethodMismatch = errors.New("payment method mismatch")
@@ -517,6 +523,51 @@ func ListPendingTopUpsBefore(paymentProvider string, createBefore int64, limit i
 		Limit(limit).
 		Find(&topUps).Error
 	return topUps, err
+}
+
+func ExpireOfficialPaymentPendingTopUpsBefore(ctx context.Context, paymentProvider string, createBefore int64, completeTime int64, userId int) (int64, error) {
+	if !IsOfficialPaymentProvider(paymentProvider) {
+		return 0, ErrPaymentMethodMismatch
+	}
+	if createBefore <= 0 {
+		return 0, nil
+	}
+	if completeTime <= 0 {
+		completeTime = common.GetTimestamp()
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	var expiredTopUps int64
+	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		subscriptionQuery := tx.Model(&SubscriptionOrder{}).
+			Where("payment_provider = ? AND status = ? AND create_time <= ?", paymentProvider, common.TopUpStatusPending, createBefore)
+		if userId > 0 {
+			subscriptionQuery = subscriptionQuery.Where("user_id = ?", userId)
+		}
+		if err := subscriptionQuery.Updates(map[string]interface{}{
+			"status":        common.TopUpStatusExpired,
+			"complete_time": completeTime,
+		}).Error; err != nil {
+			return err
+		}
+		query := tx.Model(&TopUp{}).
+			Where("payment_provider = ? AND status = ? AND create_time <= ?", paymentProvider, common.TopUpStatusPending, createBefore)
+		if userId > 0 {
+			query = query.Where("user_id = ?", userId)
+		}
+		result := query.Updates(map[string]interface{}{
+			"status":        common.TopUpStatusExpired,
+			"complete_time": completeTime,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		expiredTopUps = result.RowsAffected
+		return nil
+	})
+	return expiredTopUps, err
 }
 
 func CreateOfficialPaymentRefund(params OfficialPaymentRefundCreateParams) (*TopUpRefund, error) {
@@ -1413,7 +1464,7 @@ func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, tota
 	return GetUserTopUpsWithOptions(userId, TopUpQueryOptions{}, pageInfo)
 }
 
-// topUpReadTxOptions 返回账单列表 COUNT/SELECT 所用的只读事务选项。
+// topUpReadTxOptions 返回账单列表 COUNT/SUM/SELECT 所用的只读事务选项。
 // 使用 ReadOnly 让驱动可以走只读优化；显式 RepeatableRead 让 PostgreSQL
 // 也能在同一请求内获得稳定快照（MySQL InnoDB 默认即为 RepeatableRead）；
 // SQLite 驱动只支持 Serializable，故走默认隔离级别（WAL 模式下事务即快照）。
@@ -1426,7 +1477,10 @@ func topUpReadTxOptions() *sql.TxOptions {
 
 func scanTopUpTotalMoney(query *gorm.DB, totalMoney *float64) error {
 	var total sql.NullFloat64
-	if err := query.Session(&gorm.Session{}).Select("COALESCE(SUM(money), 0)").Scan(&total).Error; err != nil {
+	if err := query.Session(&gorm.Session{}).
+		Where("status = ?", common.TopUpStatusSuccess).
+		Select("COALESCE(SUM(money), 0)").
+		Scan(&total).Error; err != nil {
 		return err
 	}
 	if total.Valid {
@@ -1536,6 +1590,16 @@ func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp
 	return GetAllTopUpsWithOptions(TopUpQueryOptions{Keyword: keyword}, pageInfo)
 }
 
+func IsSubscriptionTopUpRecord(topUp *TopUp) bool {
+	if topUp == nil || topUp.Amount != 0 {
+		return false
+	}
+	tradeNo := strings.ToUpper(strings.TrimSpace(topUp.TradeNo))
+	return strings.HasPrefix(tradeNo, "SUB") ||
+		strings.HasPrefix(tradeNo, "ALIPAYSUB") ||
+		strings.HasPrefix(tradeNo, "WXSUB")
+}
+
 // ManualCompleteTopUp 管理员手动完成订单并给用户充值
 func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	if tradeNo == "" {
@@ -1567,8 +1631,9 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 			return nil
 		}
 
-		if topUp.Status != common.TopUpStatusPending {
-			return errors.New("订单状态不是待支付，无法补单")
+		if topUp.Status != common.TopUpStatusPending &&
+			!(topUp.Status == common.TopUpStatusExpired && IsOfficialPaymentProvider(topUp.PaymentProvider)) {
+			return errors.New("订单状态不是待支付或官方支付已超时，无法补单")
 		}
 
 		// 计算应充值额度：
@@ -1624,6 +1689,22 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	}
 	return nil
 }
+
+// ManualCompleteOfficialSubscriptionTopUp 管理员补齐官方订阅订单。
+func ManualCompleteOfficialSubscriptionTopUp(tradeNo string) error {
+	if tradeNo == "" {
+		return errors.New("未提供订单号")
+	}
+	order := GetSubscriptionOrderByTradeNo(tradeNo)
+	if order == nil {
+		return ErrSubscriptionOrderNotFound
+	}
+	if !IsOfficialPaymentProvider(order.PaymentProvider) {
+		return ErrPaymentMethodMismatch
+	}
+	return CompleteSubscriptionOrder(tradeNo, `{"source":"admin"}`, order.PaymentProvider, order.PaymentMethod)
+}
+
 func RechargeCreem(referenceId string, customerEmail string, customerName string, callerIp string) (err error) {
 	if referenceId == "" {
 		return errors.New("未提供支付单号")
@@ -1874,7 +1955,8 @@ func RechargeOfficialPayment(tradeNo string, expectedPaymentProvider string, act
 			return nil
 		}
 
-		if topUp.Status != common.TopUpStatusPending {
+		if topUp.Status != common.TopUpStatusPending &&
+			!(topUp.Status == common.TopUpStatusExpired && IsOfficialPaymentProvider(topUp.PaymentProvider)) {
 			return errors.New("充值订单状态错误")
 		}
 

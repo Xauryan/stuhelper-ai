@@ -4371,7 +4371,21 @@
     "下一条": "Tiep theo",
     "关闭后继续显示下一条": "Muc tiep theo se hien thi sau khi dong",
     "总金额": "Tổng số tiền",
+    "支付成功金额": "Số tiền thanh toán thành công",
     "官方支付宝": "Alipay chính thức",
-    "官方微信": "WeChat Pay chính thức"
+    "官方微信": "WeChat Pay chính thức",
+    "官方支付接入使用支付宝电脑网站支付、支付宝手机网站支付和微信 Native 支付。": "Tich hop thanh toan chinh thuc su dung Alipay tren may tinh, Alipay tren di dong va WeChat Native.",
+    "订单超时时间（秒）": "Thoi gian qua han don (giay)",
+    "默认 600 秒，超时后自动关闭支付宝订单": "Mac dinh 600 giay. Don Alipay qua han se tu dong dong.",
+    "默认 600 秒，超时后微信支付订单将失效": "Mac dinh 600 giay. Don WeChat Pay qua han se khong con hieu luc.",
+    "微信支付返回地址": "URL quay lai WeChat Pay",
+    "订单创建后 {{duration}}内有效，超时无效。": "Don co hieu luc trong {{duration}} sau khi tao. Qua thoi gian nay don se khong con hieu luc.",
+    "当前移动端不支持使用微信支付，请使用电脑端或选择其他支付方式": "Hien tai thiet bi di dong khong ho tro WeChat Pay. Vui long dung may tinh hoac chon phuong thuc thanh toan khac.",
+    "二维码加载中": "Dang tai ma QR",
+    "订单已超时，请重新发起支付": "Don da qua han. Vui long tao thanh toan lai.",
+    "请在 {{duration}}内支付，超时无效。": "Vui long thanh toan trong {{duration}}. Qua thoi gian nay don se khong con hieu luc.",
+    "订单已停止等待支付结果": "Da dung cho ket qua thanh toan",
+    "支付完成后将自动刷新余额": "So du se tu dong lam moi sau khi thanh toan",
+    "支付完成后将自动刷新": "Trang se tu dong lam moi sau khi thanh toan"
   }
 }

@@ -1,10 +1,12 @@
 package model
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -167,6 +169,69 @@ func TestUpdateOptionRejectsInvalidReferralCommissionSettings(t *testing.T) {
 
 	require.Error(t, UpdateOption("ReferralCommissionMaxRecharges", "-1"))
 	assert.Equal(t, 3, common.ReferralCommissionMaxRecharges)
+}
+
+func TestLoadOptionsFromDatabaseKeepsAlipayTimeoutSecondsOverLegacyMinutes(t *testing.T) {
+	truncateTables(t)
+
+	originalOptionMap := common.OptionMap
+	originalAlipayTimeoutSec := setting.AlipayOfficialOrderTimeoutSec
+	originalAlipayTimeoutMin := setting.AlipayOfficialOrderTimeoutMin
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap = originalOptionMap
+		common.OptionMapRWMutex.Unlock()
+		setting.AlipayOfficialOrderTimeoutSec = originalAlipayTimeoutSec
+		setting.AlipayOfficialOrderTimeoutMin = originalAlipayTimeoutMin
+	})
+
+	common.OptionMapRWMutex.Lock()
+	common.OptionMap = map[string]string{}
+	common.OptionMapRWMutex.Unlock()
+	setting.AlipayOfficialOrderTimeoutSec = 600
+	setting.AlipayOfficialOrderTimeoutMin = 10
+
+	require.NoError(t, DB.Create(&Option{Key: "AlipayOfficialOrderTimeoutMin", Value: "15"}).Error)
+	require.NoError(t, DB.Create(&Option{Key: "AlipayOfficialOrderTimeoutSec", Value: "450"}).Error)
+
+	loadOptionsFromDatabase()
+
+	require.Equal(t, 450, setting.AlipayOfficialOrderTimeoutSec)
+	common.OptionMapRWMutex.RLock()
+	require.Equal(t, "450", common.OptionMap["AlipayOfficialOrderTimeoutSec"])
+	common.OptionMapRWMutex.RUnlock()
+}
+
+func TestLoadOptionsFromDatabaseMigratesLegacyAlipayTimeoutMinutes(t *testing.T) {
+	truncateTables(t)
+
+	originalOptionMap := common.OptionMap
+	originalAlipayTimeoutSec := setting.AlipayOfficialOrderTimeoutSec
+	originalAlipayTimeoutMin := setting.AlipayOfficialOrderTimeoutMin
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap = originalOptionMap
+		common.OptionMapRWMutex.Unlock()
+		setting.AlipayOfficialOrderTimeoutSec = originalAlipayTimeoutSec
+		setting.AlipayOfficialOrderTimeoutMin = originalAlipayTimeoutMin
+	})
+
+	common.OptionMapRWMutex.Lock()
+	common.OptionMap = map[string]string{}
+	common.OptionMapRWMutex.Unlock()
+	setting.AlipayOfficialOrderTimeoutSec = 600
+	setting.AlipayOfficialOrderTimeoutMin = 10
+
+	require.NoError(t, DB.Create(&Option{Key: "AlipayOfficialOrderTimeoutMin", Value: "12"}).Error)
+
+	loadOptionsFromDatabase()
+
+	require.Equal(t, 720, setting.AlipayOfficialOrderTimeoutSec)
+	require.Equal(t, 12, setting.AlipayOfficialOrderTimeoutMin)
+	common.OptionMapRWMutex.RLock()
+	require.Equal(t, strconv.Itoa(12), common.OptionMap["AlipayOfficialOrderTimeoutMin"])
+	require.Equal(t, strconv.Itoa(720), common.OptionMap["AlipayOfficialOrderTimeoutSec"])
+	common.OptionMapRWMutex.RUnlock()
 }
 
 func TestInsertWithReferralCommissionEnabledStillCreditsOneTimeInviteRewards(t *testing.T) {

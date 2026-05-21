@@ -47,7 +47,7 @@ const defaultInputs = {
   AlipayOfficialReturnURL: '',
   AlipayOfficialUnitPrice: 1.0,
   AlipayOfficialMinTopUp: 1,
-  AlipayOfficialOrderTimeoutMin: 10,
+  AlipayOfficialOrderTimeoutSec: 600,
 
   WechatPayOfficialEnabled: false,
   WechatPayOfficialAppID: '',
@@ -60,6 +60,7 @@ const defaultInputs = {
   WechatPayOfficialReturnURL: '',
   WechatPayOfficialUnitPrice: 1.0,
   WechatPayOfficialMinTopUp: 1,
+  WechatPayOfficialOrderTimeoutSec: 600,
 };
 
 export default function SettingsPaymentGatewayOfficialChina(props) {
@@ -92,10 +93,12 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         props.options.AlipayOfficialMinTopUp !== undefined
           ? parseFloat(props.options.AlipayOfficialMinTopUp)
           : 1,
-      AlipayOfficialOrderTimeoutMin:
-        props.options.AlipayOfficialOrderTimeoutMin !== undefined
-          ? parseInt(props.options.AlipayOfficialOrderTimeoutMin, 10)
-          : 10,
+      AlipayOfficialOrderTimeoutSec:
+        props.options.AlipayOfficialOrderTimeoutSec !== undefined
+          ? parseInt(props.options.AlipayOfficialOrderTimeoutSec, 10)
+          : props.options.AlipayOfficialOrderTimeoutMin !== undefined
+            ? parseInt(props.options.AlipayOfficialOrderTimeoutMin, 10) * 60
+            : 600,
 
       WechatPayOfficialEnabled: toBoolean(
         props.options.WechatPayOfficialEnabled,
@@ -118,6 +121,10 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         props.options.WechatPayOfficialMinTopUp !== undefined
           ? parseFloat(props.options.WechatPayOfficialMinTopUp)
           : 1,
+      WechatPayOfficialOrderTimeoutSec:
+        props.options.WechatPayOfficialOrderTimeoutSec !== undefined
+          ? parseInt(props.options.WechatPayOfficialOrderTimeoutSec, 10)
+          : 600,
     };
 
     setInputs(currentInputs);
@@ -172,12 +179,12 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         showError(t('最低充值美元数量必须大于 0'));
         return;
       }
-      if (Number(values.AlipayOfficialOrderTimeoutMin) < 1) {
+      if (Number(values.AlipayOfficialOrderTimeoutSec) < 1) {
         showError(t('订单超时时间必须大于 0'));
         return;
       }
-      values.AlipayOfficialOrderTimeoutMin = Math.floor(
-        Number(values.AlipayOfficialOrderTimeoutMin) || 10,
+      values.AlipayOfficialOrderTimeoutSec = Math.floor(
+        Number(values.AlipayOfficialOrderTimeoutSec) || 600,
       );
     }
 
@@ -232,6 +239,13 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         showError(t('最低充值美元数量必须大于 0'));
         return;
       }
+      if (Number(values.WechatPayOfficialOrderTimeoutSec) < 1) {
+        showError(t('订单超时时间必须大于 0'));
+        return;
+      }
+      values.WechatPayOfficialOrderTimeoutSec = Math.floor(
+        Number(values.WechatPayOfficialOrderTimeoutSec) || 600,
+      );
     }
 
     const options = buildOfficialChinaPaymentOptions(values, props.options);
@@ -274,7 +288,7 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
             description={
               <>
                 {t(
-                  '官方支付接入使用支付宝电脑网站支付、支付宝手机网站支付、微信 Native 支付和微信 H5 支付。',
+                  '官方支付接入使用支付宝电脑网站支付、支付宝手机网站支付和微信 Native 支付。',
                 )}
                 <br />
                 {t('支付宝回调地址')}：
@@ -434,11 +448,11 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.InputNumber
-                    field='AlipayOfficialOrderTimeoutMin'
-                    label={t('订单超时时间（分钟）')}
+                    field='AlipayOfficialOrderTimeoutSec'
+                    label={t('订单超时时间（秒）')}
                     min={1}
                     precision={0}
-                    extraText={t('默认 10 分钟，超时后自动关闭支付宝订单')}
+                    extraText={t('默认 600 秒，超时后自动关闭支付宝订单')}
                   />
                 </Col>
               </Row>
@@ -522,7 +536,7 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                   />
                   <Form.Input
                     field='WechatPayOfficialReturnURL'
-                    label={t('微信支付 H5 返回地址')}
+                    label={t('微信支付返回地址')}
                     placeholder={t('留空则使用默认充值页地址')}
                     style={{ marginTop: 16 }}
                   />
@@ -548,6 +562,15 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                     field='WechatPayOfficialMinTopUp'
                     label={t('最低充值美元数量')}
                     min={1}
+                  />
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.InputNumber
+                    field='WechatPayOfficialOrderTimeoutSec'
+                    label={t('订单超时时间（秒）')}
+                    min={1}
+                    precision={0}
+                    extraText={t('默认 600 秒，超时后微信支付订单将失效')}
                   />
                 </Col>
               </Row>

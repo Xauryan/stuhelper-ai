@@ -3840,7 +3840,21 @@
     "关闭后继续显示下一条": "L element suivant sera affiche apres la fermeture",
     "用户ID": "ID utilisateur",
     "总金额": "Montant total",
+    "支付成功金额": "Montant des paiements reussis",
     "官方支付宝": "Alipay officiel",
-    "官方微信": "WeChat Pay officiel"
+    "官方微信": "WeChat Pay officiel",
+    "官方支付接入使用支付宝电脑网站支付、支付宝手机网站支付和微信 Native 支付。": "L integration de paiement officiel utilise Alipay desktop, Alipay mobile et WeChat Native.",
+    "订单超时时间（秒）": "Expiration de commande (secondes)",
+    "默认 600 秒，超时后自动关闭支付宝订单": "Par defaut 600 secondes. Les commandes Alipay expirees sont fermees automatiquement.",
+    "默认 600 秒，超时后微信支付订单将失效": "Par defaut 600 secondes. Les commandes WeChat Pay expirees deviennent invalides.",
+    "微信支付返回地址": "URL de retour WeChat Pay",
+    "订单创建后 {{duration}}内有效，超时无效。": "La commande est valide pendant {{duration}} apres sa creation. Elle devient invalide apres expiration.",
+    "当前移动端不支持使用微信支付，请使用电脑端或选择其他支付方式": "WeChat Pay n est pas pris en charge sur mobile. Utilisez un ordinateur ou choisissez un autre moyen de paiement.",
+    "二维码加载中": "Chargement du QR code",
+    "订单已超时，请重新发起支付": "La commande a expire. Veuillez relancer le paiement.",
+    "请在 {{duration}}内支付，超时无效。": "Veuillez payer dans {{duration}}. La commande devient invalide apres expiration.",
+    "订单已停止等待支付结果": "Attente du resultat de paiement arretee",
+    "支付完成后将自动刷新余额": "Le solde sera actualise automatiquement apres le paiement",
+    "支付完成后将自动刷新": "La page sera actualisee automatiquement apres le paiement"
   }
 }

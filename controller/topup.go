@@ -105,11 +105,12 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 		if !hasAlipayOfficial {
 			payMethods = append(payMethods, map[string]string{
-				"name":       "支付宝",
-				"type":       model.PaymentMethodAlipayOfficial,
-				"color":      "rgba(var(--semi-blue-5), 1)",
-				"min_topup":  strconv.Itoa(setting.AlipayOfficialMinTopUp),
-				"unit_price": strconv.FormatFloat(setting.AlipayOfficialUnitPrice, 'f', -1, 64),
+				"name":                  "支付宝",
+				"type":                  model.PaymentMethodAlipayOfficial,
+				"color":                 "rgba(var(--semi-blue-5), 1)",
+				"min_topup":             strconv.Itoa(setting.AlipayOfficialMinTopUp),
+				"unit_price":            strconv.FormatFloat(setting.AlipayOfficialUnitPrice, 'f', -1, 64),
+				"order_timeout_seconds": strconv.Itoa(getAlipayOfficialOrderTimeoutSeconds()),
 			})
 		}
 	}
@@ -125,11 +126,12 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 		if !hasWechatPayOfficial {
 			payMethods = append(payMethods, map[string]string{
-				"name":       "微信",
-				"type":       model.PaymentMethodWechatPayOfficial,
-				"color":      "rgba(var(--semi-green-5), 1)",
-				"min_topup":  strconv.Itoa(setting.WechatPayOfficialMinTopUp),
-				"unit_price": strconv.FormatFloat(setting.WechatPayOfficialUnitPrice, 'f', -1, 64),
+				"name":                  "微信",
+				"type":                  model.PaymentMethodWechatPayOfficial,
+				"color":                 "rgba(var(--semi-green-5), 1)",
+				"min_topup":             strconv.Itoa(setting.WechatPayOfficialMinTopUp),
+				"unit_price":            strconv.FormatFloat(setting.WechatPayOfficialUnitPrice, 'f', -1, 64),
+				"order_timeout_seconds": strconv.Itoa(getWechatPayOfficialOrderTimeoutSeconds()),
 			})
 		}
 	}
@@ -148,17 +150,19 @@ func GetTopUpInfo(c *gin.Context) {
 			}
 			return nil
 		}(),
-		"creem_products":                setting.CreemProducts,
-		"pay_methods":                   payMethods,
-		"min_topup":                     operation_setting.MinTopUp,
-		"stripe_min_topup":              setting.StripeMinTopUp,
-		"waffo_min_topup":               setting.WaffoMinTopUp,
-		"waffo_pancake_min_topup":       setting.WaffoPancakeMinTopUp,
-		"alipay_official_min_topup":     setting.AlipayOfficialMinTopUp,
-		"wechat_pay_official_min_topup": setting.WechatPayOfficialMinTopUp,
-		"amount_options":                operation_setting.GetPaymentSetting().AmountOptions,
-		"discount":                      operation_setting.GetPaymentSetting().AmountDiscount,
-		"topup_link":                    common.TopUpLink,
+		"creem_products":                    setting.CreemProducts,
+		"pay_methods":                       payMethods,
+		"min_topup":                         operation_setting.MinTopUp,
+		"stripe_min_topup":                  setting.StripeMinTopUp,
+		"waffo_min_topup":                   setting.WaffoMinTopUp,
+		"waffo_pancake_min_topup":           setting.WaffoPancakeMinTopUp,
+		"alipay_official_min_topup":         setting.AlipayOfficialMinTopUp,
+		"alipay_official_order_timeout":     getAlipayOfficialOrderTimeoutSeconds(),
+		"wechat_pay_official_min_topup":     setting.WechatPayOfficialMinTopUp,
+		"wechat_pay_official_order_timeout": getWechatPayOfficialOrderTimeoutSeconds(),
+		"amount_options":                    operation_setting.GetPaymentSetting().AmountOptions,
+		"discount":                          operation_setting.GetPaymentSetting().AmountDiscount,
+		"topup_link":                        common.TopUpLink,
 	}
 	common.ApiSuccess(c, data)
 }
@@ -465,6 +469,7 @@ func RequestAmount(c *gin.Context) {
 func GetUserTopUps(c *gin.Context) {
 	userId := c.GetInt("id")
 	pageInfo := common.GetPageQuery(c)
+	refreshOfficialPaymentTimeoutsForTopUpList(c.Request.Context(), userId)
 	result, err := model.GetUserTopUpsResultWithOptions(userId, getTopUpQueryOptions(c), pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
@@ -482,6 +487,7 @@ func GetAllTopUps(c *gin.Context) {
 	// 这里用 TryLock 保护的 goroutine 兜底，避免无 master 部署下本地订单永远停留在 pending；
 	// 不阻塞列表请求。
 	go runAlipayOfficialOrderExpireTaskOnce(context.Background())
+	refreshOfficialPaymentTimeoutsForTopUpList(c.Request.Context(), 0)
 
 	result, err := model.GetAllTopUpsResultWithOptions(getTopUpQueryOptions(c), pageInfo)
 	if err != nil {
@@ -490,6 +496,14 @@ func GetAllTopUps(c *gin.Context) {
 	}
 
 	common.ApiSuccess(c, topUpQueryResponse(pageInfo, result))
+}
+
+func refreshOfficialPaymentTimeoutsForTopUpList(ctx context.Context, userId int) {
+	syncCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if _, err := ExpireOfficialPaymentPendingTopUpsByTimeout(syncCtx, userId); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		logger.LogWarn(syncCtx, fmt.Sprintf("官方支付账单超时状态同步失败 error=%q", err.Error()))
+	}
 }
 
 func getTopUpQueryOptions(c *gin.Context) model.TopUpQueryOptions {
@@ -546,6 +560,16 @@ func AdminCompleteTopUp(c *gin.Context) {
 	// 订单级互斥，防止并发补单
 	LockOrder(req.TradeNo)
 	defer UnlockOrder(req.TradeNo)
+
+	topUp := model.GetTopUpByTradeNo(req.TradeNo)
+	if model.IsSubscriptionTopUpRecord(topUp) && model.IsOfficialPaymentProvider(topUp.PaymentProvider) {
+		if err := model.ManualCompleteOfficialSubscriptionTopUp(req.TradeNo); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		common.ApiSuccess(c, nil)
+		return
+	}
 
 	if err := model.ManualCompleteTopUp(req.TradeNo, c.ClientIP()); err != nil {
 		common.ApiError(c, err)

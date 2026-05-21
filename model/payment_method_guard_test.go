@@ -156,6 +156,71 @@ func TestRechargeOfficialPayment_CreditsQuotaAndMarksSuccess(t *testing.T) {
 	assert.Equal(t, 1000010, getUserQuotaForPaymentGuardTest(t, 103))
 }
 
+func TestRechargeOfficialPaymentCompletesExpiredOfficialOrder(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 106, 10)
+	insertTopUpForPaymentGuardTest(t, "official-expired-success", 106, PaymentProviderWechatPayOfficial)
+	require.NoError(t, DB.Model(&TopUp{}).
+		Where("trade_no = ?", "official-expired-success").
+		Updates(map[string]interface{}{"status": common.TopUpStatusExpired, "complete_time": time.Now().Unix() - 60}).Error)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 500000
+
+	err := RechargeOfficialPayment("official-expired-success", PaymentProviderWechatPayOfficial, PaymentMethodWechatPayOfficial, "127.0.0.1", 9.99)
+	require.NoError(t, err)
+
+	topUp := GetTopUpByTradeNo("official-expired-success")
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
+	assert.Equal(t, PaymentMethodWechatPayOfficial, topUp.PaymentMethod)
+	assert.Equal(t, 1000010, getUserQuotaForPaymentGuardTest(t, 106))
+}
+
+func TestManualCompleteTopUpCompletesExpiredOfficialOrder(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 107, 10)
+	insertTopUpForPaymentGuardTest(t, "official-expired-manual", 107, PaymentProviderAlipayOfficial)
+	require.NoError(t, DB.Model(&TopUp{}).
+		Where("trade_no = ?", "official-expired-manual").
+		Updates(map[string]interface{}{"status": common.TopUpStatusExpired, "complete_time": time.Now().Unix() - 60}).Error)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 100
+
+	err := ManualCompleteTopUp("official-expired-manual", "127.0.0.1")
+	require.NoError(t, err)
+
+	topUp := GetTopUpByTradeNo("official-expired-manual")
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
+	assert.Equal(t, 210, getUserQuotaForPaymentGuardTest(t, 107))
+}
+
+func TestManualCompleteTopUpRejectsExpiredNonOfficialOrder(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 108, 10)
+	insertTopUpForPaymentGuardTest(t, "stripe-expired-manual", 108, PaymentProviderStripe)
+	require.NoError(t, DB.Model(&TopUp{}).
+		Where("trade_no = ?", "stripe-expired-manual").
+		Updates(map[string]interface{}{"status": common.TopUpStatusExpired, "complete_time": time.Now().Unix() - 60}).Error)
+
+	err := ManualCompleteTopUp("stripe-expired-manual", "127.0.0.1")
+	require.Error(t, err)
+
+	assert.Equal(t, common.TopUpStatusExpired, getTopUpStatusForPaymentGuardTest(t, "stripe-expired-manual"))
+	assert.Equal(t, 10, getUserQuotaForPaymentGuardTest(t, 108))
+}
+
 func TestRecordOfficialPaymentRefundLogUsesRefundTypeAndAuditFields(t *testing.T) {
 	truncateTables(t)
 
@@ -1247,6 +1312,60 @@ func TestTopUpQueryOptionsFilterStructuredBillingFieldsAndTotalMoney(t *testing.
 		{
 			UserId:          184,
 			Amount:          10,
+			Money:           100,
+			TradeNo:         "BILLING_ALICE_ALIPAY_PENDING",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusPending,
+			CreateTime:      2001,
+		},
+		{
+			UserId:          184,
+			Amount:          10,
+			Money:           100,
+			TradeNo:         "BILLING_ALICE_ALIPAY_FAILED",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusFailed,
+			CreateTime:      2002,
+		},
+		{
+			UserId:          184,
+			Amount:          10,
+			Money:           100,
+			TradeNo:         "BILLING_ALICE_ALIPAY_EXPIRED",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusExpired,
+			CreateTime:      2003,
+		},
+		{
+			UserId:          184,
+			Amount:          10,
+			Money:           100,
+			TradeNo:         "BILLING_ALICE_ALIPAY_PARTIAL_REFUNDED",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusPartialRefunded,
+			CreateTime:      2004,
+			CompleteTime:    2004,
+			RefundedMoney:   50,
+		},
+		{
+			UserId:          184,
+			Amount:          10,
+			Money:           100,
+			TradeNo:         "BILLING_ALICE_ALIPAY_REFUNDED",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusRefunded,
+			CreateTime:      2005,
+			CompleteTime:    2005,
+			RefundedMoney:   100,
+		},
+		{
+			UserId:          184,
+			Amount:          10,
 			Money:           3.21,
 			TradeNo:         "BILLING_ALICE_WECHAT",
 			PaymentMethod:   PaymentMethodWechatPayOfficial,
@@ -1276,11 +1395,12 @@ func TestTopUpQueryOptionsFilterStructuredBillingFieldsAndTotalMoney(t *testing.
 		EndTime:       2050,
 	}, &common.PageInfo{Page: 1, PageSize: 10})
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), result.Total)
+	assert.Equal(t, int64(6), result.Total)
 	assert.InDelta(t, 12.34, result.TotalMoney, 0.0001)
-	require.Len(t, result.Items, 1)
-	assert.Equal(t, "BILLING_ALICE_ALIPAY", result.Items[0].TradeNo)
-	assert.Equal(t, "alice-billing", result.Items[0].Username)
+	require.Len(t, result.Items, 6)
+	for _, item := range result.Items {
+		assert.Equal(t, "alice-billing", item.Username)
+	}
 }
 
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {
@@ -1392,6 +1512,62 @@ func TestCompleteSubscriptionOrder_PersistsPaymentProviderToTopUp(t *testing.T) 
 	assert.Equal(t, PaymentProviderAlipayOfficial, topUp.PaymentProvider)
 	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
 	assert.NotZero(t, topUp.CompleteTime)
+}
+
+func TestCompleteSubscriptionOrderCompletesExpiredOfficialOrder(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 207, 0)
+	plan := insertSubscriptionPlanForPaymentGuardTest(t, 307)
+	insertSubscriptionOrderForPaymentGuardTest(t, "sub-official-expired-success", 207, plan.Id, PaymentProviderWechatPayOfficial)
+	require.NoError(t, DB.Model(&SubscriptionOrder{}).
+		Where("trade_no = ?", "sub-official-expired-success").
+		Updates(map[string]interface{}{"status": common.TopUpStatusExpired, "complete_time": time.Now().Unix() - 60}).Error)
+	require.NoError(t, DB.Model(&TopUp{}).
+		Where("trade_no = ?", "sub-official-expired-success").
+		Updates(map[string]interface{}{"status": common.TopUpStatusExpired, "complete_time": time.Now().Unix() - 60}).Error)
+
+	err := CompleteSubscriptionOrder("sub-official-expired-success", `{"provider":"wxpay_official"}`, PaymentProviderWechatPayOfficial, PaymentMethodWechatPayOfficial)
+	require.NoError(t, err)
+
+	order := GetSubscriptionOrderByTradeNo("sub-official-expired-success")
+	require.NotNil(t, order)
+	assert.Equal(t, common.TopUpStatusSuccess, order.Status)
+	assert.Equal(t, PaymentMethodWechatPayOfficial, order.PaymentMethod)
+	assert.Equal(t, int64(1), countUserSubscriptionsForPaymentGuardTest(t, 207))
+
+	topUp := GetTopUpByTradeNo("sub-official-expired-success")
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
+	assert.Equal(t, PaymentProviderWechatPayOfficial, topUp.PaymentProvider)
+}
+
+func TestManualCompleteOfficialSubscriptionTopUpCompletesExpiredOfficialOrder(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 208, 0)
+	plan := insertSubscriptionPlanForPaymentGuardTest(t, 308)
+	insertSubscriptionOrderForPaymentGuardTest(t, "sub-official-expired-admin", 208, plan.Id, PaymentProviderAlipayOfficial)
+	require.NoError(t, DB.Model(&SubscriptionOrder{}).
+		Where("trade_no = ?", "sub-official-expired-admin").
+		Updates(map[string]interface{}{"status": common.TopUpStatusExpired, "complete_time": time.Now().Unix() - 60}).Error)
+	require.NoError(t, DB.Model(&TopUp{}).
+		Where("trade_no = ?", "sub-official-expired-admin").
+		Updates(map[string]interface{}{"status": common.TopUpStatusExpired, "complete_time": time.Now().Unix() - 60}).Error)
+
+	err := ManualCompleteOfficialSubscriptionTopUp("sub-official-expired-admin")
+	require.NoError(t, err)
+
+	order := GetSubscriptionOrderByTradeNo("sub-official-expired-admin")
+	require.NotNil(t, order)
+	assert.Equal(t, common.TopUpStatusSuccess, order.Status)
+	assert.Equal(t, PaymentMethodAlipayOfficial, order.PaymentMethod)
+	assert.Equal(t, int64(1), countUserSubscriptionsForPaymentGuardTest(t, 208))
+
+	topUp := GetTopUpByTradeNo("sub-official-expired-admin")
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
+	assert.Equal(t, PaymentProviderAlipayOfficial, topUp.PaymentProvider)
 }
 
 func TestCompleteSubscriptionOrderAllowsEpayActualPaymentMethod(t *testing.T) {

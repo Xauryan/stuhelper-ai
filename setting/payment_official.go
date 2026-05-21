@@ -14,6 +14,7 @@ var (
 	AlipayOfficialReturnURL       string
 	AlipayOfficialUnitPrice       float64 = 1.0
 	AlipayOfficialMinTopUp        int     = 1
+	AlipayOfficialOrderTimeoutSec int     = 600
 	AlipayOfficialOrderTimeoutMin int     = 10
 
 	WechatPayOfficialEnabled           bool
@@ -27,4 +28,5 @@ var (
 	WechatPayOfficialReturnURL         string
 	WechatPayOfficialUnitPrice         float64 = 1.0
 	WechatPayOfficialMinTopUp          int     = 1
+	WechatPayOfficialOrderTimeoutSec   int     = 600
 )

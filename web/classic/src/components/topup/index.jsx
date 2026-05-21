@@ -31,7 +31,6 @@ import {
 } from '../../helpers';
 import { Modal, Toast } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
-import { QRCodeSVG } from 'qrcode.react';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 
@@ -40,10 +39,12 @@ import InvitationCard from './InvitationCard';
 import TransferModal from './modals/TransferModal';
 import PaymentConfirmModal from './modals/PaymentConfirmModal';
 import TopupHistoryModal from './modals/TopupHistoryModal';
+import WechatOfficialQrPaymentModal from './modals/WechatOfficialQrPaymentModal';
 import {
   getOfficialWechatStatus,
   getTopupStatusFromPage,
-  getWechatOfficialQrPaymentHint,
+  normalizeOfficialPaymentOrderTimeoutSeconds,
+  shouldBlockOfficialWechatMobilePayment,
 } from './wechatOfficialPaymentStatus.mjs';
 
 const TopUp = () => {
@@ -90,6 +91,9 @@ const TopUp = () => {
   const [wechatQrOrderId, setWechatQrOrderId] = useState('');
   const [wechatQrFallback, setWechatQrFallback] = useState('');
   const [wechatQrChecking, setWechatQrChecking] = useState(false);
+  const [wechatQrCreatedAt, setWechatQrCreatedAt] = useState(0);
+  const [wechatQrOrderTimeoutSeconds, setWechatQrOrderTimeoutSeconds] =
+    useState(600);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
@@ -126,7 +130,17 @@ const TopUp = () => {
   const [topupInfo, setTopupInfo] = useState({
     amount_options: [],
     discount: {},
+    payment_timeouts: {},
   });
+
+  const getPaymentOrderTimeoutSeconds = React.useCallback(
+    (payment) => {
+      return normalizeOfficialPaymentOrderTimeoutSeconds(
+        topupInfo?.payment_timeouts?.[payment],
+      );
+    },
+    [topupInfo?.payment_timeouts],
+  );
 
   const confirmPayMethods = [
     ...payMethods,
@@ -247,6 +261,14 @@ const TopUp = () => {
     } else if (payment === 'wxpay_official') {
       if (!enableWechatPayOfficialTopUp) {
         showError(t('管理员未开启微信支付官方充值！'));
+        return;
+      }
+      if (
+        shouldBlockOfficialWechatMobilePayment(payment, isMobilePaymentScene())
+      ) {
+        showError(
+          t('当前移动端不支持使用微信支付，请使用电脑端或选择其他支付方式'),
+        );
         return;
       }
     } else if (payment === 'waffo_pancake') {
@@ -564,7 +586,15 @@ const TopUp = () => {
       return;
     }
 
-    const scene = isMobilePaymentScene() ? 'h5' : 'pc';
+    const mobileScene = isMobilePaymentScene();
+    if (shouldBlockOfficialWechatMobilePayment(payment, mobileScene)) {
+      showError(
+        t('当前移动端不支持使用微信支付，请使用电脑端或选择其他支付方式'),
+      );
+      return;
+    }
+
+    const scene = mobileScene ? 'h5' : 'pc';
     const alipayWindow =
       payment === 'alipay_official' && scene === 'pc'
         ? window.open('', '_blank')
@@ -604,6 +634,12 @@ const TopUp = () => {
       setWechatQrCodeUrl(data.code_url);
       setWechatQrOrderId(data.order_id || '');
       setWechatQrFallback(data.fallback || '');
+      setWechatQrCreatedAt(Date.now());
+      setWechatQrOrderTimeoutSeconds(
+        normalizeOfficialPaymentOrderTimeoutSeconds(
+          data.order_timeout_seconds || getPaymentOrderTimeoutSeconds(payment),
+        ),
+      );
       setWechatQrOpen(true);
       return;
     }
@@ -616,6 +652,7 @@ const TopUp = () => {
     setWechatQrOrderId('');
     setWechatQrFallback('');
     setWechatQrChecking(false);
+    setWechatQrCreatedAt(0);
   };
 
   const checkWechatQrOrderStatus = async (orderId) => {
@@ -805,6 +842,14 @@ const TopUp = () => {
         setTopupInfo({
           amount_options: data.amount_options || [],
           discount: data.discount || {},
+          payment_timeouts: {
+            alipay_official:
+              data.alipay_official_order_timeout ||
+              data.alipay_official_order_timeout_seconds,
+            wxpay_official:
+              data.wechat_pay_official_order_timeout ||
+              data.wechat_pay_official_order_timeout_seconds,
+          },
         });
 
         // 处理支付方式
@@ -830,6 +875,10 @@ const TopUp = () => {
                 Number.isFinite(normalizedUnitPrice) && normalizedUnitPrice > 0
                   ? normalizedUnitPrice
                   : undefined;
+              method.order_timeout_seconds =
+                normalizeOfficialPaymentOrderTimeoutSeconds(
+                  method.order_timeout_seconds,
+                );
 
               // Stripe 的最小充值从后端字段回填
               if (
@@ -1198,6 +1247,7 @@ const TopUp = () => {
         payMethods={confirmPayMethods}
         amountNumber={amount}
         discountRate={topupInfo?.discount?.[topUpCount] || 1.0}
+        orderTimeoutSeconds={getPaymentOrderTimeoutSeconds(payWay)}
       />
 
       {/* 充值账单模态框 */}
@@ -1207,31 +1257,16 @@ const TopUp = () => {
         t={t}
       />
 
-      <Modal
-        title={t('微信支付扫码')}
+      <WechatOfficialQrPaymentModal
+        t={t}
         visible={wechatQrOpen}
+        codeUrl={wechatQrCodeUrl}
+        fallback={wechatQrFallback}
+        checking={wechatQrChecking}
+        createdAt={wechatQrCreatedAt}
+        orderTimeoutSeconds={wechatQrOrderTimeoutSeconds}
         onCancel={closeWechatQrModal}
-        footer={null}
-        size='small'
-        centered
-      >
-        <div className='flex flex-col items-center gap-3 py-2'>
-          {wechatQrCodeUrl && (
-            <QRCodeSVG value={wechatQrCodeUrl} size={220} level='M' />
-          )}
-          <div className='text-sm text-gray-500 text-center'>
-            {t(getWechatOfficialQrPaymentHint(wechatQrFallback))}
-          </div>
-          <div className='text-xs text-gray-400 text-center'>
-            {wechatQrChecking ? t('正在等待支付结果') : t('支付后将自动刷新')}
-          </div>
-          {wechatQrOrderId && (
-            <div className='text-xs text-gray-400 break-all text-center'>
-              {wechatQrOrderId}
-            </div>
-          )}
-        </div>
-      </Modal>
+      />
 
       {/* Creem 充值确认模态框 */}
       <Modal
@@ -1302,6 +1337,7 @@ const TopUp = () => {
           getPaymentUnitPrice={getPaymentUnitPrice}
           statusLoading={statusLoading}
           topupInfo={topupInfo}
+          getPaymentOrderTimeoutSeconds={getPaymentOrderTimeoutSeconds}
           onOpenHistory={handleOpenHistory}
           subscriptionLoading={subscriptionLoading}
           subscriptionPlans={subscriptionPlans}

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/model"
@@ -189,10 +190,33 @@ func TestAlipayOfficialCloseDoesNotExpireOrderWhenTradeIsNotFound(t *testing.T) 
 	require.True(t, shouldExpireAlipayOfficialOrderAfterClose(nil))
 }
 
-func TestFormatAlipayOfficialTimeoutExpressUsesConfiguredMinutes(t *testing.T) {
-	require.Equal(t, "15m", formatAlipayOfficialTimeoutExpress(15))
+func TestFormatAlipayOfficialTimeoutExpressUsesConfiguredSeconds(t *testing.T) {
+	require.Equal(t, "10m", formatAlipayOfficialTimeoutExpress(600))
+	require.Equal(t, "2m", formatAlipayOfficialTimeoutExpress(61))
 	require.Equal(t, "10m", formatAlipayOfficialTimeoutExpress(0))
 	require.Equal(t, "10m", formatAlipayOfficialTimeoutExpress(-1))
+}
+
+func TestOfficialPaymentOrderTimeoutSecondsFallbackAndWechatExpiry(t *testing.T) {
+	originalAlipayTimeoutSec := setting.AlipayOfficialOrderTimeoutSec
+	originalAlipayTimeoutMin := setting.AlipayOfficialOrderTimeoutMin
+	originalWechatTimeoutSec := setting.WechatPayOfficialOrderTimeoutSec
+	t.Cleanup(func() {
+		setting.AlipayOfficialOrderTimeoutSec = originalAlipayTimeoutSec
+		setting.AlipayOfficialOrderTimeoutMin = originalAlipayTimeoutMin
+		setting.WechatPayOfficialOrderTimeoutSec = originalWechatTimeoutSec
+	})
+
+	setting.AlipayOfficialOrderTimeoutSec = 0
+	setting.AlipayOfficialOrderTimeoutMin = 15
+	require.Equal(t, 900, getAlipayOfficialOrderTimeoutSeconds())
+	setting.AlipayOfficialOrderTimeoutMin = 0
+	require.Equal(t, 600, getAlipayOfficialOrderTimeoutSeconds())
+
+	setting.WechatPayOfficialOrderTimeoutSec = 120
+	require.Equal(t, 120, getWechatPayOfficialOrderTimeoutSeconds())
+	require.True(t, isWechatPayOfficialOrderExpired(time.Now().Add(-121*time.Second).Unix()))
+	require.False(t, isWechatPayOfficialOrderExpired(time.Now().Add(-119*time.Second).Unix()))
 }
 
 func TestGetAlipayOfficialSubscriptionPayMoneyUsesConfiguredUnitPrice(t *testing.T) {

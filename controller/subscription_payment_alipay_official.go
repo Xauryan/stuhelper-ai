@@ -125,7 +125,7 @@ func SubscriptionRequestAlipayOfficialPay(c *gin.Context) {
 		OutTradeNo:       tradeNo,
 		TotalAmount:      formatOfficialPayMoney(payMoney),
 		Subject:          fmt.Sprintf("StuHelper AI 订阅 %s", plan.Title),
-		TimeoutExpress:   formatAlipayOfficialTimeoutExpress(setting.AlipayOfficialOrderTimeoutMin),
+		TimeoutExpress:   formatAlipayOfficialTimeoutExpress(setting.AlipayOfficialOrderTimeoutSec),
 	})
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方订阅支付 生成表单失败 user_id=%d plan_id=%d trade_no=%s error=%q", userId, plan.Id, tradeNo, err.Error()))
@@ -193,6 +193,10 @@ func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
 	}
 
 	scene := normalizeOfficialPaymentScene(req.Scene)
+	if scene == officialPaymentSceneH5 {
+		common.ApiErrorMsg(c, "当前移动端不支持使用微信支付，请使用电脑端或选择其他支付方式")
+		return
+	}
 	tradeNo := buildWechatPayOfficialTradeNo("WXSUB", userId)
 	payMoney := getWechatPayOfficialSubscriptionPayMoney(plan.PriceAmount)
 	if payMoney < 0.01 {
@@ -248,6 +252,7 @@ func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
 		WapURL:      wapURL,
 		WapName:     "StuHelper AI",
 		TradeType:   scene,
+		TimeExpire:  formatWechatPayOfficialTimeExpire(setting.WechatPayOfficialOrderTimeoutSec),
 	})
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("微信支付官方订阅支付 创建预支付订单失败 user_id=%d plan_id=%d trade_no=%s scene=%s error=%q", userId, plan.Id, tradeNo, scene, err.Error()))
@@ -258,8 +263,9 @@ func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
 
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方订阅支付 订单创建成功 user_id=%d plan_id=%d trade_no=%s money=%.2f scene=%s", userId, plan.Id, tradeNo, payMoney, prepay.Scene))
 	data := gin.H{
-		"order_id": tradeNo,
-		"scene":    prepay.Scene,
+		"order_id":              tradeNo,
+		"scene":                 prepay.Scene,
+		"order_timeout_seconds": getWechatPayOfficialOrderTimeoutSeconds(),
 	}
 	if prepay.Scene == officialPaymentSceneH5 {
 		data["payment_type"] = "redirect"

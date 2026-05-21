@@ -63,6 +63,7 @@ const PaymentSetting = () => {
     AlipayOfficialReturnURL: '',
     AlipayOfficialUnitPrice: 1.0,
     AlipayOfficialMinTopUp: 1,
+    AlipayOfficialOrderTimeoutSec: 600,
 
     WechatPayOfficialEnabled: false,
     WechatPayOfficialAppID: '',
@@ -75,6 +76,7 @@ const PaymentSetting = () => {
     WechatPayOfficialReturnURL: '',
     WechatPayOfficialUnitPrice: 1.0,
     WechatPayOfficialMinTopUp: 1,
+    WechatPayOfficialOrderTimeoutSec: 600,
 
     WaffoPancakeEnabled: false,
     WaffoPancakeSandbox: false,
@@ -136,8 +138,10 @@ const PaymentSetting = () => {
           case 'StripeMinTopUp':
           case 'AlipayOfficialUnitPrice':
           case 'AlipayOfficialMinTopUp':
+          case 'AlipayOfficialOrderTimeoutSec':
           case 'WechatPayOfficialUnitPrice':
           case 'WechatPayOfficialMinTopUp':
+          case 'WechatPayOfficialOrderTimeoutSec':
           case 'WaffoPancakeUnitPrice':
           case 'WaffoPancakeMinTopUp':
             newInputs[item.key] = parseFloat(item.value);

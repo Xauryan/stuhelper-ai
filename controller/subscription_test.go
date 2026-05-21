@@ -527,7 +527,7 @@ func TestSubscriptionRequestAlipayOfficialPayRejectsPendingOrderAtPurchaseLimit(
 	assert.Contains(t, recorder.Body.String(), "已达到该套餐购买上限")
 }
 
-func TestSubscriptionRequestWechatPayOfficialPayCreatesOfficialOrder(t *testing.T) {
+func TestSubscriptionRequestWechatPayOfficialPayCreatesNativeOfficialOrder(t *testing.T) {
 	db := setupSubscriptionControllerTestDB(t)
 
 	merchantPrivateKey, _ := generateSubscriptionControllerKeyPair(t)
@@ -570,14 +570,15 @@ func TestSubscriptionRequestWechatPayOfficialPayCreatesOfficialOrder(t *testing.
 	operation_setting.CustomCallbackAddress = ""
 
 	wechatPayOfficialPrepayHTTPClient = roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		require.Equal(t, "/v3/pay/transactions/h5", req.URL.Path)
+		require.Equal(t, "/v3/pay/transactions/native", req.URL.Path)
 		body, err := io.ReadAll(req.Body)
 		require.NoError(t, err)
 		require.Contains(t, string(body), `"description":"StuHelper AI 订阅 Weekly"`)
 		require.Contains(t, string(body), `"notify_url":"https://example.com/api/wechat-pay/official/notify"`)
 		require.Contains(t, string(body), `"total":5030`)
+		require.Contains(t, string(body), `"time_expire":`)
 
-		responseBody := []byte(`{"h5_url":"https://wxpay.example.com/h5"}`)
+		responseBody := []byte(`{"code_url":"weixin://wxpay/bizpayurl?pr=native"}`)
 		timestamp := "1778753000"
 		nonce := "wechat-subscription-response"
 		resp := &http.Response{
@@ -606,7 +607,7 @@ func TestSubscriptionRequestWechatPayOfficialPayCreatesOfficialOrder(t *testing.
 
 	ctx, recorder := newSubscriptionControllerContext(t, http.MethodPost, "/api/subscription/wechat-pay-official/pay", gin.H{
 		"plan_id": plan.Id,
-		"scene":   "h5",
+		"scene":   "pc",
 	})
 	ctx.Set("id", 79)
 
@@ -617,16 +618,18 @@ func TestSubscriptionRequestWechatPayOfficialPayCreatesOfficialOrder(t *testing.
 		Message string `json:"message"`
 		Data    struct {
 			PaymentType string `json:"payment_type"`
-			PaymentURL  string `json:"payment_url"`
+			CodeURL     string `json:"code_url"`
 			OrderID     string `json:"order_id"`
 			Scene       string `json:"scene"`
+			Timeout     int    `json:"order_timeout_seconds"`
 		} `json:"data"`
 	}
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
 	require.Equal(t, "success", response.Message)
-	require.Equal(t, "redirect", response.Data.PaymentType)
-	require.Equal(t, "https://wxpay.example.com/h5", response.Data.PaymentURL)
-	require.Equal(t, "h5", response.Data.Scene)
+	require.Equal(t, "qrcode", response.Data.PaymentType)
+	require.Equal(t, "weixin://wxpay/bizpayurl?pr=native", response.Data.CodeURL)
+	require.Equal(t, "pc", response.Data.Scene)
+	require.Equal(t, 600, response.Data.Timeout)
 
 	order := model.GetSubscriptionOrderByTradeNo(response.Data.OrderID)
 	require.NotNil(t, order)
@@ -635,11 +638,11 @@ func TestSubscriptionRequestWechatPayOfficialPayCreatesOfficialOrder(t *testing.
 	assert.InDelta(t, 50.30, order.Money, 0.000001)
 }
 
-func TestSubscriptionRequestWechatPayOfficialPayFallsBackToNativeWhenH5Unavailable(t *testing.T) {
+func TestSubscriptionRequestWechatPayOfficialPayRejectsH5BeforeCreatingOrder(t *testing.T) {
 	db := setupSubscriptionControllerTestDB(t)
 
 	merchantPrivateKey, _ := generateSubscriptionControllerKeyPair(t)
-	platformPrivateKey, platformPublicKey := generateSubscriptionControllerKeyPair(t)
+	_, platformPublicKey := generateSubscriptionControllerKeyPair(t)
 
 	originalWechatEnabled := setting.WechatPayOfficialEnabled
 	originalWechatAppID := setting.WechatPayOfficialAppID
@@ -651,7 +654,6 @@ func TestSubscriptionRequestWechatPayOfficialPayFallsBackToNativeWhenH5Unavailab
 	originalWechatUnitPrice := setting.WechatPayOfficialUnitPrice
 	originalSystemServerAddress := system_setting.ServerAddress
 	originalCallbackAddress := operation_setting.CustomCallbackAddress
-	originalPrepayHTTPClient := wechatPayOfficialPrepayHTTPClient
 	t.Cleanup(func() {
 		setting.WechatPayOfficialEnabled = originalWechatEnabled
 		setting.WechatPayOfficialAppID = originalWechatAppID
@@ -663,7 +665,6 @@ func TestSubscriptionRequestWechatPayOfficialPayFallsBackToNativeWhenH5Unavailab
 		setting.WechatPayOfficialUnitPrice = originalWechatUnitPrice
 		system_setting.ServerAddress = originalSystemServerAddress
 		operation_setting.CustomCallbackAddress = originalCallbackAddress
-		wechatPayOfficialPrepayHTTPClient = originalPrepayHTTPClient
 	})
 
 	setting.WechatPayOfficialEnabled = true
@@ -676,31 +677,6 @@ func TestSubscriptionRequestWechatPayOfficialPayFallsBackToNativeWhenH5Unavailab
 	setting.WechatPayOfficialUnitPrice = 1.006
 	system_setting.ServerAddress = "https://example.com"
 	operation_setting.CustomCallbackAddress = ""
-
-	var paths []string
-	wechatPayOfficialPrepayHTTPClient = roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		paths = append(paths, req.URL.Path)
-		if req.URL.Path == "/v3/pay/transactions/h5" {
-			return &http.Response{
-				StatusCode: http.StatusForbidden,
-				Header:     http.Header{},
-				Body:       io.NopCloser(bytes.NewReader([]byte(`{"code":"NO_AUTH","message":"商户未开通H5支付权限"}`))),
-			}, nil
-		}
-		require.Equal(t, "/v3/pay/transactions/native", req.URL.Path)
-		responseBody := []byte(`{"code_url":"weixin://wxpay/bizpayurl?pr=fallback"}`)
-		timestamp := "1778753001"
-		nonce := "wechat-native-fallback"
-		resp := &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{},
-			Body:       io.NopCloser(bytes.NewReader(responseBody)),
-		}
-		resp.Header.Set("Wechatpay-Timestamp", timestamp)
-		resp.Header.Set("Wechatpay-Nonce", nonce)
-		resp.Header.Set("Wechatpay-Signature", signSubscriptionControllerWechatHeader(t, platformPrivateKey, timestamp, nonce, responseBody))
-		return resp, nil
-	}).client()
 
 	require.NoError(t, db.Create(&model.User{Id: 81, Username: "sub-wechat-fallback-user", Status: common.UserStatusEnabled}).Error)
 	plan := &model.SubscriptionPlan{
@@ -724,30 +700,11 @@ func TestSubscriptionRequestWechatPayOfficialPayFallsBackToNativeWhenH5Unavailab
 	SubscriptionRequestWechatPayOfficialPay(ctx)
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
-	var response struct {
-		Message string `json:"message"`
-		Data    struct {
-			PaymentType string `json:"payment_type"`
-			CodeURL     string `json:"code_url"`
-			OrderID     string `json:"order_id"`
-			Scene       string `json:"scene"`
-			Fallback    string `json:"fallback"`
-		} `json:"data"`
-	}
-	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
-	require.Equal(t, "success", response.Message)
-	require.Equal(t, []string{"/v3/pay/transactions/h5", "/v3/pay/transactions/native"}, paths)
-	require.Equal(t, "qrcode", response.Data.PaymentType)
-	require.Equal(t, "weixin://wxpay/bizpayurl?pr=fallback", response.Data.CodeURL)
-	require.Equal(t, "pc", response.Data.Scene)
-	require.Equal(t, "native", response.Data.Fallback)
+	require.Contains(t, recorder.Body.String(), "当前移动端不支持使用微信支付，请使用电脑端或选择其他支付方式")
 
-	order := model.GetSubscriptionOrderByTradeNo(response.Data.OrderID)
-	require.NotNil(t, order)
-	assert.Equal(t, common.TopUpStatusPending, order.Status)
-	topUp := model.GetTopUpByTradeNo(response.Data.OrderID)
-	require.NotNil(t, topUp)
-	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
+	var orderCount int64
+	require.NoError(t, db.Model(&model.SubscriptionOrder{}).Where("user_id = ?", 81).Count(&orderCount).Error)
+	require.Equal(t, int64(0), orderCount)
 }
 
 func TestCompleteAlipayOfficialSubscriptionOrderIfPresentCompletesSubscription(t *testing.T) {
@@ -982,6 +939,90 @@ func TestExpireAlipayOfficialOrderExpiresSubscriptionOrder(t *testing.T) {
 	topUp := model.GetTopUpByTradeNo("ALIPAYSUB_EXPIRE")
 	require.NotNil(t, topUp)
 	assert.Equal(t, common.TopUpStatusExpired, topUp.Status)
+}
+
+func TestExpireOfficialPaymentPendingTopUpsByTimeoutExpiresConfiguredProviders(t *testing.T) {
+	db := setupSubscriptionControllerTestDB(t)
+
+	originalAlipayTimeoutSec := setting.AlipayOfficialOrderTimeoutSec
+	originalWechatTimeoutSec := setting.WechatPayOfficialOrderTimeoutSec
+	t.Cleanup(func() {
+		setting.AlipayOfficialOrderTimeoutSec = originalAlipayTimeoutSec
+		setting.WechatPayOfficialOrderTimeoutSec = originalWechatTimeoutSec
+	})
+	setting.AlipayOfficialOrderTimeoutSec = 60
+	setting.WechatPayOfficialOrderTimeoutSec = 120
+
+	require.NoError(t, db.Create(&model.User{Id: 83, Username: "official-expire-user", Status: common.UserStatusEnabled}).Error)
+	now := common.GetTimestamp()
+	require.NoError(t, db.Create(&[]model.TopUp{
+		{
+			UserId:          83,
+			Amount:          1,
+			Money:           1.00,
+			TradeNo:         "ALIPAY_EXPIRE_BY_LIST",
+			PaymentMethod:   model.PaymentMethodAlipayOfficial,
+			PaymentProvider: model.PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusPending,
+			CreateTime:      now - 61,
+		},
+		{
+			UserId:          83,
+			Amount:          1,
+			Money:           1.00,
+			TradeNo:         "WXPAY_EXPIRE_BY_LIST",
+			PaymentMethod:   model.PaymentMethodWechatPayOfficial,
+			PaymentProvider: model.PaymentProviderWechatPayOfficial,
+			Status:          common.TopUpStatusPending,
+			CreateTime:      now - 121,
+		},
+		{
+			UserId:          83,
+			Amount:          1,
+			Money:           1.00,
+			TradeNo:         "WXPAY_STILL_PENDING_BY_LIST",
+			PaymentMethod:   model.PaymentMethodWechatPayOfficial,
+			PaymentProvider: model.PaymentProviderWechatPayOfficial,
+			Status:          common.TopUpStatusPending,
+			CreateTime:      now - 119,
+		},
+	}).Error)
+
+	plan := &model.SubscriptionPlan{
+		Id:            9907,
+		Title:         "Timeout Sync Plan",
+		PriceAmount:   12,
+		Currency:      "USD",
+		DurationUnit:  model.SubscriptionDurationDay,
+		DurationValue: 7,
+		Enabled:       true,
+		TotalAmount:   120,
+	}
+	require.NoError(t, db.Create(plan).Error)
+	order := &model.SubscriptionOrder{
+		UserId:          83,
+		PlanId:          plan.Id,
+		Money:           12.08,
+		TradeNo:         "WXSUB_EXPIRE_BY_LIST",
+		PaymentMethod:   model.PaymentMethodWechatPayOfficial,
+		PaymentProvider: model.PaymentProviderWechatPayOfficial,
+		Status:          common.TopUpStatusPending,
+		CreateTime:      now - 121,
+	}
+	require.NoError(t, order.Insert())
+
+	processed, err := ExpireOfficialPaymentPendingTopUpsByTimeout(context.Background(), 0)
+	require.NoError(t, err)
+	assert.Equal(t, 3, processed)
+
+	assert.Equal(t, common.TopUpStatusExpired, model.GetTopUpByTradeNo("ALIPAY_EXPIRE_BY_LIST").Status)
+	assert.Equal(t, common.TopUpStatusExpired, model.GetTopUpByTradeNo("WXPAY_EXPIRE_BY_LIST").Status)
+	assert.Equal(t, common.TopUpStatusPending, model.GetTopUpByTradeNo("WXPAY_STILL_PENDING_BY_LIST").Status)
+
+	reloadedOrder := model.GetSubscriptionOrderByTradeNo("WXSUB_EXPIRE_BY_LIST")
+	require.NotNil(t, reloadedOrder)
+	assert.Equal(t, common.TopUpStatusExpired, reloadedOrder.Status)
+	assert.Equal(t, common.TopUpStatusExpired, model.GetTopUpByTradeNo("WXSUB_EXPIRE_BY_LIST").Status)
 }
 
 func TestAlipayOfficialQueryCrossChecksResponseOutTradeNo(t *testing.T) {

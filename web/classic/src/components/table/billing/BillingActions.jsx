@@ -40,7 +40,7 @@ const BillingActions = ({
     <div className='flex flex-col md:flex-row justify-between items-start md:items-center gap-2 w-full'>
       <Space>
         <Tag color='blue' style={tagBaseStyle} className='!rounded-lg'>
-          {t('总金额')}: {formatCurrency(totalMoney)}
+          {t('支付成功金额')}: {formatCurrency(totalMoney)}
           {t('元')}
         </Tag>
         <Tag color='pink' style={tagBaseStyle} className='!rounded-lg'>

@@ -45,10 +45,11 @@ const retainedOptions = buildOfficialChinaPaymentOptions(
     AlipayOfficialAlipayPublicKey: '',
     AlipayOfficialUnitPrice: 7.231,
     AlipayOfficialMinTopUp: 1,
-    AlipayOfficialOrderTimeoutMin: 15,
+    AlipayOfficialOrderTimeoutSec: 900,
     WechatPayOfficialEnabled: false,
     WechatPayOfficialUnitPrice: '8',
     WechatPayOfficialMinTopUp: 1,
+    WechatPayOfficialOrderTimeoutSec: 600,
   },
   {
     AlipayOfficialAppAuthTokenConfigured: 'true',
@@ -83,9 +84,15 @@ assert.equal(
 );
 assert.equal(
   retainedOptions.find(
-    (option) => option.key === 'AlipayOfficialOrderTimeoutMin',
+    (option) => option.key === 'AlipayOfficialOrderTimeoutSec',
   )?.value,
-  '15',
+  '900',
+);
+assert.equal(
+  retainedOptions.find(
+    (option) => option.key === 'WechatPayOfficialOrderTimeoutSec',
+  )?.value,
+  '600',
 );
 
 const sensitiveRetainedOptions = buildOfficialChinaPaymentOptions(

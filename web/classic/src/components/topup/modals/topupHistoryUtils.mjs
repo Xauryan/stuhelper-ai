@@ -19,6 +19,22 @@ export const isSubscriptionTopup = (record) => {
   );
 };
 
+export const isOfficialPaymentTopup = (record) =>
+  record?.payment_provider === 'alipay_official' ||
+  record?.payment_method === 'alipay_official' ||
+  record?.payment_provider === 'wxpay_official' ||
+  record?.payment_method === 'wxpay_official';
+
+export const canAdminCompleteTopup = (record) => {
+  if (!record) {
+    return false;
+  }
+  if (record.status === 'pending') {
+    return !isSubscriptionTopup(record) || isOfficialPaymentTopup(record);
+  }
+  return record.status === 'expired' && isOfficialPaymentTopup(record);
+};
+
 export const isAlipayOfficialRefundable = (record) => {
   if (!record) {
     return false;
@@ -42,28 +58,19 @@ export const isOfficialRefundable = (record) => {
   if (!record) {
     return false;
   }
-  const isOfficial =
-    record.payment_provider === 'alipay_official' ||
-    record.payment_method === 'alipay_official' ||
-    record.payment_provider === 'wxpay_official' ||
-    record.payment_method === 'wxpay_official';
   const statusAllowsRefund =
     record.status === 'success' || record.status === 'partial_refunded';
   return (
-    isOfficial && statusAllowsRefund && getRemainingRefundMoney(record) > 0
+    isOfficialPaymentTopup(record) &&
+    statusAllowsRefund &&
+    getRemainingRefundMoney(record) > 0
   );
 };
 
 export const formatCurrency = (value) => Number(value || 0).toFixed(2);
 
-export const TOPUP_PAYMENT_METHODS = [
+export const BILLING_PAYMENT_METHOD_FILTERS = [
   { value: '', key: '全部' },
-  { value: 'alipay', key: '支付宝' },
-  { value: 'wxpay', key: '微信' },
-  { value: 'alipay_official', key: '官方支付宝' },
-  { value: 'wxpay_official', key: '官方微信' },
-  { value: 'stripe', key: 'Stripe' },
-  { value: 'creem', key: 'Creem' },
-  { value: 'waffo', key: 'Waffo' },
-  { value: 'waffo_pancake', key: 'Waffo Pancake' },
+  { value: 'alipay_official', key: '支付宝' },
+  { value: 'wxpay_official', key: '微信' },
 ];

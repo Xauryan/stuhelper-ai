@@ -42,8 +42,8 @@ import {
 import { getCurrencyConfig } from '../../helpers/render';
 import { CreditCard, RefreshCw, Sparkles } from 'lucide-react';
 import { SiAlipay, SiStripe, SiWechat } from 'react-icons/si';
-import { QRCodeSVG } from 'qrcode.react';
 import SubscriptionPurchaseModal from './modals/SubscriptionPurchaseModal';
+import WechatOfficialQrPaymentModal from './modals/WechatOfficialQrPaymentModal';
 import {
   formatSubscriptionDuration,
   formatSubscriptionResetPeriod,
@@ -59,7 +59,8 @@ import { formatSubscriptionPayAmount } from './subscriptionPaymentDisplay';
 import {
   getOfficialWechatStatus,
   getTopupStatusFromPage,
-  getWechatOfficialQrPaymentHint,
+  normalizeOfficialPaymentOrderTimeoutSeconds,
+  shouldBlockOfficialWechatMobilePayment,
 } from './wechatOfficialPaymentStatus.mjs';
 
 const { Text } = Typography;
@@ -101,6 +102,7 @@ const SubscriptionPlansCard = ({
   activeSubscriptions = [],
   allSubscriptions = [],
   reloadSubscriptionSelf,
+  getPaymentOrderTimeoutSeconds,
   withCard = true,
 }) => {
   const [open, setOpen] = useState(false);
@@ -113,6 +115,9 @@ const SubscriptionPlansCard = ({
   const [wechatQrOrderId, setWechatQrOrderId] = useState('');
   const [wechatQrFallback, setWechatQrFallback] = useState('');
   const [wechatQrChecking, setWechatQrChecking] = useState(false);
+  const [wechatQrCreatedAt, setWechatQrCreatedAt] = useState(0);
+  const [wechatQrOrderTimeoutSeconds, setWechatQrOrderTimeoutSeconds] =
+    useState(600);
   const wechatQrPollTimerRef = useRef(null);
 
   const epayMethods = useMemo(() => getEpayMethods(payMethods), [payMethods]);
@@ -143,6 +148,7 @@ const SubscriptionPlansCard = ({
     setWechatQrOrderId('');
     setWechatQrFallback('');
     setWechatQrChecking(false);
+    setWechatQrCreatedAt(0);
   };
 
   const checkWechatQrOrderStatus = async (orderId) => {
@@ -412,6 +418,13 @@ const SubscriptionPlansCard = ({
       setWechatQrCodeUrl(data.code_url);
       setWechatQrOrderId(data.order_id || '');
       setWechatQrFallback(data.fallback || '');
+      setWechatQrCreatedAt(Date.now());
+      setWechatQrOrderTimeoutSeconds(
+        normalizeOfficialPaymentOrderTimeoutSeconds(
+          data.order_timeout_seconds ||
+            getPaymentOrderTimeoutSeconds?.('wxpay_official'),
+        ),
+      );
       setWechatQrOpen(true);
       return true;
     }
@@ -459,8 +472,15 @@ const SubscriptionPlansCard = ({
       showError(t('管理员未开启微信支付官方充值！'));
       return;
     }
+    const mobileScene = isMobilePaymentScene();
+    if (shouldBlockOfficialWechatMobilePayment('wxpay_official', mobileScene)) {
+      showError(
+        t('当前移动端不支持使用微信支付，请使用电脑端或选择其他支付方式'),
+      );
+      return;
+    }
     setPaying(true);
-    const scene = isMobilePaymentScene() ? 'h5' : 'pc';
+    const scene = mobileScene ? 'h5' : 'pc';
     try {
       const res = await API.post('/api/subscription/wechat-pay-official/pay', {
         plan_id: selectedPlan.plan.id,
@@ -586,6 +606,17 @@ const SubscriptionPlansCard = ({
     }
     if (!selectedPaymentMethod) {
       showError(t('请选择支付方式'));
+      return;
+    }
+    if (
+      shouldBlockOfficialWechatMobilePayment(
+        selectedPaymentMethod.provider,
+        isMobilePaymentScene(),
+      )
+    ) {
+      showError(
+        t('当前移动端不支持使用微信支付，请使用电脑端或选择其他支付方式'),
+      );
       return;
     }
     setOpen(true);
@@ -1148,31 +1179,16 @@ const SubscriptionPlansCard = ({
         onConfirm={confirmSubscriptionPurchase}
       />
 
-      <Modal
-        title={t('微信支付扫码')}
+      <WechatOfficialQrPaymentModal
+        t={t}
         visible={wechatQrOpen}
+        codeUrl={wechatQrCodeUrl}
+        fallback={wechatQrFallback}
+        checking={wechatQrChecking}
+        createdAt={wechatQrCreatedAt}
+        orderTimeoutSeconds={wechatQrOrderTimeoutSeconds}
         onCancel={closeWechatQrModal}
-        footer={null}
-        size='small'
-        centered
-      >
-        <div className='flex flex-col items-center gap-3 py-2'>
-          {wechatQrCodeUrl && (
-            <QRCodeSVG value={wechatQrCodeUrl} size={220} level='M' />
-          )}
-          <div className='text-sm text-gray-500 text-center'>
-            {t(getWechatOfficialQrPaymentHint(wechatQrFallback))}
-          </div>
-          <div className='text-xs text-gray-400 text-center'>
-            {wechatQrChecking ? t('正在等待支付结果') : t('支付后将自动刷新')}
-          </div>
-          {wechatQrOrderId && (
-            <div className='text-xs text-gray-400 break-all text-center'>
-              {wechatQrOrderId}
-            </div>
-          )}
-        </div>
-      </Modal>
+      />
     </>
   );
 };

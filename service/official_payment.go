@@ -145,6 +145,7 @@ type WechatPayOfficialPrepayParams struct {
 	WapURL      string
 	WapName     string
 	TradeType   string
+	TimeExpire  string
 }
 
 type WechatPayOfficialPrepayResult struct {
@@ -750,6 +751,9 @@ func (c *WechatPayOfficialClient) Prepay(ctx context.Context, params WechatPayOf
 			"total":    params.AmountTotal,
 			"currency": "CNY",
 		},
+	}
+	if strings.TrimSpace(params.TimeExpire) != "" {
+		body["time_expire"] = strings.TrimSpace(params.TimeExpire)
 	}
 	if params.TradeType == "h5" {
 		body["scene_info"] = map[string]any{
