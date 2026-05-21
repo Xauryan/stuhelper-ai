@@ -634,6 +634,13 @@ func ShouldSkipRetryAfterChannelAffinityFailure(c *gin.Context) bool {
 			return b
 		}
 	}
+	return false
+}
+
+func ShouldStopAfterChannelAffinityUnavailable(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
 	meta, ok := getChannelAffinityMeta(c)
 	if !ok {
 		return false
