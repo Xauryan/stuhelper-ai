@@ -1377,7 +1377,22 @@ html.dark .sbg-variant-green {
 .update-log-content h1,
 .update-log-content h2,
 .update-log-content h3 {
-  display: none;
+  margin: 0 0 6px;
+  color: var(--semi-color-text-0);
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.update-log-content h1 {
+  font-size: 15px;
+}
+
+.update-log-content h2 {
+  font-size: 14px;
+}
+
+.update-log-content h3 {
+  font-size: 13px;
 }
 
 .update-log-content p,

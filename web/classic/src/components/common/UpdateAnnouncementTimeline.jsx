@@ -19,8 +19,20 @@ For commercial licensing, please contact support@xauryan.com
 
 import React, { useMemo } from 'react';
 import { Timeline } from '@douyinfe/semi-ui';
-import { marked } from 'marked';
 import { formatDateTimeString, getRelativeTime } from '../../helpers';
+import {
+  buildFrameHtml,
+  getUpdateAnnouncementContent,
+  renderMarkdownHtml,
+  shouldRenderFrame,
+} from './updateAnnouncementContent';
+
+export {
+  buildFrameHtml,
+  getUpdateAnnouncementContent,
+  renderMarkdownHtml,
+  shouldRenderFrame,
+} from './updateAnnouncementContent';
 
 export const formatAbsoluteTime = (dateValue) => {
   const date = dateValue ? new Date(dateValue) : null;
@@ -45,24 +57,6 @@ export const formatDisplayTime = (dateValue) => {
   const absolute = formatAbsoluteTime(dateValue);
   return joinDisplayTime(relative, absolute);
 };
-
-export const shouldRenderFrame = (raw) =>
-  /<!doctype|<html[\s>]|<head[\s>]|<body[\s>]|<style[\s>]|<script[\s>]/i.test(
-    String(raw || ''),
-  );
-
-export const buildFrameHtml = (raw) => {
-  const source = String(raw || '');
-  if (!source.trim()) {
-    return '';
-  }
-  return source;
-};
-
-export const getUpdateAnnouncementContent = (item) =>
-  String(item?.content || '').trim() ||
-  String(item?.extra || '').trim() ||
-  String(item?.title || '').trim();
 
 const getUpdateAnnouncementTime = (item) => {
   if (item?.publishDate) {
@@ -132,7 +126,7 @@ const UpdateAnnouncementTimeline = ({
                 <div
                   className='update-log-content'
                   dangerouslySetInnerHTML={{
-                    __html: marked.parse(item.content || ''),
+                    __html: renderMarkdownHtml(item.content || ''),
                   }}
                 />
               )}

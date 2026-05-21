@@ -21,7 +21,6 @@ import React, { useEffect, useState, useContext, useMemo } from 'react';
 import { Button, Modal, Empty, Tabs, TabPane, Tag } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import { getRelativeTime } from '../../helpers';
-import { marked } from 'marked';
 import {
   IllustrationNoContent,
   IllustrationNoContentDark,
@@ -41,6 +40,7 @@ import UpdateAnnouncementTimeline, {
   formatAbsoluteTime,
   formatDisplayTime,
   getUpdateAnnouncementContent,
+  renderMarkdownHtml,
   shouldRenderFrame,
 } from '../common/UpdateAnnouncementTimeline';
 
@@ -84,9 +84,9 @@ const NoticeModal = ({
   const processedNotifications = useMemo(() => {
     return (notifications || []).slice(0, 20).map((item) => {
       const usesFrame = shouldRenderFrame(item.content || '');
-      const htmlContent = marked.parse(item.content || '');
+      const htmlContent = renderMarkdownHtml(item.content || '');
       const plainContent = stripHtml(htmlContent).replace(/\s+/g, ' ').trim();
-      const plainExtra = stripHtml(marked.parse(item.extra || ''))
+      const plainExtra = stripHtml(renderMarkdownHtml(item.extra || ''))
         .replace(/\s+/g, ' ')
         .trim();
       const key = getNoticeNotificationKey(item);
@@ -160,7 +160,7 @@ const NoticeModal = ({
     }
 
     const item = autoPromptItem.item;
-    const htmlContent = marked.parse(item?.content || '');
+    const htmlContent = renderMarkdownHtml(item?.content || '');
     const usesFrame = shouldRenderFrame(item?.content || '');
     return {
       kind: 'notification',
@@ -211,7 +211,7 @@ const NoticeModal = ({
       <div
         className='notification-detail-content card-content-scroll'
         dangerouslySetInnerHTML={{
-          __html: marked.parse(selectedUpdateAnnouncement.content || ''),
+          __html: renderMarkdownHtml(selectedUpdateAnnouncement.content || ''),
         }}
       />
     );
@@ -241,7 +241,7 @@ const NoticeModal = ({
         dangerouslySetInnerHTML={{
           __html:
             autoPromptDetail.kind === 'updateAnnouncement'
-              ? marked.parse(autoPromptDetail.content || '')
+              ? renderMarkdownHtml(autoPromptDetail.content || '')
               : autoPromptDetail.htmlContent,
         }}
       />
