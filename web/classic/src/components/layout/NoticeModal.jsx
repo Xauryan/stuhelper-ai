@@ -28,7 +28,7 @@ import {
   Tag,
 } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
-import { getRelativeTime } from '../../helpers';
+import { formatDateTimeString, getRelativeTime } from '../../helpers';
 import { marked } from 'marked';
 import {
   IllustrationNoContent,
@@ -64,7 +64,20 @@ const formatAbsoluteTime = (dateValue) => {
   if (!date || isNaN(date.getTime())) {
     return dateValue || '';
   }
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  return formatDateTimeString(date);
+};
+
+const formatDisplayTime = (dateValue) => {
+  const relative = getRelativeTime(dateValue);
+  const absolute = formatAbsoluteTime(dateValue);
+
+  if (relative && absolute && relative !== absolute) {
+    if (absolute.startsWith(`${relative} `)) {
+      return absolute;
+    }
+    return `${relative} · ${absolute}`;
+  }
+  return relative || absolute || '';
 };
 
 const shouldRenderFrame = (raw) =>
@@ -93,10 +106,8 @@ const splitUpdateAnnouncementItems = (items) =>
     usesFrame: shouldRenderFrame(getTimelineContent(item)),
     frameHtml: buildFrameHtml(getTimelineContent(item)),
     type: item?.type || (index === 0 ? 'success' : 'default'),
-    time:
-      getRelativeTime(item?.publishDate) ||
-      formatAbsoluteTime(item?.publishDate) ||
-      '',
+    time: formatDisplayTime(item?.publishDate),
+    absoluteTime: formatAbsoluteTime(item?.publishDate),
   }));
 
 const NoticeModal = ({
@@ -147,6 +158,7 @@ const NoticeModal = ({
         extra: item.extra,
         plainExtra,
         relative: getRelativeTime(item.publishDate),
+        displayTime: formatDisplayTime(item.publishDate),
         isUnread: unreadSet.has(key),
       };
     });
@@ -162,7 +174,11 @@ const NoticeModal = ({
         <div className='update-log-html-frame-shell notification-detail-frame-shell'>
           <iframe
             className='update-log-html-frame'
-            title={selectedNotification.title || t('通知内容')}
+            title={
+              selectedNotification.title ||
+              selectedNotification.documentTitle ||
+              t('通知内容')
+            }
             sandbox='allow-scripts'
             srcDoc={selectedNotification.frameHtml}
           />
@@ -196,6 +212,7 @@ const NoticeModal = ({
         content: getTimelineContent(item),
         usesFrame: shouldRenderFrame(getTimelineContent(item)),
         frameHtml: buildFrameHtml(getTimelineContent(item)),
+        displayTime: formatDisplayTime(item?.publishDate),
       };
     }
 
@@ -207,16 +224,27 @@ const NoticeModal = ({
       title:
         String(item?.title || '').trim() ||
         (usesFrame ? getHtmlDocumentTitle(item?.content || '') : '') ||
-        (!usesFrame
-          ? stripHtml(htmlContent).replace(/\s+/g, ' ').trim()
-          : '') ||
         t('通知内容'),
       content: item?.content || '',
       htmlContent,
       usesFrame,
       frameHtml: buildFrameHtml(item?.content || ''),
+      displayTime: formatDisplayTime(item?.publishDate),
     };
   }, [autoPromptItem, t]);
+
+  const renderDetailMeta = (displayTime) => {
+    if (!displayTime) {
+      return null;
+    }
+
+    return (
+      <div className='notification-detail-meta'>
+        <Clock3 size={13} />
+        <span>{displayTime}</span>
+      </div>
+    );
+  };
 
   const renderUpdateAnnouncementDetail = () => {
     if (!selectedUpdateAnnouncement) {
@@ -346,7 +374,7 @@ const NoticeModal = ({
               </div>
               <div className='system-notification-meta'>
                 <Clock3 size={13} />
-                <span>{item.relative || item.time}</span>
+                <span>{item.displayTime || item.relative || item.time}</span>
               </div>
               <div className='system-notification-content'>
                 {item.plainContent || t('完整 HTML 内容，点击查看详情')}
@@ -388,7 +416,7 @@ const NoticeModal = ({
               <Timeline.Item
                 key={item.id}
                 type={item.type}
-                time={idx === 0 ? t('最新') : item.time}
+                time={idx === 0 ? `${t('最新')} · ${item.time}` : item.time}
               >
                 <div className='update-log-item'>
                   {item.title && (
@@ -491,6 +519,7 @@ const NoticeModal = ({
         }
         size={isMobile ? 'full-width' : 'large'}
       >
+        {renderDetailMeta(selectedNotification?.displayTime)}
         {renderNotificationDetail()}
       </Modal>
       <Modal
@@ -508,6 +537,7 @@ const NoticeModal = ({
         }
         size={isMobile ? 'full-width' : 'large'}
       >
+        {renderDetailMeta(selectedUpdateAnnouncement?.time)}
         {renderUpdateAnnouncementDetail()}
       </Modal>
       <Modal
@@ -527,6 +557,7 @@ const NoticeModal = ({
         }
         size={isMobile ? 'full-width' : 'large'}
       >
+        {renderDetailMeta(autoPromptDetail?.displayTime)}
         {renderAutoPromptDetail()}
       </Modal>
     </>

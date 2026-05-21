@@ -19,7 +19,7 @@ For commercial licensing, please contact support@xauryan.com
 
 import React, { useMemo, useState } from 'react';
 import { Button, Card, Tag, Timeline, Empty, Modal } from '@douyinfe/semi-ui';
-import { FileClock } from 'lucide-react';
+import { Clock3, FileClock } from 'lucide-react';
 import { marked } from 'marked';
 import {
   IllustrationConstruction,
@@ -36,6 +36,19 @@ const getAnnouncementContent = (item) =>
   String(item?.content || '').trim() ||
   String(item?.extra || '').trim() ||
   String(item?.title || '').trim();
+
+const getDisplayTime = (item) => {
+  const relative = String(item?.relative || '').trim();
+  const absolute = String(item?.time || '').trim();
+
+  if (relative && absolute && relative !== absolute) {
+    if (absolute.startsWith(`${relative} `)) {
+      return absolute;
+    }
+    return `${relative} · ${absolute}`;
+  }
+  return relative || absolute || '';
+};
 
 const AnnouncementsPanel = ({
   announcementData,
@@ -57,6 +70,7 @@ const AnnouncementsPanel = ({
           content,
           title: String(item?.title || '').trim(),
           usesFrame,
+          displayTime: getDisplayTime(item),
           htmlExtra:
             item.extra && !shouldRenderFrame(item.extra)
               ? marked.parse(item.extra)
@@ -180,14 +194,22 @@ const AnnouncementsPanel = ({
         size='large'
       >
         {selectedAnnouncement && (
-          <div className='update-log-html-frame-shell notification-detail-frame-shell'>
-            <iframe
-              className='update-log-html-frame'
-              title={selectedAnnouncement.title || t('更新公告')}
-              sandbox='allow-scripts'
-              srcDoc={selectedAnnouncement.content}
-            />
-          </div>
+          <>
+            {selectedAnnouncement.displayTime && (
+              <div className='notification-detail-meta'>
+                <Clock3 size={13} />
+                <span>{selectedAnnouncement.displayTime}</span>
+              </div>
+            )}
+            <div className='update-log-html-frame-shell notification-detail-frame-shell'>
+              <iframe
+                className='update-log-html-frame'
+                title={selectedAnnouncement.title || t('更新公告')}
+                sandbox='allow-scripts'
+                srcDoc={selectedAnnouncement.content}
+              />
+            </div>
+          </>
         )}
       </Modal>
     </>

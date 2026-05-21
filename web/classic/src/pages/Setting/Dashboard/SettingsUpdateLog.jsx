@@ -246,11 +246,9 @@ const SettingsUpdateLog = ({ options, refresh }) => {
       dataIndex: 'title',
       key: 'title',
       width: 180,
-      render: (text, record) => (
-        <Tooltip content={text || record.content} position='topLeft' showArrow>
-          <div className='truncate max-w-[180px]'>
-            {text || record.content || '-'}
-          </div>
+      render: (text) => (
+        <Tooltip content={text || '-'} position='topLeft' showArrow>
+          <div className='truncate max-w-[180px]'>{text || '-'}</div>
         </Tooltip>
       ),
     },

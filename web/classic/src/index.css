@@ -1033,6 +1033,20 @@ html.dark .sbg-variant-green {
   margin: 0 0 10px;
 }
 
+.notification-detail-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--semi-color-text-2);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.html-announcement-modal .notification-detail-meta {
+  margin: 0 0 10px;
+}
+
 .update-log-timeline {
   padding: 4px 16px 4px 0;
 }
