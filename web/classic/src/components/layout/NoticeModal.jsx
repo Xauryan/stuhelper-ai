@@ -18,17 +18,9 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import React, { useEffect, useState, useContext, useMemo } from 'react';
-import {
-  Button,
-  Modal,
-  Empty,
-  Tabs,
-  TabPane,
-  Timeline,
-  Tag,
-} from '@douyinfe/semi-ui';
+import { Button, Modal, Empty, Tabs, TabPane, Tag } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
-import { formatDateTimeString, getRelativeTime } from '../../helpers';
+import { getRelativeTime } from '../../helpers';
 import { marked } from 'marked';
 import {
   IllustrationNoContent,
@@ -44,6 +36,13 @@ import {
   FileClock,
 } from 'lucide-react';
 import { getNoticeNotificationKey } from '../../hooks/common/useNotifications';
+import UpdateAnnouncementTimeline, {
+  buildFrameHtml,
+  formatAbsoluteTime,
+  formatDisplayTime,
+  getUpdateAnnouncementContent,
+  shouldRenderFrame,
+} from '../common/UpdateAnnouncementTimeline';
 
 const stripHtml = (html) => {
   const div = document.createElement('div');
@@ -58,57 +57,6 @@ const getHtmlDocumentTitle = (html) => {
     .replace(/\s+/g, ' ')
     .trim();
 };
-
-const formatAbsoluteTime = (dateValue) => {
-  const date = dateValue ? new Date(dateValue) : null;
-  if (!date || isNaN(date.getTime())) {
-    return dateValue || '';
-  }
-  return formatDateTimeString(date);
-};
-
-const formatDisplayTime = (dateValue) => {
-  const relative = getRelativeTime(dateValue);
-  const absolute = formatAbsoluteTime(dateValue);
-
-  if (relative && absolute && relative !== absolute) {
-    if (absolute.startsWith(`${relative} `)) {
-      return absolute;
-    }
-    return `${relative} · ${absolute}`;
-  }
-  return relative || absolute || '';
-};
-
-const shouldRenderFrame = (raw) =>
-  /<!doctype|<html[\s>]|<head[\s>]|<body[\s>]|<style[\s>]|<script[\s>]/i.test(
-    String(raw || ''),
-  );
-
-const buildFrameHtml = (raw) => {
-  const source = String(raw || '');
-  if (!source.trim()) {
-    return '';
-  }
-  return source;
-};
-
-const getTimelineContent = (item) =>
-  String(item?.content || '').trim() ||
-  String(item?.extra || '').trim() ||
-  String(item?.title || '').trim();
-
-const splitUpdateAnnouncementItems = (items) =>
-  (items || []).map((item, index) => ({
-    id: item?.id || `update-announcement-${index}`,
-    title: String(item?.title || '').trim(),
-    content: getTimelineContent(item),
-    usesFrame: shouldRenderFrame(getTimelineContent(item)),
-    frameHtml: buildFrameHtml(getTimelineContent(item)),
-    type: item?.type || (index === 0 ? 'success' : 'default'),
-    time: formatDisplayTime(item?.publishDate),
-    absoluteTime: formatAbsoluteTime(item?.publishDate),
-  }));
 
 const NoticeModal = ({
   visible,
@@ -194,11 +142,6 @@ const NoticeModal = ({
     );
   };
 
-  const updateAnnouncementItems = useMemo(
-    () => splitUpdateAnnouncementItems(updateAnnouncements),
-    [updateAnnouncements],
-  );
-
   const autoPromptDetail = useMemo(() => {
     if (!autoPromptItem) {
       return null;
@@ -209,9 +152,9 @@ const NoticeModal = ({
       return {
         kind: 'updateAnnouncement',
         title: String(item?.title || '').trim() || t('更新公告'),
-        content: getTimelineContent(item),
-        usesFrame: shouldRenderFrame(getTimelineContent(item)),
-        frameHtml: buildFrameHtml(getTimelineContent(item)),
+        content: getUpdateAnnouncementContent(item),
+        usesFrame: shouldRenderFrame(getUpdateAnnouncementContent(item)),
+        frameHtml: buildFrameHtml(getUpdateAnnouncementContent(item)),
         displayTime: formatDisplayTime(item?.publishDate),
       };
     }
@@ -409,41 +352,12 @@ const NoticeModal = ({
     }
 
     return (
-      <div className='update-log-timeline max-h-[58vh] overflow-y-auto pr-2 card-content-scroll'>
-        <Timeline mode='alternate'>
-          {updateAnnouncementItems.map((item, idx) => {
-            return (
-              <Timeline.Item
-                key={item.id}
-                type={item.type}
-                time={idx === 0 ? `${t('最新')} · ${item.time}` : item.time}
-              >
-                <div className='update-log-item'>
-                  {item.title && (
-                    <div className='update-log-title'>{item.title}</div>
-                  )}
-                  {item.usesFrame ? (
-                    <button
-                      className='update-announcement-detail-button'
-                      type='button'
-                      onClick={() => setSelectedUpdateAnnouncement(item)}
-                    >
-                      {t('完整 HTML 内容，点击查看详情')}
-                    </button>
-                  ) : (
-                    <div
-                      className='update-log-content'
-                      dangerouslySetInnerHTML={{
-                        __html: marked.parse(item.content || ''),
-                      }}
-                    />
-                  )}
-                </div>
-              </Timeline.Item>
-            );
-          })}
-        </Timeline>
-      </div>
+      <UpdateAnnouncementTimeline
+        items={updateAnnouncements}
+        t={t}
+        className='max-h-[58vh] overflow-y-auto pr-2 card-content-scroll'
+        onSelectItem={setSelectedUpdateAnnouncement}
+      />
     );
   };
 

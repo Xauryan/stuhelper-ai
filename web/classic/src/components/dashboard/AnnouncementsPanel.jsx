@@ -18,41 +18,19 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import React, { useMemo, useState } from 'react';
-import { Button, Card, Tag, Timeline, Empty, Modal } from '@douyinfe/semi-ui';
+import { Button, Card, Tag, Empty, Modal } from '@douyinfe/semi-ui';
 import { Clock3, FileClock } from 'lucide-react';
-import { marked } from 'marked';
 import {
   IllustrationConstruction,
   IllustrationConstructionDark,
 } from '@douyinfe/semi-illustrations';
 import ScrollableContainer from '../common/ui/ScrollableContainer';
-
-const shouldRenderFrame = (raw) =>
-  /<!doctype|<html[\s>]|<head[\s>]|<body[\s>]|<style[\s>]|<script[\s>]/i.test(
-    String(raw || ''),
-  );
-
-const getAnnouncementContent = (item) =>
-  String(item?.content || '').trim() ||
-  String(item?.extra || '').trim() ||
-  String(item?.title || '').trim();
-
-const getDisplayTime = (item) => {
-  const relative = String(item?.relative || '').trim();
-  const absolute = String(item?.time || '').trim();
-
-  if (relative && absolute && relative !== absolute) {
-    if (absolute.startsWith(`${relative} `)) {
-      return absolute;
-    }
-    return `${relative} · ${absolute}`;
-  }
-  return relative || absolute || '';
-};
+import UpdateAnnouncementTimeline, {
+  normalizeUpdateAnnouncementItems,
+} from '../common/UpdateAnnouncementTimeline';
 
 const AnnouncementsPanel = ({
   announcementData,
-  announcementLegendData,
   CARD_PROPS,
   ILLUSTRATION_SIZE,
   t,
@@ -60,23 +38,7 @@ const AnnouncementsPanel = ({
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
 
   const processedAnnouncementData = useMemo(
-    () =>
-      (announcementData || []).map((item, index) => {
-        const content = getAnnouncementContent(item);
-        const usesFrame = shouldRenderFrame(content);
-        return {
-          ...item,
-          id: item?.id || `dashboard-announcement-${index}`,
-          content,
-          title: String(item?.title || '').trim(),
-          usesFrame,
-          displayTime: getDisplayTime(item),
-          htmlExtra:
-            item.extra && !shouldRenderFrame(item.extra)
-              ? marked.parse(item.extra)
-              : '',
-        };
-      }),
+    () => normalizeUpdateAnnouncementItems(announcementData),
     [announcementData],
   );
 
@@ -94,78 +56,18 @@ const AnnouncementsPanel = ({
                 {t('显示最新20条')}
               </Tag>
             </div>
-            {/* 图例 */}
-            <div className='flex flex-wrap gap-3 text-xs'>
-              {announcementLegendData.map((legend, index) => (
-                <div key={index} className='flex items-center gap-1'>
-                  <div
-                    className='w-2 h-2 rounded-full'
-                    style={{
-                      backgroundColor:
-                        legend.color === 'grey'
-                          ? '#8b9aa7'
-                          : legend.color === 'blue'
-                            ? '#3b82f6'
-                            : legend.color === 'green'
-                              ? '#10b981'
-                              : legend.color === 'orange'
-                                ? '#f59e0b'
-                                : legend.color === 'red'
-                                  ? '#ef4444'
-                                  : '#8b9aa7',
-                    }}
-                  />
-                  <span className='text-gray-600'>{legend.label}</span>
-                </div>
-              ))}
-            </div>
           </div>
         }
         bodyStyle={{ padding: 0 }}
       >
         <ScrollableContainer maxHeight='24rem'>
           {processedAnnouncementData.length > 0 ? (
-            <Timeline mode='left'>
-              {processedAnnouncementData.map((item) => (
-                <Timeline.Item
-                  key={item.id}
-                  type={item.type || 'default'}
-                  time={`${item.relative ? item.relative + ' ' : ''}${item.time}`}
-                  extra={
-                    item.htmlExtra ? (
-                      <div
-                        className='text-xs text-gray-500'
-                        dangerouslySetInnerHTML={{ __html: item.htmlExtra }}
-                      />
-                    ) : null
-                  }
-                >
-                  <div className='update-log-item'>
-                    {item.title && (
-                      <div className='update-log-title'>{item.title}</div>
-                    )}
-                    {item.usesFrame ? (
-                      <Button
-                        theme='borderless'
-                        type='primary'
-                        size='small'
-                        className='update-announcement-detail-button'
-                        onClick={() => setSelectedAnnouncement(item)}
-                      >
-                        {t('完整 HTML 内容，点击查看详情')}
-                      </Button>
-                    ) : (
-                      <div
-                        className='update-log-content'
-                        dangerouslySetInnerHTML={{
-                          __html: marked.parse(item.content || ''),
-                        }}
-                      />
-                    )}
-                  </div>
-                </Timeline.Item>
-              ))}
-            </Timeline>
+            <UpdateAnnouncementTimeline
+              items={announcementData}
+              t={t}
+              className='dashboard-update-log-timeline card-content-scroll'
+              onSelectItem={setSelectedAnnouncement}
+            />
           ) : (
             <div className='flex justify-center items-center py-8'>
               <Empty
@@ -195,10 +97,10 @@ const AnnouncementsPanel = ({
       >
         {selectedAnnouncement && (
           <>
-            {selectedAnnouncement.displayTime && (
+            {selectedAnnouncement.time && (
               <div className='notification-detail-meta'>
                 <Clock3 size={13} />
-                <span>{selectedAnnouncement.displayTime}</span>
+                <span>{selectedAnnouncement.time}</span>
               </div>
             )}
             <div className='update-log-html-frame-shell notification-detail-frame-shell'>
@@ -206,7 +108,7 @@ const AnnouncementsPanel = ({
                 className='update-log-html-frame'
                 title={selectedAnnouncement.title || t('更新公告')}
                 sandbox='allow-scripts'
-                srcDoc={selectedAnnouncement.content}
+                srcDoc={selectedAnnouncement.frameHtml}
               />
             </div>
           </>

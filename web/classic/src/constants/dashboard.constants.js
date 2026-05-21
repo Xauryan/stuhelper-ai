@@ -117,15 +117,6 @@ export const DEFAULT_CHART_SPECS = {
   },
 };
 
-// ========== 公告图例数据 ==========
-export const ANNOUNCEMENT_LEGEND_DATA = [
-  { color: 'grey', label: '默认', type: 'default' },
-  { color: 'blue', label: '进行中', type: 'ongoing' },
-  { color: 'green', label: '成功', type: 'success' },
-  { color: 'orange', label: '警告', type: 'warning' },
-  { color: 'red', label: '异常', type: 'error' },
-];
-
 // ========== Uptime 状态映射 ==========
 export const UPTIME_STATUS_MAP = {
   1: { color: '#10b981', label: '正常', text: '可用率' }, // UP

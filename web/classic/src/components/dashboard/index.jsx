@@ -18,7 +18,6 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import React, { useContext, useEffect } from 'react';
-import { getRelativeTime } from '../../helpers';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 
@@ -40,7 +39,6 @@ import {
   CARD_PROPS,
   FLEX_CENTER_GAP2,
   ILLUSTRATION_SIZE,
-  ANNOUNCEMENT_LEGEND_DATA,
   UPTIME_STATUS_MAP,
 } from '../../constants/dashboard.constants';
 import {
@@ -120,21 +118,7 @@ const Dashboard = () => {
 
   // ========== 数据准备 ==========
   const apiInfoData = statusState?.status?.api_info || [];
-  const announcementData = (statusState?.status?.announcements || []).map(
-    (item) => {
-      const pubDate = item?.publishDate ? new Date(item.publishDate) : null;
-      const absoluteTime =
-        pubDate && !isNaN(pubDate.getTime())
-          ? `${pubDate.getFullYear()}-${String(pubDate.getMonth() + 1).padStart(2, '0')}-${String(pubDate.getDate()).padStart(2, '0')} ${String(pubDate.getHours()).padStart(2, '0')}:${String(pubDate.getMinutes()).padStart(2, '0')}`
-          : item?.publishDate || '';
-      const relativeTime = getRelativeTime(item.publishDate);
-      return {
-        ...item,
-        time: absoluteTime,
-        relative: relativeTime,
-      };
-    },
-  );
+  const announcementData = statusState?.status?.announcements || [];
   const faqData = statusState?.status?.faq || [];
 
   const uptimeLegendData = Object.entries(UPTIME_STATUS_MAP).map(
@@ -226,12 +210,6 @@ const Dashboard = () => {
             {dashboardData.announcementsEnabled && (
               <AnnouncementsPanel
                 announcementData={announcementData}
-                announcementLegendData={ANNOUNCEMENT_LEGEND_DATA.map(
-                  (item) => ({
-                    ...item,
-                    label: dashboardData.t(item.label),
-                  }),
-                )}
                 CARD_PROPS={CARD_PROPS}
                 ILLUSTRATION_SIZE={ILLUSTRATION_SIZE}
                 t={dashboardData.t}
