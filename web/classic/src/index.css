@@ -1360,6 +1360,15 @@ html.dark .sbg-variant-green {
   max-width: 360px;
 }
 
+.dashboard-update-log-timeline .update-log-item {
+  width: 100%;
+  max-width: min(100%, 44rem);
+}
+
+.dashboard-update-log-timeline .update-log-content {
+  max-width: none;
+}
+
 .update-log-title {
   color: var(--semi-color-text-0);
   font-size: 15px;
