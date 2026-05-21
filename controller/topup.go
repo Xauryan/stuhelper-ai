@@ -465,46 +465,59 @@ func RequestAmount(c *gin.Context) {
 func GetUserTopUps(c *gin.Context) {
 	userId := c.GetInt("id")
 	pageInfo := common.GetPageQuery(c)
-	keyword := c.Query("keyword")
-	pendingRefund := c.Query("pending_refund") == "true"
-
-	topups, total, err := model.GetUserTopUpsWithOptions(userId, model.TopUpQueryOptions{
-		Keyword:       keyword,
-		PendingRefund: pendingRefund,
-	}, pageInfo)
+	result, err := model.GetUserTopUpsResultWithOptions(userId, getTopUpQueryOptions(c), pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
-	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(topups)
-	common.ApiSuccess(c, pageInfo)
+	common.ApiSuccess(c, topUpQueryResponse(pageInfo, result))
 }
 
 // GetAllTopUps 管理员获取全平台充值记录
 func GetAllTopUps(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	keyword := c.Query("keyword")
-	pendingRefund := c.Query("pending_refund") == "true"
 	// 异步触发支付宝官方超时订单清理：
 	// 非 master 节点的 StartAlipayOfficialOrderExpireTask 会直接返回，
 	// 这里用 TryLock 保护的 goroutine 兜底，避免无 master 部署下本地订单永远停留在 pending；
 	// 不阻塞列表请求。
 	go runAlipayOfficialOrderExpireTaskOnce(context.Background())
 
-	topups, total, err := model.GetAllTopUpsWithOptions(model.TopUpQueryOptions{
-		Keyword:       keyword,
-		PendingRefund: pendingRefund,
-	}, pageInfo)
+	result, err := model.GetAllTopUpsResultWithOptions(getTopUpQueryOptions(c), pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
-	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(topups)
-	common.ApiSuccess(c, pageInfo)
+	common.ApiSuccess(c, topUpQueryResponse(pageInfo, result))
+}
+
+func getTopUpQueryOptions(c *gin.Context) model.TopUpQueryOptions {
+	startTime, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTime, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	userId, _ := strconv.Atoi(c.Query("user_id"))
+	return model.TopUpQueryOptions{
+		Keyword:       c.Query("keyword"),
+		UserID:        userId,
+		Username:      c.Query("username"),
+		PaymentMethod: c.Query("payment_method"),
+		TradeNo:       c.Query("trade_no"),
+		StartTime:     startTime,
+		EndTime:       endTime,
+		PendingRefund: c.Query("pending_refund") == "true",
+	}
+}
+
+func topUpQueryResponse(pageInfo *common.PageInfo, result model.TopUpQueryResult) gin.H {
+	pageInfo.SetTotal(int(result.Total))
+	pageInfo.SetItems(result.Items)
+	return gin.H{
+		"page":        pageInfo.Page,
+		"page_size":   pageInfo.PageSize,
+		"total":       pageInfo.Total,
+		"items":       pageInfo.Items,
+		"total_money": result.TotalMoney,
+	}
 }
 
 type AdminCompleteTopupRequest struct {

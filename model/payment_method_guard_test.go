@@ -1225,6 +1225,64 @@ func TestTopUpQueryOptionsFilterPendingRefundRequests(t *testing.T) {
 	assert.Equal(t, "PENDING_REFUND_ALICE", searchRows[0].TradeNo)
 }
 
+func TestTopUpQueryOptionsFilterStructuredBillingFieldsAndTotalMoney(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, DB.Create(&[]User{
+		{Id: 184, Username: "alice-billing", Status: common.UserStatusEnabled, AffCode: "alice-billing-aff"},
+		{Id: 185, Username: "bob-billing", Status: common.UserStatusEnabled, AffCode: "bob-billing-aff"},
+	}).Error)
+	require.NoError(t, DB.Create(&[]TopUp{
+		{
+			UserId:          184,
+			Amount:          10,
+			Money:           12.34,
+			TradeNo:         "BILLING_ALICE_ALIPAY",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusSuccess,
+			CreateTime:      2000,
+			CompleteTime:    2000,
+		},
+		{
+			UserId:          184,
+			Amount:          10,
+			Money:           3.21,
+			TradeNo:         "BILLING_ALICE_WECHAT",
+			PaymentMethod:   PaymentMethodWechatPayOfficial,
+			PaymentProvider: PaymentProviderWechatPayOfficial,
+			Status:          common.TopUpStatusSuccess,
+			CreateTime:      2100,
+			CompleteTime:    2100,
+		},
+		{
+			UserId:          185,
+			Amount:          10,
+			Money:           99.99,
+			TradeNo:         "BILLING_BOB_ALIPAY",
+			PaymentMethod:   PaymentMethodAlipayOfficial,
+			PaymentProvider: PaymentProviderAlipayOfficial,
+			Status:          common.TopUpStatusSuccess,
+			CreateTime:      2100,
+			CompleteTime:    2100,
+		},
+	}).Error)
+
+	result, err := GetAllTopUpsResultWithOptions(TopUpQueryOptions{
+		Username:      "alice-billing",
+		PaymentMethod: PaymentMethodAlipayOfficial,
+		TradeNo:       "ALIPAY",
+		StartTime:     1900,
+		EndTime:       2050,
+	}, &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), result.Total)
+	assert.InDelta(t, 12.34, result.TotalMoney, 0.0001)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "BILLING_ALICE_ALIPAY", result.Items[0].TradeNo)
+	assert.Equal(t, "alice-billing", result.Items[0].Username)
+}
+
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {
 	testCases := []struct {
 		name                    string

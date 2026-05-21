@@ -4049,6 +4049,10 @@
     "更新公告标题": "Update Announcement Title",
     "可选，更新公告标题": "Optional update announcement title",
     "下一条": "Next",
-    "关闭后继续显示下一条": "The next item will be shown after closing"
+    "关闭后继续显示下一条": "The next item will be shown after closing",
+    "用户ID": "User ID",
+    "总金额": "Total amount",
+    "官方支付宝": "Official Alipay",
+    "官方微信": "Official WeChat Pay"
   }
 }

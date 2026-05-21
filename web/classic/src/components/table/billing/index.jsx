@@ -23,6 +23,11 @@ import CardPro from '../../common/ui/CardPro';
 import TopupBillingTable from '../../topup/modals/TopupBillingTable';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { useTableCompactMode } from '../../../hooks/common/useTableCompactMode';
+import {
+  isAdmin,
+  getTodayStartTimestamp,
+  timestamp2string,
+} from '../../../helpers';
 import { createCardProPagination } from '../../../helpers/utils';
 import BillingActions from './BillingActions';
 import BillingFilters from './BillingFilters';
@@ -32,21 +37,27 @@ const BillingTable = () => {
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState('all');
   const [compactMode, setCompactMode] = useTableCompactMode('billing');
-  const [submittedKeyword, setSubmittedKeyword] = useState('');
+  const [submittedFilters, setSubmittedFilters] = useState(() =>
+    getDefaultBillingFilters(),
+  );
   const [pagination, setPagination] = useState({
     page: 1,
     pageSize: 10,
     total: 0,
+    totalMoney: 0,
   });
   const [tableApi, setTableApi] = useState(null);
   const [formApi, setFormApi] = useState(null);
+  const userIsAdmin = isAdmin();
+  const [formInitValues] = useState(() => getDefaultBillingFilters());
 
   const handlePaginationChange = useCallback((nextPagination) => {
     setPagination((previousPagination) => {
       if (
         previousPagination.page === nextPagination.page &&
         previousPagination.pageSize === nextPagination.pageSize &&
-        previousPagination.total === nextPagination.total
+        previousPagination.total === nextPagination.total &&
+        previousPagination.totalMoney === nextPagination.totalMoney
       ) {
         return previousPagination;
       }
@@ -55,13 +66,15 @@ const BillingTable = () => {
   }, []);
 
   const handleSearch = (values = {}) => {
-    setSubmittedKeyword((values.keyword || '').trim());
+    setSubmittedFilters(normalizeBillingFilters(values));
     tableApi?.setPage(1);
   };
 
   const handleReset = () => {
+    const defaultFilters = getDefaultBillingFilters();
     formApi?.reset();
-    setSubmittedKeyword('');
+    formApi?.setValues?.(defaultFilters);
+    setSubmittedFilters(defaultFilters);
     setActiveTab('all');
     tableApi?.setPage(1);
   };
@@ -80,15 +93,18 @@ const BillingTable = () => {
           compactMode={compactMode}
           setCompactMode={setCompactMode}
           total={pagination.total}
+          totalMoney={pagination.totalMoney}
           t={t}
         />
       }
       searchArea={
         <BillingFilters
           formApi={formApi}
+          formInitValues={formInitValues}
           handleReset={handleReset}
           handleSearch={handleSearch}
           handleViewChange={handleViewChange}
+          isAdminUser={userIsAdmin}
           setFormApi={setFormApi}
           t={t}
         />
@@ -107,7 +123,7 @@ const BillingTable = () => {
       <TopupBillingTable
         active
         compactMode={compactMode}
-        externalKeyword={submittedKeyword}
+        externalFilters={submittedFilters}
         hideFilters
         hidePagination
         onPaginationChange={handlePaginationChange}
@@ -119,5 +135,29 @@ const BillingTable = () => {
     </CardPro>
   );
 };
+
+const getDefaultBillingFilters = () => {
+  const now = new Date();
+  return {
+    user_id: '',
+    username: '',
+    trade_no: '',
+    payment_method: '',
+    billingView: 'all',
+    dateRange: [
+      timestamp2string(getTodayStartTimestamp()),
+      timestamp2string(now.getTime() / 1000),
+    ],
+  };
+};
+
+const normalizeBillingFilters = (values = {}) => ({
+  user_id: (values.user_id || '').trim(),
+  username: (values.username || '').trim(),
+  trade_no: (values.trade_no || '').trim(),
+  payment_method: values.payment_method || '',
+  billingView: values.billingView || 'all',
+  dateRange: values.dateRange,
+});
 
 export default BillingTable;

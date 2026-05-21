@@ -20,6 +20,7 @@ For commercial licensing, please contact support@xauryan.com
 import React from 'react';
 import { Space, Tag } from '@douyinfe/semi-ui';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
+import { formatCurrency } from '../../topup/modals/topupHistoryUtils.mjs';
 
 const tagBaseStyle = {
   fontWeight: 500,
@@ -32,16 +33,20 @@ const BillingActions = ({
   compactMode,
   setCompactMode,
   total,
+  totalMoney,
   t,
 }) => {
   return (
     <div className='flex flex-col md:flex-row justify-between items-start md:items-center gap-2 w-full'>
       <Space>
         <Tag color='blue' style={tagBaseStyle} className='!rounded-lg'>
-          {t('账单')}: {total}
+          {t('总金额')}: {formatCurrency(totalMoney)}
+          {t('元')}
         </Tag>
         <Tag color='pink' style={tagBaseStyle} className='!rounded-lg'>
-          {activeTab === 'pending_refund' ? t('待处理退款') : t('全部账单')}
+          {activeTab === 'pending_refund'
+            ? t('待处理退款')
+            : `${t('账单')}: ${total}`}
         </Tag>
       </Space>
 

@@ -3837,6 +3837,10 @@
     "更新公告标题": "Titre de l annonce de mise a jour",
     "可选，更新公告标题": "Titre facultatif de l annonce de mise a jour",
     "下一条": "Suivant",
-    "关闭后继续显示下一条": "L element suivant sera affiche apres la fermeture"
+    "关闭后继续显示下一条": "L element suivant sera affiche apres la fermeture",
+    "用户ID": "ID utilisateur",
+    "总金额": "Montant total",
+    "官方支付宝": "Alipay officiel",
+    "官方微信": "WeChat Pay officiel"
   }
 }

@@ -72,9 +72,12 @@ const PAYMENT_METHOD_MAP = {
 const isOfficialTopupRefundable = (record) =>
   isOfficialRefundable(record) && !record.refund_request_id;
 
+const EMPTY_TOPUP_FILTERS = {};
+
 const TopupBillingTable = ({
   active = true,
   compactMode = false,
+  externalFilters,
   externalKeyword,
   hideFilters = false,
   hidePagination = false,
@@ -88,6 +91,7 @@ const TopupBillingTable = ({
   const [loading, setLoading] = useState(false);
   const [topups, setTopups] = useState([]);
   const [total, setTotal] = useState(0);
+  const [totalMoney, setTotalMoney] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [keyword, setKeyword] = useState('');
@@ -106,6 +110,13 @@ const TopupBillingTable = ({
   const effectiveKeyword = hideFilters
     ? externalKeyword || ''
     : debouncedKeyword;
+  const effectiveFilters = useMemo(
+    () =>
+      hideFilters
+        ? externalFilters || EMPTY_TOPUP_FILTERS
+        : EMPTY_TOPUP_FILTERS,
+    [externalFilters, hideFilters],
+  );
 
   useEffect(() => {
     if (hideFilters) {
@@ -129,6 +140,31 @@ const TopupBillingTable = ({
         if (effectiveKeyword) {
           params.set('keyword', effectiveKeyword);
         }
+        if (effectiveFilters?.user_id) {
+          params.set('user_id', effectiveFilters.user_id);
+        }
+        if (effectiveFilters?.username) {
+          params.set('username', effectiveFilters.username);
+        }
+        if (effectiveFilters?.trade_no) {
+          params.set('trade_no', effectiveFilters.trade_no);
+        }
+        if (effectiveFilters?.payment_method) {
+          params.set('payment_method', effectiveFilters.payment_method);
+        }
+        if (
+          Array.isArray(effectiveFilters?.dateRange) &&
+          effectiveFilters.dateRange.length === 2
+        ) {
+          const startTimestamp = Date.parse(effectiveFilters.dateRange[0]);
+          const endTimestamp = Date.parse(effectiveFilters.dateRange[1]);
+          if (!Number.isNaN(startTimestamp)) {
+            params.set('start_timestamp', String(startTimestamp / 1000));
+          }
+          if (!Number.isNaN(endTimestamp)) {
+            params.set('end_timestamp', String(endTimestamp / 1000));
+          }
+        }
         if (pendingRefundOnly) {
           params.set('pending_refund', 'true');
         }
@@ -138,6 +174,13 @@ const TopupBillingTable = ({
         if (success) {
           setTopups(data.items || []);
           setTotal(data.total || 0);
+          setTotalMoney(Number(data.total_money || 0));
+          onPaginationChange?.({
+            page: data.page || currentPage,
+            pageSize: data.page_size || currentPageSize,
+            total: data.total || 0,
+            totalMoney: Number(data.total_money || 0),
+          });
         } else {
           Toast.error({ content: message || t('加载失败') });
         }
@@ -147,7 +190,13 @@ const TopupBillingTable = ({
         setLoading(false);
       }
     },
-    [effectiveKeyword, pendingRefundOnly, t],
+    [
+      effectiveFilters,
+      effectiveKeyword,
+      onPaginationChange,
+      pendingRefundOnly,
+      t,
+    ],
   );
 
   useEffect(() => {
@@ -162,9 +211,9 @@ const TopupBillingTable = ({
 
   useEffect(() => {
     if (onPaginationChange) {
-      onPaginationChange({ page, pageSize, total });
+      onPaginationChange({ page, pageSize, total, totalMoney });
     }
-  }, [onPaginationChange, page, pageSize, total]);
+  }, [onPaginationChange, page, pageSize, total, totalMoney]);
 
   const handlePageChange = (currentPage) => {
     setPage(currentPage);

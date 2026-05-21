@@ -18,20 +18,25 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import React from 'react';
-import { Button, Form } from '@douyinfe/semi-ui';
+import { Button, Form, Radio } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
+
+import { DATE_RANGE_PRESETS } from '../../../constants/console.constants';
+import { TOPUP_PAYMENT_METHODS } from '../../topup/modals/topupHistoryUtils.mjs';
 
 const BillingFilters = ({
   formApi,
+  formInitValues,
   handleReset,
   handleSearch,
   handleViewChange,
+  isAdminUser,
   setFormApi,
   t,
 }) => {
   return (
     <Form
-      initValues={{ keyword: '', billingView: 'all' }}
+      initValues={formInitValues}
       getFormApi={(api) => setFormApi(api)}
       onSubmit={handleSearch}
       allowEmpty={true}
@@ -43,39 +48,96 @@ const BillingFilters = ({
       <div className='flex flex-col gap-2'>
         <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2'>
           <div className='col-span-1 lg:col-span-2'>
-            <Form.Input
-              field='keyword'
+            <Form.DatePicker
+              field='dateRange'
               className='w-full'
-              prefix={<IconSearch />}
-              placeholder={t('用户ID/用户名/订单号')}
+              type='dateTimeRange'
+              placeholder={[t('开始时间'), t('结束时间')]}
               showClear
               pure
               size='small'
+              presets={DATE_RANGE_PRESETS.map((preset) => ({
+                text: t(preset.text),
+                start: preset.start(),
+                end: preset.end(),
+              }))}
             />
           </div>
+
+          {isAdminUser && (
+            <>
+              <Form.Input
+                field='user_id'
+                prefix={<IconSearch />}
+                placeholder={t('用户ID')}
+                showClear
+                pure
+                size='small'
+              />
+              <Form.Input
+                field='username'
+                prefix={<IconSearch />}
+                placeholder={t('用户名称')}
+                showClear
+                pure
+                size='small'
+              />
+            </>
+          )}
+
+          <Form.Input
+            field='trade_no'
+            prefix={<IconSearch />}
+            placeholder={t('订单号')}
+            showClear
+            pure
+            size='small'
+          />
+        </div>
+
+        <div>
+          <Form.RadioGroup
+            field='payment_method'
+            label={t('支付方式')}
+            type='button'
+            buttonSize='small'
+            direction='horizontal'
+            aria-label={t('支付方式')}
+            className='w-full flex flex-wrap gap-2'
+            onChange={() => {
+              setTimeout(() => {
+                handleSearch(formApi?.getValues?.() || {});
+              }, 0);
+            }}
+          >
+            {TOPUP_PAYMENT_METHODS.map((method) => (
+              <Radio value={method.value} key={method.value || 'all'}>
+                {t(method.key)}
+              </Radio>
+            ))}
+          </Form.RadioGroup>
         </div>
 
         <div className='flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3'>
           <div className='w-full sm:w-auto'>
-            <Form.Select
+            <Form.RadioGroup
               field='billingView'
-              placeholder={t('账单视图')}
-              className='w-full sm:w-auto min-w-[120px]'
-              pure
-              onChange={(value) => {
+              label={t('账单视图')}
+              type='button'
+              buttonSize='small'
+              direction='horizontal'
+              aria-label={t('账单视图')}
+              className='flex flex-wrap gap-2'
+              onChange={() => {
                 setTimeout(() => {
-                  handleViewChange(value || 'all');
+                  const values = formApi?.getValues?.() || {};
+                  handleViewChange(values.billingView || 'all');
                 }, 0);
               }}
-              size='small'
             >
-              <Form.Select.Option value='all'>
-                {t('全部账单')}
-              </Form.Select.Option>
-              <Form.Select.Option value='pending_refund'>
-                {t('待处理退款')}
-              </Form.Select.Option>
-            </Form.Select>
+              <Radio value='all'>{t('全部账单')}</Radio>
+              <Radio value='pending_refund'>{t('待处理退款')}</Radio>
+            </Form.RadioGroup>
           </div>
 
           <div className='flex gap-2 w-full sm:w-auto justify-end'>
