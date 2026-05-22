@@ -1090,6 +1090,21 @@ html.dark .sbg-variant-green {
   -webkit-text-fill-color: transparent;
 }
 
+.wechat-official-waiting-spinner {
+  transform-origin: center;
+  animation: wechat-official-waiting-spin 900ms linear infinite;
+}
+
+@keyframes wechat-official-waiting-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .system-notification-list {
   display: flex;
   flex-direction: column;
