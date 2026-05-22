@@ -310,7 +310,8 @@ classic 充值页根据浏览器环境选择支付场景：
 - 微信 Native 二维码弹窗只展示二维码和支付状态，不再展示订单号。二维码使用
   单一边框区域承载，底部显示“请在 mm 分 ss 秒内支付，超时无效。”或包含小时的
   “hh 小时 mm 分 ss 秒”倒计时，倒计时来源为 `WechatPayOfficialOrderTimeoutSec`。
-  “支付完成后将自动刷新”使用静态等待状态，不再使用闪烁提示。
+  “支付完成后将自动刷新”使用静态等待状态，刷新图标连续旋转，不再使用闪烁
+  提示。
 - 官方支付宝和官方微信在充值确认弹窗中都会显示“订单创建后 {{duration}}内
   有效，超时无效。”，其中有效期分别来自
   `AlipayOfficialOrderTimeoutSec` 和 `WechatPayOfficialOrderTimeoutSec`。

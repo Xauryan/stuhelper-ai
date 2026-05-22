@@ -20,7 +20,7 @@ For commercial licensing, please contact support@xauryan.com
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Typography } from '@douyinfe/semi-ui';
 import { QRCodeSVG } from 'qrcode.react';
-import { Clock3, Loader2 } from 'lucide-react';
+import { Clock3, RefreshCw } from 'lucide-react';
 import {
   formatWechatQrCountdown,
   getWechatOfficialQrPaymentHint,
@@ -102,7 +102,7 @@ const WechatOfficialQrPaymentModal = ({
         </div>
 
         <div className='flex w-full items-center justify-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300'>
-          <Loader2
+          <RefreshCw
             size={15}
             className={
               checking && !expired
