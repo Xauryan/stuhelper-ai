@@ -34,7 +34,6 @@ const WechatOfficialQrPaymentModal = ({
   visible,
   codeUrl,
   fallback,
-  checking,
   createdAt,
   orderTimeoutSeconds,
   onCancel,
@@ -105,7 +104,7 @@ const WechatOfficialQrPaymentModal = ({
           <Loader2
             size={15}
             className={
-              checking && !expired
+              !expired
                 ? 'wechat-official-waiting-spinner text-emerald-600'
                 : 'text-slate-400'
             }

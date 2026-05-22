@@ -114,7 +114,6 @@ const SubscriptionPlansCard = ({
   const [wechatQrCodeUrl, setWechatQrCodeUrl] = useState('');
   const [wechatQrOrderId, setWechatQrOrderId] = useState('');
   const [wechatQrFallback, setWechatQrFallback] = useState('');
-  const [wechatQrChecking, setWechatQrChecking] = useState(false);
   const [wechatQrCreatedAt, setWechatQrCreatedAt] = useState(0);
   const [wechatQrOrderTimeoutSeconds, setWechatQrOrderTimeoutSeconds] =
     useState(600);
@@ -147,7 +146,6 @@ const SubscriptionPlansCard = ({
     setWechatQrCodeUrl('');
     setWechatQrOrderId('');
     setWechatQrFallback('');
-    setWechatQrChecking(false);
     setWechatQrCreatedAt(0);
   };
 
@@ -155,7 +153,6 @@ const SubscriptionPlansCard = ({
     if (!orderId) {
       return false;
     }
-    setWechatQrChecking(true);
     try {
       const officialRes = await API.post(
         '/api/user/wechat-pay/official/status',
@@ -191,8 +188,6 @@ const SubscriptionPlansCard = ({
       }
     } catch (e) {
       // 轮询失败时保持二维码，等待下一次查询。
-    } finally {
-      setWechatQrChecking(false);
     }
     return false;
   };
@@ -1184,7 +1179,6 @@ const SubscriptionPlansCard = ({
         visible={wechatQrOpen}
         codeUrl={wechatQrCodeUrl}
         fallback={wechatQrFallback}
-        checking={wechatQrChecking}
         createdAt={wechatQrCreatedAt}
         orderTimeoutSeconds={wechatQrOrderTimeoutSeconds}
         onCancel={closeWechatQrModal}
