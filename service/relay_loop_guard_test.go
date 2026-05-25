@@ -146,6 +146,69 @@ func TestAutoSelectionExcludesRelayLoopChannels(t *testing.T) {
 	require.Equal(t, "backup", selectGroup)
 }
 
+func TestAutoSelectionUsesTokenPriorityBeforeSystemDefault(t *testing.T) {
+	db := setupRelayLoopGuardTestDB(t)
+	seedRelayLoopGuardChannel(t, db, 11, "default", "gpt-4o-mini")
+	seedRelayLoopGuardChannel(t, db, 22, "backup", "gpt-4o-mini")
+
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+	common.SetContextKey(c, constant.ContextKeyTokenAutoGroups, []string{"backup"})
+
+	channel, selectGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        c,
+		TokenGroup: "auto",
+		ModelName:  "gpt-4o-mini",
+		Retry:      common.GetPointer(0),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 22, channel.Id)
+	require.Equal(t, "backup", selectGroup)
+}
+
+func TestAutoSelectionAllowsTokenPriorityWhenSystemAutoGroupsEmpty(t *testing.T) {
+	db := setupRelayLoopGuardTestDB(t)
+	require.NoError(t, setting.UpdateAutoGroupsByJsonString(`[]`))
+	seedRelayLoopGuardChannel(t, db, 22, "backup", "gpt-4o-mini")
+
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+	common.SetContextKey(c, constant.ContextKeyTokenAutoGroups, []string{"backup"})
+
+	channel, selectGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        c,
+		TokenGroup: "auto",
+		ModelName:  "gpt-4o-mini",
+		Retry:      common.GetPointer(0),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 22, channel.Id)
+	require.Equal(t, "backup", selectGroup)
+}
+
+func TestAutoSelectionReturnsClearErrorWhenNoUsableAutoGroups(t *testing.T) {
+	_ = setupRelayLoopGuardTestDB(t)
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"vip":"VIP分组"}`))
+
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyUserGroup, "vip")
+
+	channel, selectGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        c,
+		TokenGroup: "auto",
+		ModelName:  "gpt-4o-mini",
+		Retry:      common.GetPointer(0),
+	})
+
+	require.Nil(t, channel)
+	require.Equal(t, "auto", selectGroup)
+	require.ErrorContains(t, err, "auto groups has no usable groups")
+}
+
 func TestAutoSelectionReturnsRelayLoopErrorWhenAllChannelsExcluded(t *testing.T) {
 	db := setupRelayLoopGuardTestDB(t)
 	seedRelayLoopGuardChannel(t, db, 11, "default", "gpt-4o-mini")

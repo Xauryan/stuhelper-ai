@@ -27,7 +27,8 @@ type Token struct {
 	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
 	Group              string         `json:"group" gorm:"default:''"`
-	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
+	CrossGroupRetry    bool           `json:"cross_group_retry"`            // 跨分组重试，仅auto分组有效
+	AutoGroups         string         `json:"auto_groups" gorm:"type:text"` // auto分组优先级，JSON字符串数组
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 }
 
@@ -76,6 +77,64 @@ func (token *Token) GetIpLimits() []string {
 		}
 	}
 	return ipLimits
+}
+
+func normalizeAutoGroupNames(groups []string, usableGroups map[string]string) []string {
+	normalized := make([]string, 0, len(groups))
+	seen := make(map[string]struct{}, len(groups))
+	for _, group := range groups {
+		group = strings.TrimSpace(group)
+		if group == "" || group == "auto" {
+			continue
+		}
+		if usableGroups != nil {
+			if _, ok := usableGroups[group]; !ok {
+				continue
+			}
+		}
+		if _, ok := seen[group]; ok {
+			continue
+		}
+		seen[group] = struct{}{}
+		normalized = append(normalized, group)
+	}
+	return normalized
+}
+
+func ParseTokenAutoGroups(autoGroups string) []string {
+	autoGroups = strings.TrimSpace(autoGroups)
+	if autoGroups == "" {
+		return []string{}
+	}
+
+	var groups []string
+	if strings.HasPrefix(autoGroups, "[") {
+		if err := common.UnmarshalJsonStr(autoGroups, &groups); err != nil {
+			return []string{}
+		}
+	} else {
+		groups = strings.Split(autoGroups, ",")
+	}
+	return normalizeAutoGroupNames(groups, nil)
+}
+
+func NormalizeTokenAutoGroups(autoGroups string, usableGroups map[string]string) string {
+	groups := normalizeAutoGroupNames(ParseTokenAutoGroups(autoGroups), usableGroups)
+	if len(groups) == 0 {
+		return ""
+	}
+	jsonBytes, err := common.Marshal(groups)
+	if err != nil {
+		return ""
+	}
+	return string(jsonBytes)
+}
+
+func (token *Token) GetAutoGroups() []string {
+	if token == nil {
+		return []string{}
+	}
+	return ParseTokenAutoGroups(token.AutoGroups)
 }
 
 func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
@@ -295,7 +354,7 @@ func (token *Token) Update() (err error) {
 		}
 	}()
 	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
-		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry").Updates(token).Error
+		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry", "auto_groups").Updates(token).Error
 	return err
 }
 

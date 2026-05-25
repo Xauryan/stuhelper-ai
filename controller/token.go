@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/constant"
 	"github.com/Xauryan/stuhelper-ai/i18n"
 	"github.com/Xauryan/stuhelper-ai/model"
+	"github.com/Xauryan/stuhelper-ai/service"
 	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -171,6 +173,17 @@ func normalizeTokenGroup(group string) string {
 	return group
 }
 
+func normalizeTokenAutoGroups(c *gin.Context, group string, autoGroups string) string {
+	if group != "auto" {
+		return ""
+	}
+	userGroup := c.GetString(string(constant.ContextKeyUserGroup))
+	if userGroup == "" {
+		userGroup = c.GetString(string(constant.ContextKeyUsingGroup))
+	}
+	return model.NormalizeTokenAutoGroups(autoGroups, service.GetUserUsableGroups(userGroup))
+}
+
 func AddToken(c *gin.Context) {
 	token := model.Token{}
 	err := c.ShouldBindJSON(&token)
@@ -227,8 +240,9 @@ func AddToken(c *gin.Context) {
 		ModelLimits:        token.ModelLimits,
 		AllowIps:           token.AllowIps,
 		Group:              normalizeTokenGroup(token.Group),
-		CrossGroupRetry:    token.CrossGroupRetry,
 	}
+	cleanToken.CrossGroupRetry = cleanToken.Group == "auto" && token.CrossGroupRetry
+	cleanToken.AutoGroups = normalizeTokenAutoGroups(c, cleanToken.Group, token.AutoGroups)
 	err = cleanToken.Insert()
 	if err != nil {
 		common.ApiError(c, err)
@@ -305,7 +319,8 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.ModelLimits = token.ModelLimits
 		cleanToken.AllowIps = token.AllowIps
 		cleanToken.Group = normalizeTokenGroup(token.Group)
-		cleanToken.CrossGroupRetry = token.CrossGroupRetry
+		cleanToken.CrossGroupRetry = cleanToken.Group == "auto" && token.CrossGroupRetry
+		cleanToken.AutoGroups = normalizeTokenAutoGroups(c, cleanToken.Group, token.AutoGroups)
 	}
 	err = cleanToken.Update()
 	if err != nil {

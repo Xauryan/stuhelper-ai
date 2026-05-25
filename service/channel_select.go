@@ -3,12 +3,12 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/constant"
 	"github.com/Xauryan/stuhelper-ai/logger"
 	"github.com/Xauryan/stuhelper-ai/model"
-	"github.com/Xauryan/stuhelper-ai/setting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -95,10 +95,10 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	}
 
 	if param.TokenGroup == "auto" {
-		if len(setting.GetAutoGroups()) == 0 {
-			return nil, selectGroup, errors.New("auto groups is not enabled")
+		autoGroups := GetContextAutoGroups(param.Ctx, userGroup)
+		if len(autoGroups) == 0 {
+			return nil, selectGroup, fmt.Errorf("auto groups has no usable groups for user group %s", userGroup)
 		}
-		autoGroups := GetUserAutoGroup(userGroup)
 
 		// startGroupIndex: the group index to start searching from
 		// startGroupIndex: 开始搜索的分组索引
@@ -124,7 +124,10 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			}
 			logger.LogDebug(param.Ctx, "Auto selecting group: %s, priorityRetry: %d", autoGroup, priorityRetry)
 
-			channel, _ = model.GetRandomSatisfiedChannelExcluding(autoGroup, param.ModelName, priorityRetry, excludeChannelIDs)
+			channel, err = model.GetRandomSatisfiedChannelExcluding(autoGroup, param.ModelName, priorityRetry, excludeChannelIDs)
+			if err != nil {
+				return nil, selectGroup, err
+			}
 			if channel == nil {
 				// Current group has no available channel for this model, try next group
 				// 当前分组没有该模型的可用渠道，尝试下一个分组
@@ -160,6 +163,9 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 				common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i)
 			}
 			break
+		}
+		if channel == nil && len(excludeChannelIDs) == 0 {
+			return nil, selectGroup, fmt.Errorf("auto groups have no available channel for model %s: %s", param.ModelName, strings.Join(autoGroups, ","))
 		}
 	} else {
 		channel, err = model.GetRandomSatisfiedChannelExcluding(param.TokenGroup, param.ModelName, param.GetRetry(), excludeChannelIDs)

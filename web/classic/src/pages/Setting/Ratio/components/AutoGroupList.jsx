@@ -16,7 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@xauryan.com
 */
-import React, { useState, useCallback, useMemo } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react';
 import { Button, Select, Typography, Popconfirm, Tag } from '@douyinfe/semi-ui';
 import {
   IconPlus,
@@ -49,15 +55,30 @@ function serializeAutoGroups(items) {
   return names.length === 0 ? '' : JSON.stringify(names);
 }
 
-export default function AutoGroupList({ value, groupNames = [], onChange }) {
+export default function AutoGroupList({
+  value,
+  groupNames = [],
+  onChange,
+  allowCreate = true,
+}) {
   const { t } = useTranslation();
 
   const [items, setItems] = useState(() => parseAutoGroups(value));
+  const lastEmittedValue = useRef(value || '');
+
+  useEffect(() => {
+    const nextValue = value || '';
+    if (nextValue === lastEmittedValue.current) return;
+    setItems(parseAutoGroups(nextValue));
+    lastEmittedValue.current = nextValue;
+  }, [value]);
 
   const emitChange = useCallback(
     (newItems) => {
+      const serialized = serializeAutoGroups(newItems);
       setItems(newItems);
-      onChange?.(serializeAutoGroups(newItems));
+      lastEmittedValue.current = serialized;
+      onChange?.(serialized);
     },
     [onChange],
   );
@@ -136,7 +157,7 @@ export default function AutoGroupList({ value, groupNames = [], onChange }) {
               optionList={groupOptions}
               onChange={(v) => updateItem(item._id, v)}
               style={{ flex: 1 }}
-              allowCreate
+              allowCreate={allowCreate}
               position='bottomLeft'
             />
             <Button

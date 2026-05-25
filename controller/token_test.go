@@ -14,6 +14,7 @@ import (
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/model"
+	"github.com/Xauryan/stuhelper-ai/setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
@@ -537,6 +538,93 @@ func TestAddTokenNormalizesEmptyGroupToAuto(t *testing.T) {
 	}
 	if !token.CrossGroupRetry {
 		t.Fatalf("expected cross_group_retry to be preserved for auto token")
+	}
+}
+
+func TestAddTokenNormalizesAutoGroupPriority(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	originalUserUsableGroups := setting.UserUsableGroups2JSONString()
+	if err := setting.UpdateUserUsableGroupsByJSONString(`{"default":"默认分组","vip":"VIP分组"}`); err != nil {
+		t.Fatalf("failed to set user usable groups: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := setting.UpdateUserUsableGroupsByJSONString(originalUserUsableGroups); err != nil {
+			t.Fatalf("failed to restore user usable groups: %v", err)
+		}
+	})
+
+	body := map[string]any{
+		"name":                 "custom-auto-token",
+		"expired_time":         -1,
+		"remain_quota":         100,
+		"unlimited_quota":      true,
+		"model_limits_enabled": false,
+		"model_limits":         "",
+		"group":                "auto",
+		"cross_group_retry":    true,
+		"auto_groups":          `["vip","default","vip","auto","missing"]`,
+	}
+
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/token/", body, 1)
+	AddToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected success response, got message: %s", response.Message)
+	}
+
+	var token model.Token
+	if err := db.First(&token, "name = ?", "custom-auto-token").Error; err != nil {
+		t.Fatalf("failed to fetch created token: %v", err)
+	}
+	if token.AutoGroups != `["vip","default"]` {
+		t.Fatalf("expected normalized auto groups, got %q", token.AutoGroups)
+	}
+}
+
+func TestUpdateTokenClearsAutoGroupPriorityForExplicitGroup(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := seedToken(t, db, 1, "explicit-group-token", "explicit1234token")
+	token.Group = "auto"
+	token.CrossGroupRetry = true
+	token.AutoGroups = `["vip"]`
+	if err := db.Save(token).Error; err != nil {
+		t.Fatalf("failed to seed token auto groups: %v", err)
+	}
+
+	body := map[string]any{
+		"id":                   token.Id,
+		"name":                 "explicit-group-token",
+		"expired_time":         -1,
+		"remain_quota":         100,
+		"unlimited_quota":      true,
+		"model_limits_enabled": false,
+		"model_limits":         "",
+		"group":                "default",
+		"cross_group_retry":    true,
+		"auto_groups":          `["vip"]`,
+	}
+
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPut, "/api/token/", body, 1)
+	UpdateToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected success response, got message: %s", response.Message)
+	}
+
+	var updated model.Token
+	if err := db.First(&updated, "id = ?", token.Id).Error; err != nil {
+		t.Fatalf("failed to fetch updated token: %v", err)
+	}
+	if updated.Group != "default" {
+		t.Fatalf("expected explicit group to be saved, got %q", updated.Group)
+	}
+	if updated.CrossGroupRetry {
+		t.Fatalf("expected cross_group_retry to be cleared for explicit group")
+	}
+	if updated.AutoGroups != "" {
+		t.Fatalf("expected auto_groups to be cleared for explicit group, got %q", updated.AutoGroups)
 	}
 }
 

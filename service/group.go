@@ -3,8 +3,11 @@ package service
 import (
 	"strings"
 
+	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/constant"
 	"github.com/Xauryan/stuhelper-ai/setting"
 	"github.com/Xauryan/stuhelper-ai/setting/ratio_setting"
+	"github.com/gin-gonic/gin"
 )
 
 func GetUserUsableGroups(userGroup string) map[string]string {
@@ -43,14 +46,44 @@ func GroupInUserUsableGroups(userGroup, groupName string) bool {
 
 // GetUserAutoGroup 根据用户分组获取自动分组设置
 func GetUserAutoGroup(userGroup string) []string {
+	return GetUserAutoGroupWithPriority(userGroup, nil)
+}
+
+func GetUserAutoGroupWithPriority(userGroup string, preferredGroups []string) []string {
 	groups := GetUserUsableGroups(userGroup)
 	autoGroups := make([]string, 0)
-	for _, group := range setting.GetAutoGroups() {
-		if _, ok := groups[group]; ok {
-			autoGroups = append(autoGroups, group)
+	seen := make(map[string]struct{})
+
+	appendGroup := func(group string) {
+		group = strings.TrimSpace(group)
+		if group == "" || group == "auto" {
+			return
 		}
+		if _, ok := groups[group]; !ok {
+			return
+		}
+		if _, ok := seen[group]; ok {
+			return
+		}
+		seen[group] = struct{}{}
+		autoGroups = append(autoGroups, group)
+	}
+
+	for _, group := range preferredGroups {
+		appendGroup(group)
+	}
+	for _, group := range setting.GetAutoGroups() {
+		appendGroup(group)
 	}
 	return autoGroups
+}
+
+func GetContextAutoGroups(c *gin.Context, userGroup string) []string {
+	if c == nil {
+		return GetUserAutoGroup(userGroup)
+	}
+	preferredGroups := common.GetContextKeyStringSlice(c, constant.ContextKeyTokenAutoGroups)
+	return GetUserAutoGroupWithPriority(userGroup, preferredGroups)
 }
 
 // GetUserGroupRatio 获取用户使用某个分组的倍率

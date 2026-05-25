@@ -4546,6 +4546,18 @@
           },
           "unlimited_quota": {
             "type": "boolean"
+          },
+          "group": {
+            "type": "string",
+            "description": "令牌分组；auto 表示自动分组"
+          },
+          "cross_group_retry": {
+            "type": "boolean",
+            "description": "auto 分组下是否允许渠道失败后跨分组重试"
+          },
+          "auto_groups": {
+            "type": "string",
+            "description": "auto 令牌的用户自定义分组优先级，JSON 字符串数组；优先级高于系统默认 AutoGroups"
           }
         }
       },

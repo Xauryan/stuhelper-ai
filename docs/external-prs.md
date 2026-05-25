@@ -455,8 +455,9 @@ API token。失败信息为：
 - `token.Group == "auto"` 时，跳过中间件中的可用分组成员检查。
 - `token.Group != "auto"` 时，仍要求该分组存在于
   `service.GetUserUsableGroups(userGroup)`。
-- 下游渠道和模型选择使用 `service.GetUserAutoGroup(userGroup)` 解析 `auto`，
-  该函数会按用户真实可用分组过滤。
+- 下游渠道和模型选择使用 `service.GetContextAutoGroups(ctx, userGroup)` 解析
+  `auto`，该函数会先应用令牌级 `auto_groups` 优先级，再追加系统默认
+  `AutoGroups`，并按用户真实可用分组过滤。
 
 ### 验证
 

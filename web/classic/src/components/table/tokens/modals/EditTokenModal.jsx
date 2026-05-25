@@ -33,6 +33,7 @@ import {
   displayAmountToQuota,
 } from '../../../../helpers/quota';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
+import AutoGroupList from '../../../../pages/Setting/Ratio/components/AutoGroupList';
 import {
   Button,
   SideSheet,
@@ -80,6 +81,7 @@ const EditTokenModal = (props) => {
     allow_ips: '',
     group: DEFAULT_TOKEN_GROUP,
     cross_group_retry: true,
+    auto_groups: '',
     tokenCount: 1,
   });
 
@@ -251,6 +253,10 @@ const EditTokenModal = (props) => {
         localInputs.group === DEFAULT_TOKEN_GROUP
           ? !!localInputs.cross_group_retry
           : false;
+      localInputs.auto_groups =
+        localInputs.group === DEFAULT_TOKEN_GROUP
+          ? localInputs.auto_groups || ''
+          : '';
       let res = await API.put(`/api/token/`, {
         ...localInputs,
         id: parseInt(props.editingToken.id),
@@ -300,6 +306,10 @@ const EditTokenModal = (props) => {
           localInputs.group === DEFAULT_TOKEN_GROUP
             ? !!localInputs.cross_group_retry
             : false;
+        localInputs.auto_groups =
+          localInputs.group === DEFAULT_TOKEN_GROUP
+            ? localInputs.auto_groups || ''
+            : '';
         let res = await API.post(`/api/token/`, localInputs);
         const { success, message } = res.data;
         if (success) {
@@ -442,6 +452,32 @@ const EditTokenModal = (props) => {
                         '开启后，当前分组渠道失败时会按顺序尝试下一个分组的渠道',
                       )}
                     />
+                  </Col>
+                  <Col
+                    span={24}
+                    style={{
+                      display: values.group === 'auto' ? 'block' : 'none',
+                    }}
+                  >
+                    <Form.Slot label={t('auto 分组优先级')}>
+                      <AutoGroupList
+                        value={values.auto_groups}
+                        groupNames={groups
+                          .filter(
+                            (group) => group.value !== DEFAULT_TOKEN_GROUP,
+                          )
+                          .map((group) => group.value)}
+                        onChange={(value) =>
+                          formApiRef.current?.setValue('auto_groups', value)
+                        }
+                        allowCreate={false}
+                      />
+                      <Text type='tertiary' size='small' className='mt-2 block'>
+                        {t(
+                          '按列表顺序优先尝试这些分组；未选择的分组会继续按系统默认 auto 顺序补充',
+                        )}
+                      </Text>
+                    </Form.Slot>
                   </Col>
                   <Col xs={24} sm={24} md={24} lg={10} xl={10}>
                     <Form.DatePicker
