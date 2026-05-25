@@ -79,14 +79,14 @@ type wechatPayOfficialPrepayResponse struct {
 }
 
 func RequestAlipayOfficialAmount(c *gin.Context) {
-	requestOfficialAmount(c, setting.AlipayOfficialMinTopUp, setting.AlipayOfficialUnitPrice)
+	requestOfficialAmount(c, setting.AlipayOfficialMinTopUp, setting.AlipayOfficialUnitPrice, setting.AlipayOfficialServiceFeePercent)
 }
 
 func RequestWechatPayOfficialAmount(c *gin.Context) {
-	requestOfficialAmount(c, setting.WechatPayOfficialMinTopUp, setting.WechatPayOfficialUnitPrice)
+	requestOfficialAmount(c, setting.WechatPayOfficialMinTopUp, setting.WechatPayOfficialUnitPrice, setting.WechatPayOfficialServiceFeePercent)
 }
 
-func requestOfficialAmount(c *gin.Context, minTopUp int, unitPrice float64) {
+func requestOfficialAmount(c *gin.Context, minTopUp int, unitPrice float64, serviceFeePercent float64) {
 	var req OfficialPayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
@@ -103,7 +103,7 @@ func requestOfficialAmount(c *gin.Context, minTopUp int, unitPrice float64) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
 		return
 	}
-	payMoney := getOfficialPayMoney(req.Amount, group, unitPrice)
+	payMoney := getOfficialPayMoney(req.Amount, group, unitPrice, serviceFeePercent)
 	if payMoney < 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
@@ -134,14 +134,14 @@ func RequestAlipayOfficialPay(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
 		return
 	}
-	payMoney := getOfficialPayMoney(req.Amount, group, setting.AlipayOfficialUnitPrice)
-	if payMoney < 0.01 {
+	payMoney := getOfficialPayMoneyBreakdown(req.Amount, group, setting.AlipayOfficialUnitPrice, setting.AlipayOfficialServiceFeePercent)
+	if payMoney.TotalMoney < 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
 	}
 
 	tradeNo := buildOfficialTradeNo("ALIPAY", id)
-	topUp := buildOfficialTopUp(id, req.Amount, payMoney, tradeNo, model.PaymentMethodAlipayOfficial, model.PaymentProviderAlipayOfficial)
+	topUp := buildOfficialTopUp(id, req.Amount, payMoney.EffectiveMoney, payMoney.Fee, tradeNo, model.PaymentMethodAlipayOfficial, model.PaymentProviderAlipayOfficial)
 	if err := topUp.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("支付宝官方支付 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, tradeNo, req.Amount, err.Error()))
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
@@ -175,7 +175,7 @@ func RequestAlipayOfficialPay(c *gin.Context) {
 		ReturnURL:        returnURL,
 		QuitURL:          paymentReturnPath("/console/topup"),
 		OutTradeNo:       tradeNo,
-		TotalAmount:      formatOfficialPayMoney(payMoney),
+		TotalAmount:      formatOfficialPayMoney(payMoney.TotalMoney),
 		Subject:          fmt.Sprintf("StuHelper AI 充值 %d", req.Amount),
 		TimeoutExpress:   formatAlipayOfficialTimeoutExpress(setting.AlipayOfficialOrderTimeoutSec),
 	})
@@ -187,7 +187,7 @@ func RequestAlipayOfficialPay(c *gin.Context) {
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方支付 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f scene=%s", id, tradeNo, req.Amount, payMoney, scene))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方支付 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f fee=%.2f total_money=%.2f scene=%s", id, tradeNo, req.Amount, payMoney.EffectiveMoney, payMoney.Fee, payMoney.TotalMoney, scene))
 	c.JSON(http.StatusOK, gin.H{
 		"message": "success",
 		"data": gin.H{
@@ -226,14 +226,14 @@ func RequestWechatPayOfficialPay(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
 		return
 	}
-	payMoney := getOfficialPayMoney(req.Amount, group, setting.WechatPayOfficialUnitPrice)
-	if payMoney < 0.01 {
+	payMoney := getOfficialPayMoneyBreakdown(req.Amount, group, setting.WechatPayOfficialUnitPrice, setting.WechatPayOfficialServiceFeePercent)
+	if payMoney.TotalMoney < 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
 	}
 
 	tradeNo := buildWechatPayOfficialTradeNo("WX", id)
-	topUp := buildOfficialTopUp(id, req.Amount, payMoney, tradeNo, model.PaymentMethodWechatPayOfficial, model.PaymentProviderWechatPayOfficial)
+	topUp := buildOfficialTopUp(id, req.Amount, payMoney.EffectiveMoney, payMoney.Fee, tradeNo, model.PaymentMethodWechatPayOfficial, model.PaymentProviderWechatPayOfficial)
 	if err := topUp.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("微信支付官方 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, tradeNo, req.Amount, err.Error()))
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
@@ -262,7 +262,7 @@ func RequestWechatPayOfficialPay(c *gin.Context) {
 		Description: fmt.Sprintf("StuHelper AI 充值 %d", req.Amount),
 		OutTradeNo:  tradeNo,
 		NotifyURL:   notifyURL,
-		AmountTotal: yuanToFen(payMoney),
+		AmountTotal: yuanToFen(payMoney.TotalMoney),
 		ClientIP:    c.ClientIP(),
 		WapURL:      wapURL,
 		WapName:     "StuHelper AI",
@@ -277,7 +277,7 @@ func RequestWechatPayOfficialPay(c *gin.Context) {
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f scene=%s", id, tradeNo, req.Amount, payMoney, prepay.Scene))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f fee=%.2f total_money=%.2f scene=%s", id, tradeNo, req.Amount, payMoney.EffectiveMoney, payMoney.Fee, payMoney.TotalMoney, prepay.Scene))
 	data := gin.H{
 		"order_id":              tradeNo,
 		"scene":                 prepay.Scene,
@@ -648,7 +648,7 @@ func requestWechatPayOfficialRefund(ctx context.Context, refund *model.TopUpRefu
 		Reason:      normalizeWechatPayOfficialRefundReason(reason),
 		NotifyURL:   notifyURL,
 		RefundFen:   yuanToFen(refund.RefundAmount),
-		TotalFen:    yuanToFen(topUp.Money),
+		TotalFen:    yuanToFen(topUp.PaidMoney()),
 	})
 	if err != nil {
 		return nil, err
@@ -1302,7 +1302,7 @@ func completeAlipayOfficialSubscriptionOrderIfPresent(tradeNo string, payload an
 	if order.PaymentProvider != model.PaymentProviderAlipayOfficial {
 		return model.ErrPaymentMethodMismatch
 	}
-	expectedMoney := decimal.NewFromFloat(order.Money).Round(2)
+	expectedMoney := decimal.NewFromFloat(order.PaidMoney()).Round(2)
 	actualMoney := paidMoney.Round(2)
 	if !expectedMoney.Equal(actualMoney) {
 		return errors.New("支付金额与订阅订单金额不一致")
@@ -1469,7 +1469,7 @@ func completeWechatPayOfficialSubscriptionOrderIfPresent(envelope service.Wechat
 	if order.PaymentProvider != model.PaymentProviderWechatPayOfficial {
 		return model.ErrPaymentMethodMismatch
 	}
-	expectedFen := yuanToFen(order.Money)
+	expectedFen := yuanToFen(order.PaidMoney())
 	if expectedFen != transaction.Amount.Total {
 		return errors.New("支付金额与订阅订单金额不一致")
 	}
@@ -1516,7 +1516,11 @@ func prepayWechatPayOfficialWithNativeFallback(ctx context.Context, client *serv
 	}, nil
 }
 
-func getOfficialPayMoney(amount int64, group string, unitPrice float64) float64 {
+func getOfficialPayMoney(amount int64, group string, unitPrice float64, serviceFeePercent float64) float64 {
+	return getOfficialPayMoneyBreakdown(amount, group, unitPrice, serviceFeePercent).TotalMoney
+}
+
+func getOfficialPayMoneyBreakdown(amount int64, group string, unitPrice float64, serviceFeePercent float64) payMoneyBreakdown {
 	dAmount := decimal.NewFromInt(amount)
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		dAmount = dAmount.Div(decimal.NewFromFloat(common.QuotaPerUnit))
@@ -1532,12 +1536,12 @@ func getOfficialPayMoney(amount int64, group string, unitPrice float64) float64 
 		discount = ds
 	}
 
-	return dAmount.
+	payMoney := dAmount.
 		Mul(decimal.NewFromFloat(unitPrice)).
 		Mul(decimal.NewFromFloat(topupGroupRatio)).
-		Mul(decimal.NewFromFloat(discount)).
-		RoundCeil(2).
-		InexactFloat64()
+		Mul(decimal.NewFromFloat(discount))
+
+	return buildPayMoneyBreakdown(payMoney, serviceFeePercent)
 }
 
 func formatOfficialPayMoney(payMoney float64) string {
@@ -1685,11 +1689,12 @@ func normalizeOfficialTopUpAmount(amount int64) int64 {
 	return normalized
 }
 
-func buildOfficialTopUp(userID int, amount int64, money float64, tradeNo string, paymentMethod string, paymentProvider string) *model.TopUp {
+func buildOfficialTopUp(userID int, amount int64, money float64, fee float64, tradeNo string, paymentMethod string, paymentProvider string) *model.TopUp {
 	return &model.TopUp{
 		UserId:          userID,
 		Amount:          normalizeOfficialTopUpAmount(amount),
 		Money:           money,
+		Fee:             fee,
 		TradeNo:         tradeNo,
 		PaymentMethod:   paymentMethod,
 		PaymentProvider: paymentProvider,

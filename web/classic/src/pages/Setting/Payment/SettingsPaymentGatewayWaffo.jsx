@@ -95,6 +95,7 @@ export default function SettingsPaymentGatewayWaffo(props) {
     icon: '',
     payMethodType: '',
     payMethodName: '',
+    serviceFeePercent: 0,
   });
 
   useEffect(() => {
@@ -251,6 +252,7 @@ export default function SettingsPaymentGatewayWaffo(props) {
       icon: '',
       payMethodType: '',
       payMethodName: '',
+      serviceFeePercent: 0,
     });
     setPayMethodModalVisible(true);
   };
@@ -263,6 +265,9 @@ export default function SettingsPaymentGatewayWaffo(props) {
       icon: record.icon || '',
       payMethodType: record.payMethodType || '',
       payMethodName: record.payMethodName || '',
+      serviceFeePercent: Number(
+        record.service_fee_percent ?? record.serviceFeePercent ?? 0,
+      ),
     });
     setPayMethodModalVisible(true);
   };
@@ -273,11 +278,17 @@ export default function SettingsPaymentGatewayWaffo(props) {
       showError(t('支付方式名称不能为空'));
       return;
     }
+    const serviceFeePercent = Number(payMethodForm.serviceFeePercent || 0);
+    if (!Number.isFinite(serviceFeePercent) || serviceFeePercent < 0) {
+      showError(t('支付手续费不能小于 0'));
+      return;
+    }
     const newMethod = {
       name: payMethodForm.name.trim(),
       icon: payMethodForm.icon.trim(),
       payMethodType: payMethodForm.payMethodType.trim(),
       payMethodName: payMethodForm.payMethodName.trim(),
+      service_fee_percent: serviceFeePercent,
     };
     if (editingPayMethodIndex === -1) {
       // 新增
@@ -326,6 +337,14 @@ export default function SettingsPaymentGatewayWaffo(props) {
       title: t('支付方式名称'),
       dataIndex: 'payMethodName',
       render: (text) => text || <Text type='tertiary'>—</Text>,
+    },
+    {
+      title: t('支付手续费（%）'),
+      dataIndex: 'service_fee_percent',
+      render: (text) => {
+        const value = Number(text);
+        return Number.isFinite(value) ? value : 0;
+      },
     },
     {
       title: t('操作'),
@@ -693,6 +712,24 @@ export default function SettingsPaymentGatewayWaffo(props) {
             />
             <Text type='tertiary' size='small'>
               {t('Waffo API 参数，可空（最多64位）')}
+            </Text>
+          </div>
+          <div>
+            <div style={{ marginBottom: 4 }}>
+              <Text strong>{t('支付手续费（%）')}</Text>
+            </div>
+            <Input
+              value={payMethodForm.serviceFeePercent}
+              onChange={(val) =>
+                setPayMethodForm({
+                  ...payMethodForm,
+                  serviceFeePercent: val,
+                })
+              }
+              placeholder={t('例如：0.6')}
+            />
+            <Text type='tertiary' size='small'>
+              {t('按该支付通道有效支付金额百分比计算，手续费不计入可退款金额')}
             </Text>
           </div>
         </div>

@@ -28,6 +28,18 @@ function ceilToCents(amount) {
   return Math.ceil((Number(amount) || 0) * 100 - 1e-9) / 100;
 }
 
+function applyServiceFee(amount, serviceFeePercent) {
+  const feePercent = Number(serviceFeePercent);
+  if (!Number.isFinite(feePercent) || feePercent <= 0) {
+    return ceilToCents(amount);
+  }
+  return ceilToCents(ceilToCents(amount) * (1 + feePercent / 100));
+}
+
+function shouldApplyServiceFee(paymentMethod) {
+  return paymentMethod !== 'stripe' && paymentMethod !== 'creem';
+}
+
 function getConfiguredDiscount(preset, discountConfig) {
   if (preset && Object.prototype.hasOwnProperty.call(preset, 'discount')) {
     const presetDiscount = Number(preset.discount);
@@ -58,6 +70,7 @@ export function buildRechargeAmountDisplay({
   currencyConfig,
   usdExchangeRate,
   selectedPaymentMethod,
+  serviceFeePercent,
 }) {
   const amount = Number(preset?.value) || 0;
   const unitPrice = Number(priceRatio) || 0;
@@ -65,9 +78,15 @@ export function buildRechargeAmountDisplay({
   const configuredDiscount = getConfiguredDiscount(preset, discountConfig);
   const discount = configuredDiscount ?? 1;
   const hasDiscount = configuredDiscount !== null && discount < 1;
-  const actualPay = ceilToCents(originalPrice * discount);
-  const originalPay = ceilToCents(originalPrice);
+  const paymentMethod = selectedPaymentMethod || '';
+  const activeServiceFeePercent = shouldApplyServiceFee(paymentMethod)
+    ? serviceFeePercent
+    : 0;
+  const effectivePay = ceilToCents(originalPrice * discount);
+  const actualPay = applyServiceFee(effectivePay, activeServiceFeePercent);
+  const originalPay = applyServiceFee(originalPrice, activeServiceFeePercent);
   const save = Math.max(0, originalPay - actualPay);
+  const fee = Math.max(0, actualPay - effectivePay);
   const displayType = currencyConfig?.type || 'USD';
   const exchangeRate = Number(usdExchangeRate) || 7;
   let displayValue = amount;
@@ -78,7 +97,6 @@ export function buildRechargeAmountDisplay({
     displayValue = amount * (Number(currencyConfig?.rate) || 1);
   }
 
-  const paymentMethod = selectedPaymentMethod || '';
   let paymentSymbol = currencyConfig?.symbol || '$';
   let displayActualPay = actualPay;
   let displaySave = save;
@@ -104,6 +122,7 @@ export function buildRechargeAmountDisplay({
     paymentSymbol,
     displayActualPay,
     displaySave,
+    fee,
     discount,
     hasDiscount,
     showSavings: hasDiscount,

@@ -67,7 +67,7 @@ const EditUserModal = (props) => {
   const [adjustModalOpen, setAdjustModalOpen] = useState(false);
   const [adjustQuotaLocal, setAdjustQuotaLocal] = useState('');
   const [adjustAmountLocal, setAdjustAmountLocal] = useState('');
-  const [adjustMode, setAdjustMode] = useState('add');
+  const [adjustMode, setAdjustMode] = useState('recharge');
   const [adjustLoading, setAdjustLoading] = useState(false);
   const isMobile = useIsMobile();
   const [groupOptions, setGroupOptions] = useState([]);
@@ -235,7 +235,8 @@ const EditUserModal = (props) => {
     const val = parseInt(adjustQuotaLocal) || 0;
     let result;
     switch (adjustMode) {
-      case 'add':
+      case 'recharge':
+      case 'gift':
         result = current + Math.abs(val);
         return `${t('当前额度')}：${renderQuota(current)}，+${renderQuota(Math.abs(val))} = ${renderQuota(result)}`;
       case 'subtract':
@@ -516,7 +517,7 @@ const EditUserModal = (props) => {
           setAdjustModalOpen(false);
           setAdjustQuotaLocal('');
           setAdjustAmountLocal('');
-          setAdjustMode('add');
+          setAdjustMode('recharge');
         }}
         confirmLoading={adjustLoading}
         closable={null}
@@ -546,7 +547,8 @@ const EditUserModal = (props) => {
             }}
             style={{ width: '100%' }}
           >
-            <Radio value='add'>{t('添加')}</Radio>
+            <Radio value='recharge'>{t('充值')}</Radio>
+            <Radio value='gift'>{t('赠送')}</Radio>
             <Radio value='subtract'>{t('减少')}</Radio>
             <Radio value='override'>{t('覆盖')}</Radio>
           </RadioGroup>

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/logger"
@@ -21,6 +22,7 @@ type TopUp struct {
 	Username            string  `json:"username" gorm:"-"`
 	Amount              int64   `json:"amount"`
 	Money               float64 `json:"money"`
+	Fee                 float64 `json:"fee" gorm:"default:0"`
 	RefundedMoney       float64 `json:"refunded_money" gorm:"default:0"`
 	RefundedQuota       int64   `json:"refunded_quota" gorm:"default:0"`
 	RefundRequestId     int     `json:"refund_request_id" gorm:"-"`
@@ -35,6 +37,15 @@ type TopUp struct {
 	Status              string  `json:"status"`
 }
 
+func (topUp TopUp) PaidMoney() float64 {
+	money := decimal.NewFromFloat(topUp.Money).Round(2)
+	fee := decimal.NewFromFloat(topUp.Fee).Round(2)
+	if fee.IsNegative() {
+		fee = decimal.Zero
+	}
+	return money.Add(fee).Round(2).InexactFloat64()
+}
+
 const (
 	PaymentMethodStripe            = "stripe"
 	PaymentMethodCreem             = "creem"
@@ -42,6 +53,7 @@ const (
 	PaymentMethodWaffoPancake      = "waffo_pancake"
 	PaymentMethodAlipayOfficial    = "alipay_official"
 	PaymentMethodWechatPayOfficial = "wxpay_official"
+	PaymentMethodAdminAdd          = "admin_add"
 )
 
 const (
@@ -52,11 +64,18 @@ const (
 	PaymentProviderWaffoPancake      = "waffo_pancake"
 	PaymentProviderAlipayOfficial    = "alipay_official"
 	PaymentProviderWechatPayOfficial = "wxpay_official"
+	PaymentProviderAdmin             = "admin"
 )
 
 func IsOfficialPaymentProvider(paymentProvider string) bool {
 	return paymentProvider == PaymentProviderAlipayOfficial ||
 		paymentProvider == PaymentProviderWechatPayOfficial
+}
+
+func IsAdminTopUpRecord(topUp *TopUp) bool {
+	return topUp != nil &&
+		(topUp.PaymentProvider == PaymentProviderAdmin ||
+			topUp.PaymentMethod == PaymentMethodAdminAdd)
 }
 
 var (
@@ -309,8 +328,12 @@ func calculateSubscriptionPaymentRefundPreview(tx *gorm.DB, topUp TopUp, order S
 		preview.Reason = "未找到可退款的订阅实例"
 		return preview, nil
 	}
+	plan, err := getSubscriptionPlanByIdTx(tx, order.PlanId)
+	if err != nil {
+		return nil, err
+	}
 	now := common.GetTimestamp()
-	timeRatio := subscriptionElapsedRatio(*sub, now)
+	timeRatio := subscriptionRefundTimeRatio(*sub, plan, now)
 	quotaRatio := subscriptionQuotaUsedRatio(*sub)
 	usedRatio := decimal.Max(timeRatio, quotaRatio)
 	if usedRatio.LessThan(decimal.Zero) {
@@ -396,6 +419,101 @@ func subscriptionElapsedRatio(sub UserSubscription, now int64) decimal.Decimal {
 		return decimal.NewFromInt(1)
 	}
 	return decimal.NewFromInt(now - sub.StartTime).Div(decimal.NewFromInt(sub.EndTime - sub.StartTime))
+}
+
+func subscriptionRefundTimeRatio(sub UserSubscription, plan *SubscriptionPlan, now int64) decimal.Decimal {
+	if plan == nil {
+		return subscriptionElapsedRatio(sub, now)
+	}
+	switch NormalizeResetPeriod(plan.QuotaResetPeriod) {
+	case SubscriptionResetDaily:
+		return subscriptionFixedCycleElapsedRatio(sub, now, int64((24*time.Hour)/time.Second))
+	case SubscriptionResetWeekly:
+		return subscriptionFixedCycleElapsedRatio(sub, now, int64((7*24*time.Hour)/time.Second))
+	case SubscriptionResetCustom:
+		return subscriptionFixedCycleElapsedRatio(sub, now, plan.QuotaResetCustomSeconds)
+	case SubscriptionResetMonthly:
+		return subscriptionMonthlyCycleElapsedRatio(sub, now)
+	default:
+		return subscriptionElapsedRatio(sub, now)
+	}
+}
+
+func subscriptionFixedCycleElapsedRatio(sub UserSubscription, now int64, cycleSeconds int64) decimal.Decimal {
+	if sub.StartTime <= 0 || sub.EndTime <= sub.StartTime || cycleSeconds <= 0 {
+		return subscriptionElapsedRatio(sub, now)
+	}
+	if now <= sub.StartTime {
+		return decimal.Zero
+	}
+	if now >= sub.EndTime {
+		return decimal.NewFromInt(1)
+	}
+	durationSeconds := sub.EndTime - sub.StartTime
+	totalCycles := ceilDivideInt64(durationSeconds, cycleSeconds)
+	if totalCycles <= 0 {
+		return subscriptionElapsedRatio(sub, now)
+	}
+	usedCycles := ceilDivideInt64(now-sub.StartTime, cycleSeconds)
+	if usedCycles < 0 {
+		usedCycles = 0
+	}
+	if usedCycles > totalCycles {
+		usedCycles = totalCycles
+	}
+	return decimal.NewFromInt(usedCycles).Div(decimal.NewFromInt(totalCycles))
+}
+
+func subscriptionMonthlyCycleElapsedRatio(sub UserSubscription, now int64) decimal.Decimal {
+	if sub.StartTime <= 0 || sub.EndTime <= sub.StartTime {
+		return decimal.Zero
+	}
+	if now <= sub.StartTime {
+		return decimal.Zero
+	}
+	if now >= sub.EndTime {
+		return decimal.NewFromInt(1)
+	}
+	start := time.Unix(sub.StartTime, 0)
+	end := time.Unix(sub.EndTime, 0)
+	current := time.Unix(now, 0)
+	totalCycles := countSubscriptionCalendarCycles(start, end, func(t time.Time) time.Time {
+		return t.AddDate(0, 1, 0)
+	})
+	usedCycles := countSubscriptionCalendarCycles(start, current, func(t time.Time) time.Time {
+		return t.AddDate(0, 1, 0)
+	})
+	if totalCycles <= 0 {
+		return subscriptionElapsedRatio(sub, now)
+	}
+	if usedCycles > totalCycles {
+		usedCycles = totalCycles
+	}
+	return decimal.NewFromInt(usedCycles).Div(decimal.NewFromInt(totalCycles))
+}
+
+func countSubscriptionCalendarCycles(start time.Time, end time.Time, advance func(time.Time) time.Time) int64 {
+	if !end.After(start) {
+		return 0
+	}
+	var count int64
+	cursor := start
+	for cursor.Before(end) {
+		count++
+		next := advance(cursor)
+		if !next.After(cursor) {
+			break
+		}
+		cursor = next
+	}
+	return count
+}
+
+func ceilDivideInt64(value int64, divisor int64) int64 {
+	if value <= 0 || divisor <= 0 {
+		return 0
+	}
+	return (value + divisor - 1) / divisor
 }
 
 func subscriptionQuotaUsedRatio(sub UserSubscription) decimal.Decimal {
@@ -1600,6 +1718,130 @@ func IsSubscriptionTopUpRecord(topUp *TopUp) bool {
 		strings.HasPrefix(tradeNo, "WXSUB")
 }
 
+func adminTopUpTradeNo() string {
+	return fmt.Sprintf("ADMIN_%d_%s", common.GetTimestamp(), strings.ToUpper(common.GetUUID()[:8]))
+}
+
+func adminTopUpRefundNo() string {
+	return fmt.Sprintf("ADMIN_RF_%d_%s", common.GetTimestamp(), strings.ToUpper(common.GetUUID()[:8]))
+}
+
+func CreateAdminBalanceTopUp(userId int, quota int) (*TopUp, error) {
+	if userId <= 0 {
+		return nil, errors.New("无效用户")
+	}
+	if quota <= 0 {
+		return nil, errors.New("无效的充值额度")
+	}
+
+	now := common.GetTimestamp()
+	topUp := &TopUp{
+		UserId:          userId,
+		Amount:          int64(quota),
+		Money:           0,
+		TradeNo:         adminTopUpTradeNo(),
+		PaymentMethod:   PaymentMethodAdminAdd,
+		PaymentProvider: PaymentProviderAdmin,
+		CreateTime:      now,
+		CompleteTime:    now,
+		Status:          common.TopUpStatusSuccess,
+	}
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var user User
+		if err := withRowLock(tx).Select("id").Where("id = ?", userId).First(&user).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(topUp).Error; err != nil {
+			return err
+		}
+		return tx.Model(&User{}).Where("id = ?", userId).Update("quota", gorm.Expr("quota + ?", quota)).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return topUp, nil
+}
+
+func RefundAdminBalanceTopUp(tradeNo string, refundQuota int64, reason string) (*TopUpRefund, error) {
+	tradeNo = strings.TrimSpace(tradeNo)
+	if tradeNo == "" {
+		return nil, errors.New("未提供订单号")
+	}
+	if refundQuota <= 0 {
+		return nil, errors.New("退款额度必须大于 0")
+	}
+
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	var refund *TopUpRefund
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		topUp := &TopUp{}
+		if err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
+			return ErrTopUpNotFound
+		}
+		if !IsAdminTopUpRecord(topUp) {
+			return ErrPaymentMethodMismatch
+		}
+		if topUp.Status != common.TopUpStatusSuccess && topUp.Status != common.TopUpStatusPartialRefunded {
+			return ErrTopUpStatusInvalid
+		}
+
+		totalQuota := topUpCreditedQuota(*topUp)
+		remainingQuota := totalQuota - topUp.RefundedQuota
+		if remainingQuota <= 0 {
+			return errors.New("订单已无可退额度")
+		}
+		if refundQuota > remainingQuota {
+			return errors.New("退款额度超过可退额度")
+		}
+
+		result := tx.Model(&User{}).
+			Where("id = ? AND quota >= ?", topUp.UserId, refundQuota).
+			Update("quota", gorm.Expr("quota - ?", refundQuota))
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return errors.New("用户当前余额不足以扣回退款额度")
+		}
+
+		now := common.GetTimestamp()
+		refund = &TopUpRefund{
+			TopUpId:         topUp.Id,
+			UserId:          topUp.UserId,
+			TradeNo:         topUp.TradeNo,
+			OutRequestNo:    adminTopUpRefundNo(),
+			PaymentMethod:   topUp.PaymentMethod,
+			PaymentProvider: topUp.PaymentProvider,
+			RefundAmount:    0,
+			RefundQuota:     refundQuota,
+			Reason:          normalizeRefundRequestReason(reason),
+			Status:          TopUpRefundStatusSuccess,
+			CreateTime:      now,
+			CompleteTime:    now,
+		}
+		if err := tx.Create(refund).Error; err != nil {
+			return err
+		}
+
+		topUp.RefundedQuota += refundQuota
+		if topUp.RefundedQuota >= totalQuota {
+			topUp.Status = common.TopUpStatusRefunded
+		} else {
+			topUp.Status = common.TopUpStatusPartialRefunded
+		}
+		return tx.Save(topUp).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return refund, nil
+}
+
 // ManualCompleteTopUp 管理员手动完成订单并给用户充值
 func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	if tradeNo == "" {
@@ -1961,7 +2203,7 @@ func RechargeOfficialPayment(tradeNo string, expectedPaymentProvider string, act
 		}
 
 		if len(paidMoney) > 0 {
-			expectedMoney := decimal.NewFromFloat(topUp.Money).Round(2)
+			expectedMoney := decimal.NewFromFloat(topUp.PaidMoney()).Round(2)
 			actualMoney := decimal.NewFromFloat(paidMoney[0]).Round(2)
 			if !expectedMoney.Equal(actualMoney) {
 				return errors.New("支付金额与订单金额不一致")

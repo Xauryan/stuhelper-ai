@@ -97,6 +97,7 @@ const SubscriptionPlansCard = ({
   enableAlipayOfficialTopUp = false,
   enableWechatPayOfficialTopUp = false,
   priceRatio,
+  getPaymentServiceFeePercent,
   billingPreference,
   onChangeBillingPreference,
   activeSubscriptions = [],
@@ -260,6 +261,12 @@ const SubscriptionPlansCard = ({
     symbol: currencyConfig.symbol,
     rate: currencyConfig.rate,
     unitPrice: selectedPaymentMethod?.unitPrice,
+    serviceFeePercent:
+      selectedPaymentMethod?.service_fee_percent ??
+      selectedPaymentMethod?.serviceFeePercent ??
+      getPaymentServiceFeePercent?.(selectedPaymentMethod?.type) ??
+      0,
+    paymentMethod: selectedPaymentMethod?.type,
   });
 
   const renderPaymentIcon = (method) => {

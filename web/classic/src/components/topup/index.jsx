@@ -161,6 +161,16 @@ const TopUp = () => {
       : priceRatio;
   };
 
+  const getPaymentServiceFeePercent = (payment) => {
+    const method = getPayMethodConfig(payment);
+    const configuredPercent = Number(
+      method?.service_fee_percent ?? method?.serviceFeePercent ?? 0,
+    );
+    return Number.isFinite(configuredPercent) && configuredPercent > 0
+      ? configuredPercent
+      : 0;
+  };
+
   const getPaymentMinTopUp = (payment) => {
     const configuredMinTopUp = Number(getPayMethodConfig(payment)?.min_topup);
     return Number.isFinite(configuredMinTopUp) && configuredMinTopUp > 0
@@ -181,10 +191,17 @@ const TopUp = () => {
     if (payment === 'waffo_pancake') {
       return getWaffoPancakeAmount(value);
     }
-    if (typeof payment === 'string' && payment.startsWith('waffo:')) {
-      return getWaffoAmount(value);
+    if (
+      payment === 'waffo' ||
+      (typeof payment === 'string' && payment.startsWith('waffo:'))
+    ) {
+      const payMethodIndex = Number(payment.split(':')[1]);
+      return getWaffoAmount(
+        value,
+        Number.isFinite(payMethodIndex) ? payMethodIndex : undefined,
+      );
     }
-    return getAmount(value);
+    return getAmount(value, payment);
   };
 
   const getSelectedAmountPayment = () => {
@@ -275,7 +292,7 @@ const TopUp = () => {
         showError(t('管理员未开启 Waffo Pancake 充值！'));
         return;
       }
-    } else if (payment.startsWith('waffo:')) {
+    } else if (payment === 'waffo' || payment.startsWith('waffo:')) {
       if (!enableWaffoTopUp) {
         showError(t('管理员未开启 Waffo 充值！'));
         return;
@@ -328,11 +345,13 @@ const TopUp = () => {
       return;
     }
 
-    if (payWay.startsWith('waffo:')) {
+    if (payWay === 'waffo' || payWay.startsWith('waffo:')) {
       const payMethodIndex = Number(payWay.split(':')[1]);
       setConfirmLoading(true);
       try {
-        await waffoTopUp(Number.isFinite(payMethodIndex) ? payMethodIndex : 0);
+        await waffoTopUp(
+          Number.isFinite(payMethodIndex) ? payMethodIndex : undefined,
+        );
       } finally {
         setOpen(false);
         setConfirmLoading(false);
@@ -495,15 +514,19 @@ const TopUp = () => {
     }
   };
 
-  const getWaffoAmount = async (value) => {
+  const getWaffoAmount = async (value, payMethodIndex) => {
     if (value === undefined) {
       value = topUpCount;
     }
     setAmountLoading(true);
     try {
-      const res = await API.post('/api/user/waffo/amount', {
+      const requestBody = {
         amount: parseInt(value),
-      });
+      };
+      if (payMethodIndex != null) {
+        requestBody.pay_method_index = payMethodIndex;
+      }
+      const res = await API.post('/api/user/waffo/amount', requestBody);
       if (res !== undefined) {
         const { message, data } = res.data;
         if (message === 'success') {
@@ -874,6 +897,13 @@ const TopUp = () => {
                 normalizeOfficialPaymentOrderTimeoutSeconds(
                   method.order_timeout_seconds,
                 );
+              const serviceFeePercent = Number(
+                method.service_fee_percent ?? method.serviceFeePercent ?? 0,
+              );
+              method.service_fee_percent =
+                Number.isFinite(serviceFeePercent) && serviceFeePercent > 0
+                  ? serviceFeePercent
+                  : 0;
 
               // Stripe 的最小充值从后端字段回填
               if (
@@ -944,7 +974,20 @@ const TopUp = () => {
           setEnableStripeTopUp(enableStripeTopUp);
           setEnableCreemTopUp(enableCreemTopUp);
           setEnableWaffoTopUp(enableWaffoTopUp);
-          setWaffoPayMethods(data.waffo_pay_methods || []);
+          setWaffoPayMethods(
+            (data.waffo_pay_methods || []).map((method) => {
+              const serviceFeePercent = Number(
+                method.service_fee_percent ?? method.serviceFeePercent ?? 0,
+              );
+              return {
+                ...method,
+                service_fee_percent:
+                  Number.isFinite(serviceFeePercent) && serviceFeePercent > 0
+                    ? serviceFeePercent
+                    : 0,
+              };
+            }),
+          );
           setWaffoMinTopUp(data.waffo_min_topup || 1);
           setEnableWaffoPancakeTopUp(enableWaffoPancakeTopUp);
           setWaffoPancakeMinTopUp(data.waffo_pancake_min_topup || 1);
@@ -972,7 +1015,7 @@ const TopUp = () => {
             setPayWay((current) => current || payMethods[0].type);
             requestAmountByPayment(payMethods[0].type, minTopUpValue);
           } else if (enableWaffoTopUp) {
-            getWaffoAmount(minTopUpValue);
+            getWaffoAmount(minTopUpValue, 0);
           } else if (enableWaffoPancakeTopUp) {
             getWaffoPancakeAmount(minTopUpValue);
           } else if (enableOnlineTopUp) {
@@ -1118,7 +1161,7 @@ const TopUp = () => {
     return amount + ' ' + t('元');
   };
 
-  const getAmount = async (value) => {
+  const getAmount = async (value, paymentMethod) => {
     if (value === undefined) {
       value = topUpCount;
     }
@@ -1126,6 +1169,7 @@ const TopUp = () => {
     try {
       const res = await API.post('/api/user/amount', {
         amount: parseFloat(value),
+        payment_method: paymentMethod || getSelectedAmountPayment(),
       });
       if (res !== undefined) {
         const { message, data } = res.data;
@@ -1331,6 +1375,7 @@ const TopUp = () => {
           getPaymentUnitPrice={getPaymentUnitPrice}
           statusLoading={statusLoading}
           topupInfo={topupInfo}
+          getPaymentServiceFeePercent={getPaymentServiceFeePercent}
           getPaymentOrderTimeoutSeconds={getPaymentOrderTimeoutSeconds}
           onOpenHistory={handleOpenHistory}
           subscriptionLoading={subscriptionLoading}

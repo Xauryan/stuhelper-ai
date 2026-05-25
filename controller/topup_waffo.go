@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/constant"
 	"github.com/Xauryan/stuhelper-ai/logger"
 	"github.com/Xauryan/stuhelper-ai/model"
 	"github.com/Xauryan/stuhelper-ai/service"
@@ -76,6 +77,10 @@ func formatWaffoAmount(amount float64, currency string) string {
 // Waffo only accepts USD, so this function handles the conversion from different
 // display types (USD/CNY/TOKENS) to the actual USD amount to charge.
 func getWaffoPayMoney(amount float64, group string) float64 {
+	return getWaffoPayMoneyBreakdown(amount, group, 0).TotalMoney
+}
+
+func getWaffoPayMoneyBreakdown(amount float64, group string, serviceFeePercent float64) payMoneyBreakdown {
 	originalAmount := amount
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		amount = amount / common.QuotaPerUnit
@@ -94,7 +99,26 @@ func getWaffoPayMoney(amount float64, group string) float64 {
 		Mul(decimal.NewFromFloat(setting.WaffoUnitPrice)).
 		Mul(decimal.NewFromFloat(topupGroupRatio)).
 		Mul(decimal.NewFromFloat(discount))
-	return ceilPayMoneyToCents(payMoney)
+	return buildPayMoneyBreakdown(payMoney, serviceFeePercent)
+}
+
+func resolveWaffoServiceFeePercent(req WaffoPayRequest, methods []constant.WaffoPayMethod) float64 {
+	if req.PayMethodIndex != nil {
+		idx := *req.PayMethodIndex
+		if idx >= 0 && idx < len(methods) {
+			return methods[idx].ServiceFeePercent
+		}
+		return 0
+	}
+	if req.PayMethodType == "" {
+		return 0
+	}
+	for _, method := range methods {
+		if method.PayMethodType == req.PayMethodType && method.PayMethodName == req.PayMethodName {
+			return method.ServiceFeePercent
+		}
+	}
+	return 0
 }
 
 type WaffoPayRequest struct {
@@ -124,7 +148,9 @@ func RequestWaffoAmount(c *gin.Context) {
 		return
 	}
 
-	payMoney := getWaffoPayMoney(float64(req.Amount), group)
+	methods := setting.GetWaffoPayMethods()
+	serviceFeePercent := resolveWaffoServiceFeePercent(req, methods)
+	payMoney := getWaffoPayMoneyBreakdown(float64(req.Amount), group, serviceFeePercent).TotalMoney
 	if payMoney <= 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
@@ -191,8 +217,8 @@ func RequestWaffoPay(c *gin.Context) {
 	// resolvedPayMethodType/Name 为空时，Waffo 自动选择支付方式
 
 	group, _ := model.GetUserGroup(id, true)
-	payMoney := getWaffoPayMoney(float64(req.Amount), group)
-	if payMoney < 0.01 {
+	payMoney := getWaffoPayMoneyBreakdown(float64(req.Amount), group, resolveWaffoServiceFeePercent(req, methods))
+	if payMoney.TotalMoney < 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
 	}
@@ -214,7 +240,8 @@ func RequestWaffoPay(c *gin.Context) {
 	topUp := &model.TopUp{
 		UserId:          id,
 		Amount:          amount,
-		Money:           payMoney,
+		Money:           payMoney.EffectiveMoney,
+		Fee:             payMoney.Fee,
 		TradeNo:         merchantOrderId,
 		PaymentMethod:   model.PaymentMethodWaffo,
 		PaymentProvider: model.PaymentProviderWaffo,
@@ -250,7 +277,7 @@ func RequestWaffoPay(c *gin.Context) {
 	createParams := &order.CreateOrderParams{
 		PaymentRequestID: paymentRequestId,
 		MerchantOrderID:  merchantOrderId,
-		OrderAmount:      formatWaffoAmount(payMoney, currency),
+		OrderAmount:      formatWaffoAmount(payMoney.TotalMoney, currency),
 		OrderCurrency:    currency,
 		OrderDescription: fmt.Sprintf("Recharge %d credits", req.Amount),
 		OrderRequestedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
@@ -288,7 +315,7 @@ func RequestWaffoPay(c *gin.Context) {
 	}
 
 	orderData := resp.GetData()
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f pay_method_type=%s pay_method_name=%q", id, merchantOrderId, req.Amount, payMoney, resolvedPayMethodType, resolvedPayMethodName))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f fee=%.2f total_money=%.2f pay_method_type=%s pay_method_name=%q", id, merchantOrderId, req.Amount, payMoney.EffectiveMoney, payMoney.Fee, payMoney.TotalMoney, resolvedPayMethodType, resolvedPayMethodName))
 
 	paymentUrl := orderData.FetchRedirectURL()
 	if paymentUrl == "" {

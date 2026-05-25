@@ -198,6 +198,17 @@ func TestGetUserRechargeRankingTotalsIncludesAllRechargeSources(t *testing.T) {
 			CompleteTime:    1400,
 			Status:          common.TopUpStatusRefunded,
 		},
+		{
+			UserId:          1,
+			Amount:          600000,
+			Money:           0,
+			TradeNo:         "admin-recharge",
+			PaymentMethod:   PaymentMethodAdminAdd,
+			PaymentProvider: PaymentProviderAdmin,
+			CreateTime:      1350,
+			CompleteTime:    1450,
+			Status:          common.TopUpStatusSuccess,
+		},
 	}).Error)
 
 	require.NoError(t, DB.Create(&[]Redemption{
@@ -207,8 +218,9 @@ func TestGetUserRechargeRankingTotalsIncludesAllRechargeSources(t *testing.T) {
 
 	require.NoError(t, LOG_DB.Create(&[]Log{
 		{UserId: 2, Username: "bob", CreatedAt: 1600, Type: LogTypeManage, Quota: 400000, Content: "管理员增加用户额度"},
-		{UserId: 3, Username: "carol", CreatedAt: 1700, Type: LogTypeManage, Content: "管理员增加用户额度 ＄1.600000 额度"},
+		{UserId: 3, Username: "carol", CreatedAt: 1700, Type: LogTypeManage, Content: "管理员充值用户额度 ＄1.600000 额度"},
 		{UserId: 1, Username: "alice", CreatedAt: 1600, Type: LogTypeManage, Quota: 250000, Content: "管理员减少用户额度"},
+		{UserId: 2, Username: "bob", CreatedAt: 1650, Type: LogTypeManage, Quota: 900000, Content: "管理员赠送用户额度"},
 		{UserId: 3, Username: "carol", CreatedAt: 900, Type: LogTypeManage, Quota: 800000, Content: "管理员增加用户额度"},
 	}).Error)
 
@@ -216,10 +228,10 @@ func TestGetUserRechargeRankingTotalsIncludesAllRechargeSources(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, rows, 3)
-	assert.Equal(t, int64(3700000), total)
+	assert.Equal(t, int64(4300000), total)
 	assert.Equal(t, 1, rows[0].UserId)
 	assert.Equal(t, "alice", rows[0].Username)
-	assert.Equal(t, int64(1300000), rows[0].TotalQuota)
+	assert.Equal(t, int64(1900000), rows[0].TotalQuota)
 	assert.Equal(t, 3, rows[1].UserId)
 	assert.Equal(t, "carol", rows[1].Username)
 	assert.Equal(t, int64(1300000), rows[1].TotalQuota)
@@ -230,5 +242,5 @@ func TestGetUserRechargeRankingTotalsIncludesAllRechargeSources(t *testing.T) {
 	limitedRows, limitedTotal, err := GetUserRechargeRankingTotals(1000, 2000, 1)
 	require.NoError(t, err)
 	require.Len(t, limitedRows, 1)
-	assert.Equal(t, int64(3700000), limitedTotal)
+	assert.Equal(t, int64(4300000), limitedTotal)
 }

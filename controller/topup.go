@@ -86,10 +86,11 @@ func GetTopUpInfo(c *gin.Context) {
 
 		if !hasWaffoPancake {
 			payMethods = append(payMethods, map[string]string{
-				"name":      "Waffo Pancake",
-				"type":      model.PaymentMethodWaffoPancake,
-				"color":     "rgba(var(--semi-orange-5), 1)",
-				"min_topup": strconv.Itoa(setting.WaffoPancakeMinTopUp),
+				"name":                "Waffo Pancake",
+				"type":                model.PaymentMethodWaffoPancake,
+				"color":               "rgba(var(--semi-orange-5), 1)",
+				"min_topup":           strconv.Itoa(setting.WaffoPancakeMinTopUp),
+				"service_fee_percent": strconv.FormatFloat(setting.WaffoPancakeServiceFeePercent, 'f', -1, 64),
 			})
 		}
 	}
@@ -110,6 +111,7 @@ func GetTopUpInfo(c *gin.Context) {
 				"color":                 "rgba(var(--semi-blue-5), 1)",
 				"min_topup":             strconv.Itoa(setting.AlipayOfficialMinTopUp),
 				"unit_price":            strconv.FormatFloat(setting.AlipayOfficialUnitPrice, 'f', -1, 64),
+				"service_fee_percent":   strconv.FormatFloat(setting.AlipayOfficialServiceFeePercent, 'f', -1, 64),
 				"order_timeout_seconds": strconv.Itoa(getAlipayOfficialOrderTimeoutSeconds()),
 			})
 		}
@@ -131,6 +133,7 @@ func GetTopUpInfo(c *gin.Context) {
 				"color":                 "rgba(var(--semi-green-5), 1)",
 				"min_topup":             strconv.Itoa(setting.WechatPayOfficialMinTopUp),
 				"unit_price":            strconv.FormatFloat(setting.WechatPayOfficialUnitPrice, 'f', -1, 64),
+				"service_fee_percent":   strconv.FormatFloat(setting.WechatPayOfficialServiceFeePercent, 'f', -1, 64),
 				"order_timeout_seconds": strconv.Itoa(getWechatPayOfficialOrderTimeoutSeconds()),
 			})
 		}
@@ -173,7 +176,8 @@ type EpayRequest struct {
 }
 
 type AmountRequest struct {
-	Amount int64 `json:"amount"`
+	Amount        int64  `json:"amount"`
+	PaymentMethod string `json:"payment_method"`
 }
 
 func GetEpayClient() *epay.Client {
@@ -190,7 +194,11 @@ func GetEpayClient() *epay.Client {
 	return withUrl
 }
 
-func getPayMoney(amount int64, group string) float64 {
+func getPayMoney(amount int64, group string, paymentMethod string) float64 {
+	return getPayMoneyBreakdown(amount, group, paymentMethod).TotalMoney
+}
+
+func getPayMoneyBreakdown(amount int64, group string, paymentMethod string) payMoneyBreakdown {
 	dAmount := decimal.NewFromInt(amount)
 	// 充值金额以“展示类型”为准：
 	// - USD/CNY: 前端传 amount 为金额单位；TOKENS: 前端传 tokens，需要换成 USD 金额
@@ -217,7 +225,16 @@ func getPayMoney(amount int64, group string) float64 {
 
 	payMoney := dAmount.Mul(dPrice).Mul(dTopupGroupRatio).Mul(dDiscount)
 
-	return ceilPayMoneyToCents(payMoney)
+	return buildPayMoneyBreakdown(payMoney, getEpayServiceFeePercent(paymentMethod))
+}
+
+func getEpayServiceFeePercent(paymentMethod string) float64 {
+	for _, method := range operation_setting.PayMethods {
+		if method["type"] == paymentMethod {
+			return parseServiceFeePercent(method["service_fee_percent"])
+		}
+	}
+	return 0
 }
 
 func getMinTopup() int64 {
@@ -248,8 +265,8 @@ func RequestEpay(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
 		return
 	}
-	payMoney := getPayMoney(req.Amount, group)
-	if payMoney < 0.01 {
+	payMoney := getPayMoneyBreakdown(req.Amount, group, req.PaymentMethod)
+	if payMoney.TotalMoney < 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
 	}
@@ -273,7 +290,7 @@ func RequestEpay(c *gin.Context) {
 		Type:           req.PaymentMethod,
 		ServiceTradeNo: tradeNo,
 		Name:           fmt.Sprintf("TUC%d", req.Amount),
-		Money:          formatPayMoneyToCents(payMoney),
+		Money:          formatPayMoneyToCents(payMoney.TotalMoney),
 		Device:         epay.PC,
 		NotifyUrl:      notifyUrl,
 		ReturnUrl:      returnUrl,
@@ -292,7 +309,8 @@ func RequestEpay(c *gin.Context) {
 	topUp := &model.TopUp{
 		UserId:          id,
 		Amount:          amount,
-		Money:           payMoney,
+		Money:           payMoney.EffectiveMoney,
+		Fee:             payMoney.Fee,
 		TradeNo:         tradeNo,
 		PaymentMethod:   req.PaymentMethod,
 		PaymentProvider: model.PaymentProviderEpay,
@@ -305,7 +323,7 @@ func RequestEpay(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
 		return
 	}
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 充值订单创建成功 user_id=%d trade_no=%s payment_method=%s amount=%d money=%.2f uri=%q params=%q", id, tradeNo, req.PaymentMethod, req.Amount, payMoney, uri, common.GetJsonString(params)))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 充值订单创建成功 user_id=%d trade_no=%s payment_method=%s amount=%d money=%.2f fee=%.2f total_money=%.2f uri=%q params=%q", id, tradeNo, req.PaymentMethod, req.Amount, payMoney.EffectiveMoney, payMoney.Fee, payMoney.TotalMoney, uri, common.GetJsonString(params)))
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": params, "url": uri})
 }
 
@@ -458,7 +476,7 @@ func RequestAmount(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
 		return
 	}
-	payMoney := getPayMoney(req.Amount, group)
+	payMoney := getPayMoney(req.Amount, group, req.PaymentMethod)
 	if payMoney <= 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
@@ -545,6 +563,7 @@ type AdminTopUpTradeRequest struct {
 type AdminRefundTopUpRequest struct {
 	TradeNo      string  `json:"trade_no"`
 	RefundAmount float64 `json:"refund_amount"`
+	RefundQuota  int64   `json:"refund_quota"`
 	Reason       string  `json:"reason"`
 	FullRefund   bool    `json:"full_refund"`
 }
@@ -576,4 +595,34 @@ func AdminCompleteTopUp(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, nil)
+}
+
+// AdminRefundAdminTopUp records an offline/admin top-up refund and deducts quota.
+func AdminRefundAdminTopUp(c *gin.Context) {
+	var req AdminRefundTopUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.TradeNo == "" || req.RefundQuota <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+
+	LockOrder(req.TradeNo)
+	defer UnlockOrder(req.TradeNo)
+
+	refund, err := model.RefundAdminBalanceTopUp(req.TradeNo, req.RefundQuota, req.Reason)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	model.RecordTopupRefundLog(
+		refund.UserId,
+		fmt.Sprintf("管理员退款充值额度 %s，订单号：%s", logger.LogQuota(int(refund.RefundQuota)), refund.TradeNo),
+		c.ClientIP(),
+		model.PaymentMethodAdminAdd,
+		model.PaymentProviderAdmin,
+	)
+	common.ApiSuccess(c, gin.H{
+		"trade_no":     refund.TradeNo,
+		"refund_quota": refund.RefundQuota,
+	})
 }

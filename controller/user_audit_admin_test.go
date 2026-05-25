@@ -296,7 +296,7 @@ func TestAdminCannotManageAuditAdminAccount(t *testing.T) {
 	for _, action := range []string{"disable", "enable", "delete", "add_quota"} {
 		t.Run(action, func(t *testing.T) {
 			target := createAuditAdminControllerTestUser(t, db, common.RoleAuditAdminUser)
-			body := fmt.Sprintf(`{"id":%d,"action":%q,"mode":"add","value":100}`, target.Id, action)
+			body := fmt.Sprintf(`{"id":%d,"action":%q,"mode":"recharge","value":100}`, target.Id, action)
 
 			recorder := performUserAuditAdminControllerRequest(t, common.RoleAdminUser, body, ManageUser)
 
@@ -310,6 +310,76 @@ func TestAdminCannotManageAuditAdminAccount(t *testing.T) {
 			require.Equal(t, common.UserStatusEnabled, unchanged.Status)
 			require.Zero(t, unchanged.DeletedAt.Valid)
 			require.Zero(t, unchanged.Quota)
+		})
+	}
+}
+
+func TestManageUserRejectsLegacyAddQuotaMode(t *testing.T) {
+	db := setupUserAuditAdminControllerTestDB(t)
+	target := createAuditAdminControllerTestUser(t, db, common.RoleCommonUser)
+
+	recorder := performUserAuditAdminControllerRequest(
+		t,
+		common.RoleAdminUser,
+		fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":"recharge","value":100}`, target.Id),
+		ManageUser,
+	)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	response := decodeUserAuditAdminControllerResponse(t, recorder)
+	require.Equal(t, false, response["success"])
+
+	var unchanged model.User
+	require.NoError(t, db.First(&unchanged, target.Id).Error)
+	require.Zero(t, unchanged.Quota)
+}
+
+func TestManageUserQuotaLogsIncludeOperationType(t *testing.T) {
+	db := setupUserAuditAdminControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.TopUp{}))
+
+	for _, testCase := range []struct {
+		name        string
+		mode        string
+		logType     int
+		contentPart string
+	}{
+		{
+			name:        "recharge",
+			mode:        "recharge",
+			logType:     model.LogTypeTopup,
+			contentPart: "管理员充值用户额度",
+		},
+		{
+			name:        "gift",
+			mode:        "gift",
+			logType:     model.LogTypeManage,
+			contentPart: "管理员赠送用户额度",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			target := createAuditAdminControllerTestUser(t, db, common.RoleCommonUser)
+
+			recorder := performUserAuditAdminControllerRequest(
+				t,
+				common.RoleAdminUser,
+				fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":%q,"value":100}`, target.Id, testCase.mode),
+				ManageUser,
+			)
+
+			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+			response := decodeUserAuditAdminControllerResponse(t, recorder)
+			require.Equal(t, true, response["success"])
+
+			var log model.Log
+			require.NoError(t, db.Where("user_id = ? AND type = ?", target.Id, testCase.logType).First(&log).Error)
+			require.Contains(t, log.Content, testCase.contentPart)
+
+			var other map[string]interface{}
+			require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
+			adminInfo, ok := other["admin_info"].(map[string]interface{})
+			require.True(t, ok)
+			require.Equal(t, testCase.mode, adminInfo["operation_type"])
 		})
 	}
 }

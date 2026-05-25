@@ -403,6 +403,7 @@ func TestSubscriptionRequestAlipayOfficialPayCreatesOfficialOrder(t *testing.T) 
 	originalAlipayPrivateKey := setting.AlipayOfficialPrivateKey
 	originalAlipayPublicKey := setting.AlipayOfficialAlipayPublicKey
 	originalAlipayUnitPrice := setting.AlipayOfficialUnitPrice
+	originalAlipayServiceFeePercent := setting.AlipayOfficialServiceFeePercent
 	originalSystemServerAddress := system_setting.ServerAddress
 	originalCallbackAddress := operation_setting.CustomCallbackAddress
 	t.Cleanup(func() {
@@ -411,6 +412,7 @@ func TestSubscriptionRequestAlipayOfficialPayCreatesOfficialOrder(t *testing.T) 
 		setting.AlipayOfficialPrivateKey = originalAlipayPrivateKey
 		setting.AlipayOfficialAlipayPublicKey = originalAlipayPublicKey
 		setting.AlipayOfficialUnitPrice = originalAlipayUnitPrice
+		setting.AlipayOfficialServiceFeePercent = originalAlipayServiceFeePercent
 		system_setting.ServerAddress = originalSystemServerAddress
 		operation_setting.CustomCallbackAddress = originalCallbackAddress
 	})
@@ -419,7 +421,8 @@ func TestSubscriptionRequestAlipayOfficialPayCreatesOfficialOrder(t *testing.T) 
 	setting.AlipayOfficialAppID = "app_123"
 	setting.AlipayOfficialPrivateKey = generateSubscriptionControllerAlipayPrivateKey(t)
 	setting.AlipayOfficialAlipayPublicKey = "public"
-	setting.AlipayOfficialUnitPrice = 1.006
+	setting.AlipayOfficialUnitPrice = 1
+	setting.AlipayOfficialServiceFeePercent = 0.6
 	system_setting.ServerAddress = "https://example.com"
 	operation_setting.CustomCallbackAddress = ""
 
@@ -463,7 +466,8 @@ func TestSubscriptionRequestAlipayOfficialPayCreatesOfficialOrder(t *testing.T) 
 	require.NotNil(t, order)
 	assert.Equal(t, model.PaymentMethodAlipayOfficial, order.PaymentMethod)
 	assert.Equal(t, model.PaymentProviderAlipayOfficial, order.PaymentProvider)
-	assert.InDelta(t, 50.30, order.Money, 0.000001)
+	assert.InDelta(t, 50.00, order.Money, 0.000001)
+	assert.InDelta(t, 0.30, order.Fee, 0.000001)
 }
 
 func TestSubscriptionRequestAlipayOfficialPayRejectsPendingOrderAtPurchaseLimit(t *testing.T) {
@@ -541,6 +545,7 @@ func TestSubscriptionRequestWechatPayOfficialPayCreatesNativeOfficialOrder(t *te
 	originalWechatPrivateKey := setting.WechatPayOfficialPrivateKey
 	originalWechatPlatformPublicKey := setting.WechatPayOfficialPlatformPublicKey
 	originalWechatUnitPrice := setting.WechatPayOfficialUnitPrice
+	originalWechatServiceFeePercent := setting.WechatPayOfficialServiceFeePercent
 	originalSystemServerAddress := system_setting.ServerAddress
 	originalCallbackAddress := operation_setting.CustomCallbackAddress
 	originalPrepayHTTPClient := wechatPayOfficialPrepayHTTPClient
@@ -553,6 +558,7 @@ func TestSubscriptionRequestWechatPayOfficialPayCreatesNativeOfficialOrder(t *te
 		setting.WechatPayOfficialPrivateKey = originalWechatPrivateKey
 		setting.WechatPayOfficialPlatformPublicKey = originalWechatPlatformPublicKey
 		setting.WechatPayOfficialUnitPrice = originalWechatUnitPrice
+		setting.WechatPayOfficialServiceFeePercent = originalWechatServiceFeePercent
 		system_setting.ServerAddress = originalSystemServerAddress
 		operation_setting.CustomCallbackAddress = originalCallbackAddress
 		wechatPayOfficialPrepayHTTPClient = originalPrepayHTTPClient
@@ -565,7 +571,8 @@ func TestSubscriptionRequestWechatPayOfficialPayCreatesNativeOfficialOrder(t *te
 	setting.WechatPayOfficialAPIv3Key = "12345678901234567890123456789012"
 	setting.WechatPayOfficialPrivateKey = merchantPrivateKey
 	setting.WechatPayOfficialPlatformPublicKey = platformPublicKey
-	setting.WechatPayOfficialUnitPrice = 1.006
+	setting.WechatPayOfficialUnitPrice = 1
+	setting.WechatPayOfficialServiceFeePercent = 0.6
 	system_setting.ServerAddress = "https://example.com"
 	operation_setting.CustomCallbackAddress = ""
 
@@ -635,7 +642,8 @@ func TestSubscriptionRequestWechatPayOfficialPayCreatesNativeOfficialOrder(t *te
 	require.NotNil(t, order)
 	assert.Equal(t, model.PaymentMethodWechatPayOfficial, order.PaymentMethod)
 	assert.Equal(t, model.PaymentProviderWechatPayOfficial, order.PaymentProvider)
-	assert.InDelta(t, 50.30, order.Money, 0.000001)
+	assert.InDelta(t, 50.00, order.Money, 0.000001)
+	assert.InDelta(t, 0.30, order.Fee, 0.000001)
 }
 
 func TestSubscriptionRequestWechatPayOfficialPayRejectsH5BeforeCreatingOrder(t *testing.T) {

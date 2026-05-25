@@ -266,6 +266,7 @@ type SubscriptionOrder struct {
 	UserId int     `json:"user_id" gorm:"index"`
 	PlanId int     `json:"plan_id" gorm:"index"`
 	Money  float64 `json:"money"`
+	Fee    float64 `json:"fee" gorm:"default:0"`
 
 	TradeNo         string `json:"trade_no" gorm:"unique;type:varchar(255);index"`
 	PaymentMethod   string `json:"payment_method" gorm:"type:varchar(50)"`
@@ -275,6 +276,15 @@ type SubscriptionOrder struct {
 	CompleteTime    int64  `json:"complete_time"`
 
 	ProviderPayload string `json:"provider_payload" gorm:"type:text"`
+}
+
+func (o SubscriptionOrder) PaidMoney() float64 {
+	money := decimal.NewFromFloat(o.Money).Round(2)
+	fee := decimal.NewFromFloat(o.Fee).Round(2)
+	if fee.IsNegative() {
+		fee = decimal.Zero
+	}
+	return money.Add(fee).Round(2).InexactFloat64()
 }
 
 func (o *SubscriptionOrder) Insert() error {
@@ -735,6 +745,7 @@ func upsertSubscriptionTopUpTx(tx *gorm.DB, order *SubscriptionOrder) error {
 				UserId:          order.UserId,
 				Amount:          0,
 				Money:           order.Money,
+				Fee:             order.Fee,
 				TradeNo:         order.TradeNo,
 				PaymentMethod:   order.PaymentMethod,
 				PaymentProvider: order.PaymentProvider,
@@ -747,6 +758,7 @@ func upsertSubscriptionTopUpTx(tx *gorm.DB, order *SubscriptionOrder) error {
 		return err
 	}
 	topup.Money = order.Money
+	topup.Fee = order.Fee
 	if topup.PaymentMethod == "" || (order.PaymentProvider == PaymentProviderEpay && order.PaymentMethod != "") {
 		topup.PaymentMethod = order.PaymentMethod
 	} else if topup.PaymentMethod != order.PaymentMethod {

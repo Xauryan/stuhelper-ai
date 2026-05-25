@@ -46,6 +46,7 @@ const defaultInputs = {
   AlipayOfficialNotifyURL: '',
   AlipayOfficialReturnURL: '',
   AlipayOfficialUnitPrice: 1.0,
+  AlipayOfficialServiceFeePercent: 0,
   AlipayOfficialMinTopUp: 1,
   AlipayOfficialOrderTimeoutSec: 600,
 
@@ -59,6 +60,7 @@ const defaultInputs = {
   WechatPayOfficialNotifyURL: '',
   WechatPayOfficialReturnURL: '',
   WechatPayOfficialUnitPrice: 1.0,
+  WechatPayOfficialServiceFeePercent: 0,
   WechatPayOfficialMinTopUp: 1,
   WechatPayOfficialOrderTimeoutSec: 600,
 };
@@ -89,6 +91,10 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         props.options.AlipayOfficialUnitPrice !== undefined
           ? parseFloat(props.options.AlipayOfficialUnitPrice)
           : 1.0,
+      AlipayOfficialServiceFeePercent:
+        props.options.AlipayOfficialServiceFeePercent !== undefined
+          ? parseFloat(props.options.AlipayOfficialServiceFeePercent)
+          : 0,
       AlipayOfficialMinTopUp:
         props.options.AlipayOfficialMinTopUp !== undefined
           ? parseFloat(props.options.AlipayOfficialMinTopUp)
@@ -117,6 +123,10 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
         props.options.WechatPayOfficialUnitPrice !== undefined
           ? parseFloat(props.options.WechatPayOfficialUnitPrice)
           : 1.0,
+      WechatPayOfficialServiceFeePercent:
+        props.options.WechatPayOfficialServiceFeePercent !== undefined
+          ? parseFloat(props.options.WechatPayOfficialServiceFeePercent)
+          : 0,
       WechatPayOfficialMinTopUp:
         props.options.WechatPayOfficialMinTopUp !== undefined
           ? parseFloat(props.options.WechatPayOfficialMinTopUp)
@@ -173,6 +183,10 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
       }
       if (Number(values.AlipayOfficialUnitPrice) <= 0) {
         showError(t('充值价格必须大于 0'));
+        return;
+      }
+      if (Number(values.AlipayOfficialServiceFeePercent) < 0) {
+        showError(t('支付手续费不能小于 0'));
         return;
       }
       if (Number(values.AlipayOfficialMinTopUp) < 1) {
@@ -233,6 +247,10 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
       }
       if (Number(values.WechatPayOfficialUnitPrice) <= 0) {
         showError(t('充值价格必须大于 0'));
+        return;
+      }
+      if (Number(values.WechatPayOfficialServiceFeePercent) < 0) {
+        showError(t('支付手续费不能小于 0'));
         return;
       }
       if (Number(values.WechatPayOfficialMinTopUp) < 1) {
@@ -448,6 +466,19 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.InputNumber
+                    field='AlipayOfficialServiceFeePercent'
+                    label={t('支付手续费（%）')}
+                    min={0}
+                    precision={3}
+                    step={0.1}
+                    placeholder={t('例如：0.6')}
+                    extraText={t(
+                      '按该支付通道有效支付金额百分比计算，手续费不计入可退款金额',
+                    )}
+                  />
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.InputNumber
                     field='AlipayOfficialOrderTimeoutSec'
                     label={t('订单超时时间（秒）')}
                     min={1}
@@ -562,6 +593,19 @@ export default function SettingsPaymentGatewayOfficialChina(props) {
                     field='WechatPayOfficialMinTopUp'
                     label={t('最低充值美元数量')}
                     min={1}
+                  />
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.InputNumber
+                    field='WechatPayOfficialServiceFeePercent'
+                    label={t('支付手续费（%）')}
+                    min={0}
+                    precision={3}
+                    step={0.1}
+                    placeholder={t('例如：0.6')}
+                    extraText={t(
+                      '按该支付通道有效支付金额百分比计算，手续费不计入可退款金额',
+                    )}
                   />
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>

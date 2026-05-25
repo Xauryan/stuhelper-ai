@@ -16,7 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@xauryan.com
 */
-export function calculateSubscriptionPayAmount(priceAmount, unitPrice) {
+function shouldApplyServiceFee(paymentMethod) {
+  return paymentMethod !== 'stripe' && paymentMethod !== 'creem';
+}
+
+export function calculateSubscriptionPayAmount(
+  priceAmount,
+  unitPrice,
+  serviceFeePercent,
+  paymentMethod,
+) {
   const price = Number(priceAmount);
   const priceRatio = Number(unitPrice);
   if (
@@ -27,7 +36,14 @@ export function calculateSubscriptionPayAmount(priceAmount, unitPrice) {
   ) {
     return null;
   }
-  return Math.ceil(price * priceRatio * 100 - 1e-9) / 100;
+  const effectiveAmount = Math.ceil(price * priceRatio * 100 - 1e-9) / 100;
+  const feePercent = shouldApplyServiceFee(paymentMethod)
+    ? Number(serviceFeePercent)
+    : 0;
+  if (!Number.isFinite(feePercent) || feePercent <= 0) {
+    return effectiveAmount;
+  }
+  return Math.ceil(effectiveAmount * (1 + feePercent / 100) * 100 - 1e-9) / 100;
 }
 
 export function formatSubscriptionPayAmount({
@@ -35,8 +51,15 @@ export function formatSubscriptionPayAmount({
   symbol,
   rate,
   unitPrice,
+  serviceFeePercent,
+  paymentMethod,
 }) {
-  const amount = calculateSubscriptionPayAmount(priceAmount, unitPrice);
+  const amount = calculateSubscriptionPayAmount(
+    priceAmount,
+    unitPrice,
+    serviceFeePercent,
+    paymentMethod,
+  );
   if (amount !== null) {
     return `¥${amount.toFixed(2)}`;
   }

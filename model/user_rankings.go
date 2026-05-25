@@ -14,7 +14,7 @@ import (
 
 const userRankingDefaultLimit = 20
 
-var adminAddQuotaContentPattern = regexp.MustCompile(`管理员增加用户额度\s*[^0-9]*([0-9]+(?:\.[0-9]+)?)`)
+var adminRechargeQuotaContentPattern = regexp.MustCompile(`管理员(?:增加|充值)用户额度\s*[^0-9]*([0-9]+(?:\.[0-9]+)?)`)
 
 type UserRankingTotal struct {
 	UserId       int    `json:"user_id"       gorm:"column:user_id"`
@@ -46,9 +46,9 @@ func GetUserSelfDisplayNameById(userId int) string {
 
 func userConsumptionRankingBaseQuery(startTime int64, endTime int64) *gorm.DB {
 	query := LOG_DB.Table("logs").
-		Select("user_id, " +
-			"sum(coalesce(quota, 0)) as total_quota, " +
-			"sum(coalesce(prompt_tokens, 0) + coalesce(completion_tokens, 0)) as total_tokens, " +
+		Select("user_id, "+
+			"sum(coalesce(quota, 0)) as total_quota, "+
+			"sum(coalesce(prompt_tokens, 0) + coalesce(completion_tokens, 0)) as total_tokens, "+
 			"count(*) as request_count").
 		Where("type = ? AND quota > 0", LogTypeConsume).
 		Group("user_id").
@@ -208,7 +208,7 @@ func mergeUserRankingRows(aggregates map[int]*UserRankingTotal, query *gorm.DB) 
 func mergeAdminAddedQuotaRankingRows(aggregates map[int]*UserRankingTotal, startTime int64, endTime int64) error {
 	var logs []Log
 	query := LOG_DB.
-		Where("type = ? AND content LIKE ?", LogTypeManage, "管理员增加用户额度%")
+		Where("type = ? AND (content LIKE ? OR content LIKE ?)", LogTypeManage, "管理员充值用户额度%", "管理员增加用户额度%")
 	query = applyUnixTimeRange(query, "created_at", startTime, endTime)
 	if err := query.Find(&logs).Error; err != nil {
 		return err
@@ -219,7 +219,7 @@ func mergeAdminAddedQuotaRankingRows(aggregates map[int]*UserRankingTotal, start
 		}
 		quota := int64(log.Quota)
 		if quota <= 0 {
-			quota = parseAdminAddedQuotaFromContent(log.Content)
+			quota = parseAdminRechargeQuotaFromContent(log.Content)
 		}
 		if quota <= 0 {
 			continue
@@ -326,6 +326,9 @@ func sortUserRankingRows(rows []UserRankingTotal) {
 }
 
 func topUpCreditedQuota(topUp TopUp) int64 {
+	if topUp.PaymentProvider == PaymentProviderAdmin || topUp.PaymentMethod == PaymentMethodAdminAdd {
+		return topUp.Amount
+	}
 	switch topUp.PaymentProvider {
 	case PaymentProviderCreem:
 		return topUp.Amount
@@ -336,11 +339,11 @@ func topUpCreditedQuota(topUp TopUp) int64 {
 	}
 }
 
-func parseAdminAddedQuotaFromContent(content string) int64 {
-	if !strings.HasPrefix(content, "管理员增加用户额度") {
+func parseAdminRechargeQuotaFromContent(content string) int64 {
+	if !strings.HasPrefix(content, "管理员充值用户额度") && !strings.HasPrefix(content, "管理员增加用户额度") {
 		return 0
 	}
-	matches := adminAddQuotaContentPattern.FindStringSubmatch(content)
+	matches := adminRechargeQuotaContentPattern.FindStringSubmatch(content)
 	if len(matches) < 2 {
 		return 0
 	}

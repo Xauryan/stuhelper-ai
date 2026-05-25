@@ -51,6 +51,10 @@ func RequestWaffoPancakeAmount(c *gin.Context) {
 }
 
 func getWaffoPancakePayMoney(amount int64, group string) float64 {
+	return getWaffoPancakePayMoneyBreakdown(amount, group).TotalMoney
+}
+
+func getWaffoPancakePayMoneyBreakdown(amount int64, group string) payMoneyBreakdown {
 	dAmount := decimal.NewFromInt(amount)
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		dAmount = dAmount.Div(decimal.NewFromFloat(common.QuotaPerUnit))
@@ -71,7 +75,7 @@ func getWaffoPancakePayMoney(amount int64, group string) float64 {
 		Mul(decimal.NewFromFloat(topupGroupRatio)).
 		Mul(decimal.NewFromFloat(discount))
 
-	return ceilPayMoneyToCents(payMoney)
+	return buildPayMoneyBreakdown(payMoney, setting.WaffoPancakeServiceFeePercent)
 }
 
 func normalizeWaffoPancakeTopUpAmount(amount int64) int64 {
@@ -150,8 +154,8 @@ func RequestWaffoPancakePay(c *gin.Context) {
 		return
 	}
 
-	payMoney := getWaffoPancakePayMoney(req.Amount, group)
-	if payMoney < 0.01 {
+	payMoney := getWaffoPancakePayMoneyBreakdown(req.Amount, group)
+	if payMoney.TotalMoney < 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
 	}
@@ -160,7 +164,8 @@ func RequestWaffoPancakePay(c *gin.Context) {
 	topUp := &model.TopUp{
 		UserId:          id,
 		Amount:          normalizeWaffoPancakeTopUpAmount(req.Amount),
-		Money:           payMoney,
+		Money:           payMoney.EffectiveMoney,
+		Fee:             payMoney.Fee,
 		TradeNo:         tradeNo,
 		PaymentMethod:   model.PaymentMethodWaffoPancake,
 		PaymentProvider: model.PaymentProviderWaffoPancake,
@@ -180,7 +185,7 @@ func RequestWaffoPancakePay(c *gin.Context) {
 		ProductType: "onetime",
 		Currency:    strings.ToUpper(strings.TrimSpace(setting.WaffoPancakeCurrency)),
 		PriceSnapshot: &service.WaffoPancakePriceSnapshot{
-			Amount:      formatWaffoPancakeAmount(payMoney),
+			Amount:      formatWaffoPancakeAmount(payMoney.TotalMoney),
 			TaxIncluded: false,
 			TaxCategory: "saas",
 		},
@@ -195,7 +200,7 @@ func RequestWaffoPancakePay(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
 		return
 	}
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo Pancake 充值订单创建成功 user_id=%d trade_no=%s session_id=%s amount=%d money=%.2f", id, tradeNo, session.SessionID, req.Amount, payMoney))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo Pancake 充值订单创建成功 user_id=%d trade_no=%s session_id=%s amount=%d money=%.2f fee=%.2f total_money=%.2f", id, tradeNo, session.SessionID, req.Amount, payMoney.EffectiveMoney, payMoney.Fee, payMoney.TotalMoney))
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "success",

@@ -1066,7 +1066,23 @@ func ManageUser(c *gin.Context) {
 			"admin_username": adminName,
 		}
 		switch req.Mode {
-		case "add":
+		case "recharge":
+			if req.Value <= 0 {
+				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
+				return
+			}
+			topUp, err := model.CreateAdminBalanceTopUp(user.Id, req.Value)
+			if err != nil {
+				common.ApiError(c, err)
+				return
+			}
+			adminInfo["trade_no"] = topUp.TradeNo
+			adminInfo["payment_method"] = model.PaymentMethodAdminAdd
+			adminInfo["payment_provider"] = model.PaymentProviderAdmin
+			adminInfo["operation_type"] = "recharge"
+			model.RecordLogWithAdminInfo(user.Id, model.LogTypeTopup,
+				fmt.Sprintf("管理员充值用户额度 %s", logger.LogQuota(req.Value)), adminInfo, req.Value)
+		case "gift":
 			if req.Value <= 0 {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
 				return
@@ -1075,8 +1091,9 @@ func ManageUser(c *gin.Context) {
 				common.ApiError(c, err)
 				return
 			}
+			adminInfo["operation_type"] = "gift"
 			model.RecordLogWithAdminInfo(user.Id, model.LogTypeManage,
-				fmt.Sprintf("管理员增加用户额度 %s", logger.LogQuota(req.Value)), adminInfo, req.Value)
+				fmt.Sprintf("管理员赠送用户额度 %s", logger.LogQuota(req.Value)), adminInfo, req.Value)
 		case "subtract":
 			if req.Value <= 0 {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)

@@ -40,6 +40,7 @@ const defaultInputs = {
   WaffoPancakeReturnURL: '',
   WaffoPancakeCurrency: 'USD',
   WaffoPancakeUnitPrice: 1.0,
+  WaffoPancakeServiceFeePercent: 0,
   WaffoPancakeMinTopUp: 1,
 };
 
@@ -74,6 +75,10 @@ export default function SettingsPaymentGatewayWaffoPancake(props) {
         props.options.WaffoPancakeUnitPrice !== undefined
           ? parseFloat(props.options.WaffoPancakeUnitPrice)
           : 1.0,
+      WaffoPancakeServiceFeePercent:
+        props.options.WaffoPancakeServiceFeePercent !== undefined
+          ? parseFloat(props.options.WaffoPancakeServiceFeePercent)
+          : 0,
       WaffoPancakeMinTopUp:
         props.options.WaffoPancakeMinTopUp !== undefined
           ? parseFloat(props.options.WaffoPancakeMinTopUp)
@@ -133,6 +138,14 @@ export default function SettingsPaymentGatewayWaffoPancake(props) {
       return;
     }
 
+    if (
+      values.WaffoPancakeEnabled &&
+      Number(values.WaffoPancakeServiceFeePercent) < 0
+    ) {
+      showError(t('支付手续费不能小于 0'));
+      return;
+    }
+
     if (values.WaffoPancakeEnabled && Number(values.WaffoPancakeMinTopUp) < 1) {
       showError(t('最低充值美元数量必须大于 0'));
       return;
@@ -172,6 +185,10 @@ export default function SettingsPaymentGatewayWaffoPancake(props) {
         {
           key: 'WaffoPancakeUnitPrice',
           value: String(values.WaffoPancakeUnitPrice),
+        },
+        {
+          key: 'WaffoPancakeServiceFeePercent',
+          value: String(values.WaffoPancakeServiceFeePercent || 0),
         },
         {
           key: 'WaffoPancakeMinTopUp',
@@ -398,6 +415,19 @@ export default function SettingsPaymentGatewayWaffoPancake(props) {
                 placeholder={t('例如：2，就是最低充值2$')}
                 extraText={t('用户单次最少可充值的美元数量')}
                 min={1}
+              />
+            </Col>
+            <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+              <Form.InputNumber
+                field='WaffoPancakeServiceFeePercent'
+                label={t('支付手续费（%）')}
+                min={0}
+                precision={3}
+                step={0.1}
+                placeholder={t('例如：0.6')}
+                extraText={t(
+                  '按该支付通道有效支付金额百分比计算，手续费不计入可退款金额',
+                )}
               />
             </Col>
           </Row>

@@ -3,25 +3,28 @@ import { buildRechargeAmountDisplay } from './rechargeAmountDisplay.js';
 
 const alipayDisplay = buildRechargeAmountDisplay({
   preset: { value: 10 },
-  priceRatio: 1.006,
+  priceRatio: 1,
   discountConfig: {},
   currencyConfig: { symbol: '$', rate: 1, type: 'USD' },
   usdExchangeRate: 7,
   selectedPaymentMethod: 'alipay_official',
+  serviceFeePercent: 0.6,
 });
 
 assert.equal(alipayDisplay.displayValue, 10);
 assert.equal(alipayDisplay.paymentSymbol, '¥');
 assert.equal(alipayDisplay.displayActualPay.toFixed(2), '10.06');
+assert.equal(alipayDisplay.fee.toFixed(2), '0.06');
 assert.equal(alipayDisplay.showSavings, false);
 
 const discountedAlipayDisplay = buildRechargeAmountDisplay({
   preset: { value: 100 },
-  priceRatio: 1.006,
+  priceRatio: 1,
   discountConfig: { 100: 0.95 },
   currencyConfig: { symbol: '$', rate: 1, type: 'USD' },
   usdExchangeRate: 7,
   selectedPaymentMethod: 'alipay_official',
+  serviceFeePercent: 0.6,
 });
 
 assert.equal(discountedAlipayDisplay.paymentSymbol, '¥');
@@ -36,6 +39,7 @@ const stripeDisplay = buildRechargeAmountDisplay({
   currencyConfig: { symbol: '$', rate: 1, type: 'USD' },
   usdExchangeRate: 7,
   selectedPaymentMethod: 'stripe',
+  serviceFeePercent: 0.6,
 });
 
 assert.equal(stripeDisplay.paymentSymbol, '$');

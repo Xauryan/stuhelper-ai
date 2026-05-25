@@ -73,6 +73,7 @@ func TestGetTopUpInfoIncludesOfficialUnitPrice(t *testing.T) {
 	originalAlipayPrivateKey := setting.AlipayOfficialPrivateKey
 	originalAlipayPublicKey := setting.AlipayOfficialAlipayPublicKey
 	originalAlipayUnitPrice := setting.AlipayOfficialUnitPrice
+	originalAlipayServiceFeePercent := setting.AlipayOfficialServiceFeePercent
 	originalEpayPayAddress := operation_setting.PayAddress
 	originalEpayID := operation_setting.EpayId
 	originalEpayKey := operation_setting.EpayKey
@@ -83,6 +84,7 @@ func TestGetTopUpInfoIncludesOfficialUnitPrice(t *testing.T) {
 		setting.AlipayOfficialPrivateKey = originalAlipayPrivateKey
 		setting.AlipayOfficialAlipayPublicKey = originalAlipayPublicKey
 		setting.AlipayOfficialUnitPrice = originalAlipayUnitPrice
+		setting.AlipayOfficialServiceFeePercent = originalAlipayServiceFeePercent
 		operation_setting.PayAddress = originalEpayPayAddress
 		operation_setting.EpayId = originalEpayID
 		operation_setting.EpayKey = originalEpayKey
@@ -94,6 +96,7 @@ func TestGetTopUpInfoIncludesOfficialUnitPrice(t *testing.T) {
 	setting.AlipayOfficialPrivateKey = "private-key"
 	setting.AlipayOfficialAlipayPublicKey = "alipay-public-key"
 	setting.AlipayOfficialUnitPrice = 1.006
+	setting.AlipayOfficialServiceFeePercent = 0.6
 	operation_setting.PayAddress = ""
 	operation_setting.EpayId = ""
 	operation_setting.EpayKey = ""
@@ -117,6 +120,7 @@ func TestGetTopUpInfoIncludesOfficialUnitPrice(t *testing.T) {
 	require.Len(t, payload.Data.PayMethods, 1)
 	require.Equal(t, model.PaymentMethodAlipayOfficial, payload.Data.PayMethods[0]["type"])
 	require.Equal(t, "1.006", payload.Data.PayMethods[0]["unit_price"])
+	require.Equal(t, "0.6", payload.Data.PayMethods[0]["service_fee_percent"])
 }
 
 func TestBuildOfficialTradeNoUsesAlipaySafeCharacters(t *testing.T) {
@@ -145,6 +149,7 @@ func TestConfiguredTopUpPayMoneyCeilsToCents(t *testing.T) {
 	originalStripeUnitPrice := setting.StripeUnitPrice
 	originalWaffoUnitPrice := setting.WaffoUnitPrice
 	originalWaffoPancakeUnitPrice := setting.WaffoPancakeUnitPrice
+	originalWaffoPancakeServiceFeePercent := setting.WaffoPancakeServiceFeePercent
 	t.Cleanup(func() {
 		operation_setting.Price = originalPrice
 		operation_setting.GetGeneralSetting().QuotaDisplayType = originalQuotaDisplayType
@@ -153,6 +158,7 @@ func TestConfiguredTopUpPayMoneyCeilsToCents(t *testing.T) {
 		setting.StripeUnitPrice = originalStripeUnitPrice
 		setting.WaffoUnitPrice = originalWaffoUnitPrice
 		setting.WaffoPancakeUnitPrice = originalWaffoPancakeUnitPrice
+		setting.WaffoPancakeServiceFeePercent = originalWaffoPancakeServiceFeePercent
 	})
 
 	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
@@ -162,13 +168,14 @@ func TestConfiguredTopUpPayMoneyCeilsToCents(t *testing.T) {
 	setting.StripeUnitPrice = 7.231
 	setting.WaffoUnitPrice = 7.231
 	setting.WaffoPancakeUnitPrice = 7.231
+	setting.WaffoPancakeServiceFeePercent = 0
 
 	testCases := []struct {
 		name   string
 		actual float64
 	}{
-		{name: "epay", actual: getPayMoney(1, "default")},
-		{name: "official", actual: getOfficialPayMoney(1, "default", 7.231)},
+		{name: "epay", actual: getPayMoney(1, "default", "alipay")},
+		{name: "official", actual: getOfficialPayMoney(1, "default", 7.231, 0)},
 		{name: "stripe", actual: getStripePayMoney(1, "default")},
 		{name: "waffo", actual: getWaffoPayMoney(1, "default")},
 		{name: "waffo pancake", actual: getWaffoPancakePayMoney(1, "default")},
@@ -182,6 +189,59 @@ func TestConfiguredTopUpPayMoneyCeilsToCents(t *testing.T) {
 
 	require.Equal(t, "7.24", formatOfficialPayMoney(7.231))
 	require.Equal(t, int64(724), yuanToFen(7.231))
+}
+
+func TestConfiguredTopUpPayMoneySplitsServiceFee(t *testing.T) {
+	originalPrice := operation_setting.Price
+	originalQuotaDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	originalPayMethods := operation_setting.PayMethods
+	originalDiscounts := make(map[int]float64, len(operation_setting.GetPaymentSetting().AmountDiscount))
+	for k, v := range operation_setting.GetPaymentSetting().AmountDiscount {
+		originalDiscounts[k] = v
+	}
+	originalTopupGroupRatio := common.TopupGroupRatio2JSONString()
+	originalWaffoUnitPrice := setting.WaffoUnitPrice
+	originalWaffoPancakeUnitPrice := setting.WaffoPancakeUnitPrice
+	originalWaffoPancakeServiceFeePercent := setting.WaffoPancakeServiceFeePercent
+	t.Cleanup(func() {
+		operation_setting.Price = originalPrice
+		operation_setting.GetGeneralSetting().QuotaDisplayType = originalQuotaDisplayType
+		operation_setting.PayMethods = originalPayMethods
+		operation_setting.GetPaymentSetting().AmountDiscount = originalDiscounts
+		require.NoError(t, common.UpdateTopupGroupRatioByJSONString(originalTopupGroupRatio))
+		setting.WaffoUnitPrice = originalWaffoUnitPrice
+		setting.WaffoPancakeUnitPrice = originalWaffoPancakeUnitPrice
+		setting.WaffoPancakeServiceFeePercent = originalWaffoPancakeServiceFeePercent
+	})
+
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+	operation_setting.GetPaymentSetting().AmountDiscount = map[int]float64{}
+	operation_setting.PayMethods = []map[string]string{
+		{"name": "支付宝", "type": "alipay", "service_fee_percent": "0.6"},
+	}
+	require.NoError(t, common.UpdateTopupGroupRatioByJSONString(`{"default":1}`))
+	operation_setting.Price = 1
+	setting.WaffoUnitPrice = 1
+	setting.WaffoPancakeUnitPrice = 1
+	setting.WaffoPancakeServiceFeePercent = 0.6
+
+	testCases := []struct {
+		name      string
+		breakdown payMoneyBreakdown
+	}{
+		{name: "epay", breakdown: getPayMoneyBreakdown(10, "default", "alipay")},
+		{name: "official", breakdown: getOfficialPayMoneyBreakdown(10, "default", 1, 0.6)},
+		{name: "waffo", breakdown: getWaffoPayMoneyBreakdown(10, "default", 0.6)},
+		{name: "waffo pancake", breakdown: getWaffoPancakePayMoneyBreakdown(10, "default")},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.InDelta(t, 10.00, tc.breakdown.EffectiveMoney, 0.000001)
+			require.InDelta(t, 0.06, tc.breakdown.Fee, 0.000001)
+			require.InDelta(t, 10.06, tc.breakdown.TotalMoney, 0.000001)
+		})
+	}
 }
 
 func TestAlipayOfficialCloseDoesNotExpireOrderWhenTradeIsNotFound(t *testing.T) {
@@ -221,11 +281,14 @@ func TestOfficialPaymentOrderTimeoutSecondsFallbackAndWechatExpiry(t *testing.T)
 
 func TestGetAlipayOfficialSubscriptionPayMoneyUsesConfiguredUnitPrice(t *testing.T) {
 	originalAlipayUnitPrice := setting.AlipayOfficialUnitPrice
+	originalServiceFeePercent := setting.AlipayOfficialServiceFeePercent
 	t.Cleanup(func() {
 		setting.AlipayOfficialUnitPrice = originalAlipayUnitPrice
+		setting.AlipayOfficialServiceFeePercent = originalServiceFeePercent
 	})
 
 	setting.AlipayOfficialUnitPrice = 7.231
+	setting.AlipayOfficialServiceFeePercent = 0
 
 	require.InDelta(t, 7.24, getAlipayOfficialSubscriptionPayMoney(1), 0.000001)
 	require.Equal(t, "7.24", formatOfficialPayMoney(getAlipayOfficialSubscriptionPayMoney(1)))
@@ -233,11 +296,14 @@ func TestGetAlipayOfficialSubscriptionPayMoneyUsesConfiguredUnitPrice(t *testing
 
 func TestGetWechatPayOfficialSubscriptionPayMoneyUsesConfiguredUnitPrice(t *testing.T) {
 	originalWechatUnitPrice := setting.WechatPayOfficialUnitPrice
+	originalServiceFeePercent := setting.WechatPayOfficialServiceFeePercent
 	t.Cleanup(func() {
 		setting.WechatPayOfficialUnitPrice = originalWechatUnitPrice
+		setting.WechatPayOfficialServiceFeePercent = originalServiceFeePercent
 	})
 
 	setting.WechatPayOfficialUnitPrice = 1.006
+	setting.WechatPayOfficialServiceFeePercent = 0
 
 	require.InDelta(t, 50.30, getWechatPayOfficialSubscriptionPayMoney(50), 0.000001)
 	require.Equal(t, int64(5030), yuanToFen(getWechatPayOfficialSubscriptionPayMoney(50)))
@@ -260,6 +326,53 @@ func TestGetEpaySubscriptionPayMoneyUsesConfiguredUnitPrice(t *testing.T) {
 	require.Equal(t, "50.30", formatPayMoneyToCents(getEpaySubscriptionPayMoney(50, "wxpay")))
 	require.InDelta(t, 60.00, getEpaySubscriptionPayMoney(50, "alipay"), 0.000001)
 	require.Equal(t, "60.00", formatPayMoneyToCents(getEpaySubscriptionPayMoney(50, "alipay")))
+}
+
+func TestSubscriptionPayMoneyAppliesServiceFee(t *testing.T) {
+	originalPrice := operation_setting.Price
+	originalPayMethods := operation_setting.PayMethods
+	originalAlipayUnitPrice := setting.AlipayOfficialUnitPrice
+	originalWechatUnitPrice := setting.WechatPayOfficialUnitPrice
+	originalAlipayServiceFeePercent := setting.AlipayOfficialServiceFeePercent
+	originalWechatServiceFeePercent := setting.WechatPayOfficialServiceFeePercent
+	t.Cleanup(func() {
+		operation_setting.Price = originalPrice
+		operation_setting.PayMethods = originalPayMethods
+		setting.AlipayOfficialUnitPrice = originalAlipayUnitPrice
+		setting.WechatPayOfficialUnitPrice = originalWechatUnitPrice
+		setting.AlipayOfficialServiceFeePercent = originalAlipayServiceFeePercent
+		setting.WechatPayOfficialServiceFeePercent = originalWechatServiceFeePercent
+	})
+
+	operation_setting.Price = 1
+	operation_setting.PayMethods = []map[string]string{
+		{"name": "微信", "type": "wxpay", "service_fee_percent": "0.6"},
+		{"name": "支付宝", "type": "alipay", "unit_price": "1.2", "service_fee_percent": "0.6"},
+	}
+	setting.AlipayOfficialUnitPrice = 1
+	setting.WechatPayOfficialUnitPrice = 1
+	setting.AlipayOfficialServiceFeePercent = 0.6
+	setting.WechatPayOfficialServiceFeePercent = 0.6
+
+	epayDefault := getEpaySubscriptionPayMoneyBreakdown(50, "wxpay")
+	require.InDelta(t, 50.00, epayDefault.EffectiveMoney, 0.000001)
+	require.InDelta(t, 0.30, epayDefault.Fee, 0.000001)
+	require.InDelta(t, 50.30, epayDefault.TotalMoney, 0.000001)
+
+	epayMethod := getEpaySubscriptionPayMoneyBreakdown(50, "alipay")
+	require.InDelta(t, 60.00, epayMethod.EffectiveMoney, 0.000001)
+	require.InDelta(t, 0.36, epayMethod.Fee, 0.000001)
+	require.InDelta(t, 60.36, epayMethod.TotalMoney, 0.000001)
+
+	alipay := getAlipayOfficialSubscriptionPayMoneyBreakdown(50)
+	require.InDelta(t, 50.00, alipay.EffectiveMoney, 0.000001)
+	require.InDelta(t, 0.30, alipay.Fee, 0.000001)
+	require.InDelta(t, 50.30, alipay.TotalMoney, 0.000001)
+
+	wechat := getWechatPayOfficialSubscriptionPayMoneyBreakdown(50)
+	require.InDelta(t, 50.00, wechat.EffectiveMoney, 0.000001)
+	require.InDelta(t, 0.30, wechat.Fee, 0.000001)
+	require.InDelta(t, 50.30, wechat.TotalMoney, 0.000001)
 }
 
 func TestGetTopUpInfoStillExposesOfficialMethodsWhenEpayDisabled(t *testing.T) {

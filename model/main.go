@@ -292,6 +292,9 @@ func migrateDB() error {
 	if err := backfillInviterRewardMigrationState(hadInviterRewardMigrationState); err != nil {
 		return err
 	}
+	if err := migrateAdminAddedQuotaLogsToRecharge(DB); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -368,6 +371,9 @@ func migrateDBFast() error {
 	if err := backfillInviterRewardMigrationState(hadInviterRewardMigrationState); err != nil {
 		return err
 	}
+	if err := migrateAdminAddedQuotaLogsToRecharge(DB); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -386,7 +392,19 @@ func migrateLOGDB() error {
 	if err = LOG_DB.AutoMigrate(&Log{}); err != nil {
 		return err
 	}
+	if err = migrateAdminAddedQuotaLogsToRecharge(LOG_DB); err != nil {
+		return err
+	}
 	return nil
+}
+
+func migrateAdminAddedQuotaLogsToRecharge(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&Log{}) {
+		return nil
+	}
+	return db.Model(&Log{}).
+		Where("content LIKE ?", "管理员增加用户额度%").
+		Update("content", gorm.Expr("REPLACE(content, ?, ?)", "管理员增加用户额度", "管理员充值用户额度")).Error
 }
 
 func hasInviterRewardMigrationStateColumns() bool {

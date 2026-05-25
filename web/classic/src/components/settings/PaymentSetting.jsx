@@ -62,6 +62,7 @@ const PaymentSetting = () => {
     AlipayOfficialNotifyURL: '',
     AlipayOfficialReturnURL: '',
     AlipayOfficialUnitPrice: 1.0,
+    AlipayOfficialServiceFeePercent: 0,
     AlipayOfficialMinTopUp: 1,
     AlipayOfficialOrderTimeoutSec: 600,
 
@@ -75,6 +76,7 @@ const PaymentSetting = () => {
     WechatPayOfficialNotifyURL: '',
     WechatPayOfficialReturnURL: '',
     WechatPayOfficialUnitPrice: 1.0,
+    WechatPayOfficialServiceFeePercent: 0,
     WechatPayOfficialMinTopUp: 1,
     WechatPayOfficialOrderTimeoutSec: 600,
 
@@ -87,6 +89,7 @@ const PaymentSetting = () => {
     WaffoPancakeReturnURL: '',
     WaffoPancakeCurrency: 'USD',
     WaffoPancakeUnitPrice: 1.0,
+    WaffoPancakeServiceFeePercent: 0,
     WaffoPancakeMinTopUp: 1,
   });
 
@@ -137,12 +140,15 @@ const PaymentSetting = () => {
           case 'StripeUnitPrice':
           case 'StripeMinTopUp':
           case 'AlipayOfficialUnitPrice':
+          case 'AlipayOfficialServiceFeePercent':
           case 'AlipayOfficialMinTopUp':
           case 'AlipayOfficialOrderTimeoutSec':
           case 'WechatPayOfficialUnitPrice':
+          case 'WechatPayOfficialServiceFeePercent':
           case 'WechatPayOfficialMinTopUp':
           case 'WechatPayOfficialOrderTimeoutSec':
           case 'WaffoPancakeUnitPrice':
+          case 'WaffoPancakeServiceFeePercent':
           case 'WaffoPancakeMinTopUp':
             newInputs[item.key] = parseFloat(item.value);
             break;

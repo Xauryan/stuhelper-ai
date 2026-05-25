@@ -46,6 +46,11 @@ function normalizeUnitPrice(unitPrice) {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+function normalizeServiceFeePercent(percent) {
+  const value = Number(percent);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 export function buildSubscriptionPaymentMethods({
   plan,
   payMethods = [],
@@ -71,6 +76,9 @@ export function buildSubscriptionPaymentMethods({
       provider: 'stripe',
       name: stripeMethod?.name || 'Stripe',
       unitPrice: normalizeUnitPrice(stripeMethod?.unit_price),
+      service_fee_percent: normalizeServiceFeePercent(
+        stripeMethod?.service_fee_percent ?? stripeMethod?.serviceFeePercent,
+      ),
       icon: stripeMethod?.icon,
       color: stripeMethod?.color,
     });
@@ -86,6 +94,9 @@ export function buildSubscriptionPaymentMethods({
       provider: 'creem',
       name: creemMethod?.name || 'Creem',
       unitPrice: normalizeUnitPrice(creemMethod?.unit_price),
+      service_fee_percent: normalizeServiceFeePercent(
+        creemMethod?.service_fee_percent ?? creemMethod?.serviceFeePercent,
+      ),
       icon: creemMethod?.icon,
       color: creemMethod?.color,
     });
@@ -99,6 +110,9 @@ export function buildSubscriptionPaymentMethods({
       provider: 'alipay_official',
       name: alipayMethod?.name || '支付宝',
       unitPrice: normalizeUnitPrice(alipayMethod?.unit_price),
+      service_fee_percent: normalizeServiceFeePercent(
+        alipayMethod?.service_fee_percent ?? alipayMethod?.serviceFeePercent,
+      ),
       icon: alipayMethod?.icon,
       color: alipayMethod?.color,
     });
@@ -112,6 +126,9 @@ export function buildSubscriptionPaymentMethods({
       provider: 'wxpay_official',
       name: wechatMethod?.name || '微信',
       unitPrice: normalizeUnitPrice(wechatMethod?.unit_price),
+      service_fee_percent: normalizeServiceFeePercent(
+        wechatMethod?.service_fee_percent ?? wechatMethod?.serviceFeePercent,
+      ),
       icon: wechatMethod?.icon,
       color: wechatMethod?.color,
     });
@@ -126,6 +143,9 @@ export function buildSubscriptionPaymentMethods({
         provider: 'epay',
         name: method.name || method.type,
         unitPrice: normalizeUnitPrice(method.unit_price ?? epayUnitPrice),
+        service_fee_percent: normalizeServiceFeePercent(
+          method.service_fee_percent ?? method.serviceFeePercent,
+        ),
         icon: method.icon,
         color: method.color,
         raw: method,

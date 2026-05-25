@@ -131,7 +131,6 @@ export default function SettingsGeneralPayment(props) {
           value: inputs.AmountDiscount,
         });
       }
-
       const results = await Promise.all(
         options.map((option) =>
           API.put('/api/option/', {
@@ -205,7 +204,12 @@ export default function SettingsGeneralPayment(props) {
               <Form.TextArea
                 field='PayMethods'
                 label={t('充值方式设置')}
-                placeholder={t('为一个 JSON 文本')}
+                placeholder={t(
+                  '为一个 JSON 文本，例如：[{"name":"支付宝","type":"alipay","service_fee_percent":"0.6"}]',
+                )}
+                extraText={t(
+                  '每个支付通道可单独配置 service_fee_percent，单位为百分比；留空或不填表示 0',
+                )}
                 autosize
               />
             </Col>
@@ -223,8 +227,11 @@ export default function SettingsGeneralPayment(props) {
               />
             </Col>
           </Row>
-          <Row style={{ marginTop: 16 }}>
-            <Col span={24}>
+          <Row
+            gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+            style={{ marginTop: 16 }}
+          >
+            <Col xs={24} sm={24} md={24} lg={24} xl={24}>
               <Form.TextArea
                 field='AmountDiscount'
                 label={t('充值金额折扣配置')}

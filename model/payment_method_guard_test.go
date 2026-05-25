@@ -1626,3 +1626,57 @@ func TestExpireSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) 
 	require.NotNil(t, topUp)
 	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
 }
+
+func TestCalculateOfficialPaymentRefundPreviewUsesResetCycleForSubscriptionTime(t *testing.T) {
+	truncateTables(t)
+
+	now := common.GetTimestamp()
+	start := now - int64((3*24+4)*time.Hour/time.Second)
+	end := start + int64((7*24*time.Hour)/time.Second)
+
+	insertUserForPaymentGuardTest(t, 272, 0)
+	plan := &SubscriptionPlan{
+		Id:               408,
+		Title:            "Daily Reset Weekly",
+		PriceAmount:      58,
+		Currency:         "USD",
+		DurationUnit:     SubscriptionDurationDay,
+		DurationValue:    7,
+		Enabled:          true,
+		TotalAmount:      70,
+		QuotaResetPeriod: SubscriptionResetDaily,
+	}
+	require.NoError(t, DB.Create(plan).Error)
+	InvalidateSubscriptionPlanCache(plan.Id)
+	order := &SubscriptionOrder{
+		UserId:          272,
+		PlanId:          plan.Id,
+		Money:           58,
+		Fee:             0.35,
+		TradeNo:         "WXSUB_REFUND_CYCLE",
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CreateTime:      start,
+		CompleteTime:    start,
+	}
+	require.NoError(t, order.Insert())
+	require.NoError(t, DB.Create(&UserSubscription{
+		UserId:      272,
+		PlanId:      plan.Id,
+		AmountTotal: 70,
+		AmountUsed:  0,
+		StartTime:   start,
+		EndTime:     end,
+		Status:      "active",
+		Source:      "order",
+	}).Error)
+
+	preview, err := CalculateOfficialPaymentRefundPreview(order.TradeNo)
+	require.NoError(t, err)
+	require.True(t, preview.IsSubscription)
+	assert.InDelta(t, float64(4)/7, preview.SubscriptionTimeRatio, 0.0001)
+	assert.InDelta(t, 24.85, preview.MaxRefundAmount, 0.0001)
+	assert.Equal(t, int64(30), preview.MaxRefundQuota)
+	assert.InDelta(t, 58.00, preview.RemainingRefundAmount, 0.0001)
+}

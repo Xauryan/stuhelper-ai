@@ -1474,7 +1474,7 @@
       "get": {
         "summary": "获取所有充值记录",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）",
+        "description": "👨‍💼 需要管理员权限（Admin）。账单 money 为有效支付金额，fee 为不可退手续费，total_money 汇总 success 账单的有效支付金额。",
         "tags": [
           "用户管理"
         ],
@@ -1608,6 +1608,31 @@
         "summary": "管理员完成充值",
         "deprecated": false,
         "description": "👨‍💼 需要管理员权限（Admin）",
+        "tags": [
+          "用户管理"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ]
+      }
+    },
+    "/api/user/topup/admin/refund": {
+      "post": {
+        "summary": "管理员充值退款记账",
+        "deprecated": false,
+        "description": "👨‍💼 需要管理员权限（Admin）。仅用于 payment_method=admin_add 的管理员充值账单，记录退款并扣回用户额度，不调用第三方支付退款。",
         "tags": [
           "用户管理"
         ],
@@ -1867,7 +1892,7 @@
       "get": {
         "summary": "获取充值信息",
         "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
+        "description": "🔐 需要登录（User权限）。返回充值配置；支付手续费按支付通道独立配置，pay_methods 或 waffo_pay_methods 中的 service_fee_percent 为该通道手续费百分比，未配置表示 0。",
         "tags": [
           "充值"
         ],
@@ -1892,7 +1917,7 @@
       "get": {
         "summary": "获取用户充值记录",
         "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
+        "description": "🔐 需要登录（User权限）。账单 money 为有效支付金额，fee 为不可退手续费，total_money 汇总 success 账单的有效支付金额。",
         "tags": [
           "充值"
         ],
@@ -5318,7 +5343,7 @@
       "post": {
         "summary": "预览官方支付可退款金额",
         "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
+        "description": "🔐 需要登录（User权限）。退款上限只按有效支付金额 money 计算，手续费 fee 不进入可退款金额；订阅退款的时间比例会按套餐重置周期向上取整。",
         "tags": [
           "充值"
         ],
@@ -5354,7 +5379,7 @@
       "post": {
         "summary": "提交官方支付退款申请",
         "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
+        "description": "🔐 需要登录（User权限）。申请金额不能超过预览返回的可退有效金额，手续费不支持退款。",
         "tags": [
           "充值"
         ],
@@ -6819,6 +6844,18 @@
           },
           "unlimited_quota": {
             "type": "boolean"
+          },
+          "group": {
+            "type": "string",
+            "description": "令牌分组；auto 表示自动分组"
+          },
+          "cross_group_retry": {
+            "type": "boolean",
+            "description": "auto 分组下是否允许渠道失败后跨分组重试"
+          },
+          "auto_groups": {
+            "type": "string",
+            "description": "auto 令牌的用户自定义分组优先级，JSON 字符串数组；优先级高于系统默认 AutoGroups"
           }
         }
       },

@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import {
   BILLING_PAYMENT_METHOD_FILTERS,
   canAdminCompleteTopup,
+  getRemainingAdminRefundQuota,
   getRemainingRefundMoney,
   isAlipayOfficialRefundable,
+  isAdminManagedTopup,
+  isAdminManagedTopupRefundable,
   isOfficialPaymentTopup,
   isOfficialRefundable,
   isSubscriptionTopup,
@@ -13,10 +16,15 @@ assert.deepEqual(BILLING_PAYMENT_METHOD_FILTERS, [
   { value: '', key: '全部' },
   { value: 'alipay_official', key: '支付宝' },
   { value: 'wxpay_official', key: '微信' },
+  { value: 'admin_add', key: '管理员充值' },
 ]);
 assert.equal(
   getRemainingRefundMoney({ money: 1.01, refunded_money: 0.4 }),
   0.61,
+);
+assert.equal(
+  getRemainingRefundMoney({ money: 20, fee: 0.12, refunded_money: 0 }),
+  20,
 );
 assert.equal(getRemainingRefundMoney({ money: 1, refunded_money: 1 }), 0);
 assert.equal(
@@ -201,6 +209,38 @@ assert.equal(
   isSubscriptionTopup({
     trade_no: 'WXSUB_1_ABCDEF1234567890',
     amount: 10,
+  }),
+  false,
+);
+assert.equal(
+  isAdminManagedTopup({
+    payment_provider: 'admin',
+    payment_method: 'admin_add',
+  }),
+  true,
+);
+assert.equal(
+  getRemainingAdminRefundQuota({
+    amount: 1000,
+    refunded_quota: 250,
+  }),
+  750,
+);
+assert.equal(
+  isAdminManagedTopupRefundable({
+    status: 'partial_refunded',
+    payment_method: 'admin_add',
+    amount: 1000,
+    refunded_quota: 250,
+  }),
+  true,
+);
+assert.equal(
+  isAdminManagedTopupRefundable({
+    status: 'refunded',
+    payment_method: 'admin_add',
+    amount: 1000,
+    refunded_quota: 1000,
   }),
   false,
 );

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/constant"
 	"github.com/Xauryan/stuhelper-ai/setting"
 	"github.com/Xauryan/stuhelper-ai/setting/config"
 	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
@@ -126,6 +127,7 @@ func InitOptionMap() {
 	common.OptionMap["WaffoPancakeReturnURL"] = setting.WaffoPancakeReturnURL
 	common.OptionMap["WaffoPancakeCurrency"] = setting.WaffoPancakeCurrency
 	common.OptionMap["WaffoPancakeUnitPrice"] = strconv.FormatFloat(setting.WaffoPancakeUnitPrice, 'f', -1, 64)
+	common.OptionMap["WaffoPancakeServiceFeePercent"] = strconv.FormatFloat(setting.WaffoPancakeServiceFeePercent, 'f', -1, 64)
 	common.OptionMap["WaffoPancakeMinTopUp"] = strconv.Itoa(setting.WaffoPancakeMinTopUp)
 	common.OptionMap["AlipayOfficialEnabled"] = strconv.FormatBool(setting.AlipayOfficialEnabled)
 	common.OptionMap["AlipayOfficialAppID"] = setting.AlipayOfficialAppID
@@ -139,6 +141,7 @@ func InitOptionMap() {
 	common.OptionMap["AlipayOfficialNotifyURL"] = setting.AlipayOfficialNotifyURL
 	common.OptionMap["AlipayOfficialReturnURL"] = setting.AlipayOfficialReturnURL
 	common.OptionMap["AlipayOfficialUnitPrice"] = strconv.FormatFloat(setting.AlipayOfficialUnitPrice, 'f', -1, 64)
+	common.OptionMap["AlipayOfficialServiceFeePercent"] = strconv.FormatFloat(setting.AlipayOfficialServiceFeePercent, 'f', -1, 64)
 	common.OptionMap["AlipayOfficialMinTopUp"] = strconv.Itoa(setting.AlipayOfficialMinTopUp)
 	common.OptionMap["AlipayOfficialOrderTimeoutSec"] = strconv.Itoa(setting.AlipayOfficialOrderTimeoutSec)
 	common.OptionMap["WechatPayOfficialEnabled"] = strconv.FormatBool(setting.WechatPayOfficialEnabled)
@@ -151,6 +154,7 @@ func InitOptionMap() {
 	common.OptionMap["WechatPayOfficialNotifyURL"] = setting.WechatPayOfficialNotifyURL
 	common.OptionMap["WechatPayOfficialReturnURL"] = setting.WechatPayOfficialReturnURL
 	common.OptionMap["WechatPayOfficialUnitPrice"] = strconv.FormatFloat(setting.WechatPayOfficialUnitPrice, 'f', -1, 64)
+	common.OptionMap["WechatPayOfficialServiceFeePercent"] = strconv.FormatFloat(setting.WechatPayOfficialServiceFeePercent, 'f', -1, 64)
 	common.OptionMap["WechatPayOfficialMinTopUp"] = strconv.Itoa(setting.WechatPayOfficialMinTopUp)
 	common.OptionMap["WechatPayOfficialOrderTimeoutSec"] = strconv.Itoa(setting.WechatPayOfficialOrderTimeoutSec)
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
@@ -508,6 +512,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WaffoPancakeCurrency = value
 	case "WaffoPancakeUnitPrice":
 		setting.WaffoPancakeUnitPrice, _ = strconv.ParseFloat(value, 64)
+	case "WaffoPancakeServiceFeePercent":
+		setting.WaffoPancakeServiceFeePercent, _ = strconv.ParseFloat(value, 64)
 	case "WaffoPancakeMinTopUp":
 		setting.WaffoPancakeMinTopUp, _ = strconv.Atoi(value)
 	case "AlipayOfficialEnabled":
@@ -534,6 +540,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.AlipayOfficialReturnURL = value
 	case "AlipayOfficialUnitPrice":
 		setting.AlipayOfficialUnitPrice, _ = strconv.ParseFloat(value, 64)
+	case "AlipayOfficialServiceFeePercent":
+		setting.AlipayOfficialServiceFeePercent, _ = strconv.ParseFloat(value, 64)
 	case "AlipayOfficialMinTopUp":
 		setting.AlipayOfficialMinTopUp, _ = strconv.Atoi(value)
 	case "AlipayOfficialOrderTimeoutSec":
@@ -564,6 +572,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WechatPayOfficialReturnURL = value
 	case "WechatPayOfficialUnitPrice":
 		setting.WechatPayOfficialUnitPrice, _ = strconv.ParseFloat(value, 64)
+	case "WechatPayOfficialServiceFeePercent":
+		setting.WechatPayOfficialServiceFeePercent, _ = strconv.ParseFloat(value, 64)
 	case "WechatPayOfficialMinTopUp":
 		setting.WechatPayOfficialMinTopUp, _ = strconv.Atoi(value)
 	case "WechatPayOfficialOrderTimeoutSec":
@@ -682,6 +692,30 @@ func updateOptionMap(key string, value string) (err error) {
 
 func validateOptionValue(key string, value string) error {
 	switch key {
+	case "PayMethods":
+		var methods []map[string]string
+		if err := common.UnmarshalJsonStr(value, &methods); err != nil {
+			return fmt.Errorf("invalid PayMethods: %s", value)
+		}
+		for _, method := range methods {
+			if err := validateServiceFeePercentValue("PayMethods.service_fee_percent", method["service_fee_percent"], true); err != nil {
+				return err
+			}
+		}
+	case "WaffoPayMethods":
+		var methods []constant.WaffoPayMethod
+		if err := common.UnmarshalJsonStr(value, &methods); err != nil {
+			return fmt.Errorf("invalid WaffoPayMethods: %s", value)
+		}
+		for _, method := range methods {
+			if err := validateServiceFeePercentFloat("WaffoPayMethods.service_fee_percent", method.ServiceFeePercent); err != nil {
+				return err
+			}
+		}
+	case "AlipayOfficialServiceFeePercent", "WechatPayOfficialServiceFeePercent", "WaffoPancakeServiceFeePercent":
+		if err := validateServiceFeePercentValue(key, value, false); err != nil {
+			return err
+		}
 	case "ReferralCommissionPercent":
 		percent, err := strconv.ParseFloat(value, 64)
 		if err != nil || math.IsNaN(percent) || math.IsInf(percent, 0) || percent < 0 || percent > 100 {
@@ -692,6 +726,24 @@ func validateOptionValue(key string, value string) error {
 		if err != nil || maxRecharges < 0 {
 			return fmt.Errorf("invalid ReferralCommissionMaxRecharges: %s", value)
 		}
+	}
+	return nil
+}
+
+func validateServiceFeePercentValue(key string, value string, allowEmpty bool) error {
+	if strings.TrimSpace(value) == "" && allowEmpty {
+		return nil
+	}
+	percent, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return fmt.Errorf("invalid %s: %s", key, value)
+	}
+	return validateServiceFeePercentFloat(key, percent)
+}
+
+func validateServiceFeePercentFloat(key string, percent float64) error {
+	if math.IsNaN(percent) || math.IsInf(percent, 0) || percent < 0 || percent > 100 {
+		return fmt.Errorf("invalid %s: %s", key, strconv.FormatFloat(percent, 'f', -1, 64))
 	}
 	return nil
 }

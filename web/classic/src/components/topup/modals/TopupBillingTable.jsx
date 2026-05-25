@@ -36,13 +36,16 @@ import {
 } from '@douyinfe/semi-illustrations';
 import { Coins } from 'lucide-react';
 import { IconSearch } from '@douyinfe/semi-icons';
-import { API, timestamp2string } from '../../../helpers';
+import { API, timestamp2string, renderQuota } from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
 import CardTable from '../../common/ui/CardTable';
 import {
   canAdminCompleteTopup,
   formatCurrency,
+  getRemainingAdminRefundQuota,
   getRemainingRefundMoney,
+  isAdminManagedTopup,
+  isAdminManagedTopupRefundable,
   isOfficialRefundable,
   isSubscriptionTopup,
 } from './topupHistoryUtils.mjs';
@@ -68,6 +71,7 @@ const PAYMENT_METHOD_MAP = {
   wxpay: '微信',
   alipay_official: '支付宝',
   wxpay_official: '微信',
+  admin_add: '管理员充值',
 };
 
 const isOfficialTopupRefundable = (record) =>
@@ -105,6 +109,7 @@ const TopupBillingTable = ({
   const [refundVisible, setRefundVisible] = useState(false);
   const [refundRecord, setRefundRecord] = useState(null);
   const [refundAmount, setRefundAmount] = useState(0);
+  const [refundQuota, setRefundQuota] = useState(0);
   const [refundReason, setRefundReason] = useState('');
   const [refundLoading, setRefundLoading] = useState(false);
   const [refundPreview, setRefundPreview] = useState(null);
@@ -269,6 +274,17 @@ const TopupBillingTable = ({
 
   const openRefundModal = useCallback(
     async (record) => {
+      if (isAdminManagedTopup(record)) {
+        setRefundPreview(null);
+        setRefundRecord(record);
+        setRefundAmount(0);
+        setRefundQuota(getRemainingAdminRefundQuota(record));
+        setRefundReason('');
+        setRefundMode('admin_quota');
+        setRefundFull(false);
+        setRefundVisible(true);
+        return;
+      }
       let preview = null;
       let remaining = getRemainingRefundMoney(record);
       try {
@@ -286,6 +302,7 @@ const TopupBillingTable = ({
       setRefundPreview(preview);
       setRefundRecord(record);
       setRefundAmount(remaining);
+      setRefundQuota(0);
       setRefundReason('');
       setRefundMode(
         record.refund_request_id && userIsAdmin ? 'approve' : 'direct',
@@ -298,6 +315,40 @@ const TopupBillingTable = ({
 
   const handleRefund = async () => {
     if (!refundRecord) {
+      return;
+    }
+    if (refundMode === 'admin_quota') {
+      const maxQuota = getRemainingAdminRefundQuota(refundRecord);
+      const normalizedQuota = Math.round(Number(refundQuota || 0));
+      if (!normalizedQuota || normalizedQuota <= 0) {
+        Toast.error({ content: t('请输入退款额度') });
+        return;
+      }
+      if (normalizedQuota > maxQuota) {
+        Toast.error({ content: t('退款额度不能超过可退额度') });
+        return;
+      }
+      setRefundLoading(true);
+      try {
+        const res = await API.post('/api/user/topup/admin/refund', {
+          trade_no: refundRecord.trade_no,
+          refund_quota: normalizedQuota,
+          reason: refundReason,
+          full_refund: refundFull,
+        });
+        const { success, message } = res.data;
+        if (success) {
+          Toast.success({ content: t('退款成功') });
+          setRefundVisible(false);
+          await loadTopups(page, pageSize);
+        } else {
+          Toast.error({ content: message || t('退款失败') });
+        }
+      } catch (e) {
+        Toast.error({ content: t('退款失败') });
+      } finally {
+        setRefundLoading(false);
+      }
       return;
     }
     const maxAmount = refundFull
@@ -569,6 +620,14 @@ const TopupBillingTable = ({
               </Tag>
             );
           }
+          if (isAdminManagedTopup(record)) {
+            return (
+              <span className='flex items-center gap-1'>
+                <Coins size={16} />
+                <Text>{renderQuota(amount)}</Text>
+              </span>
+            );
+          }
           return (
             <span className='flex items-center gap-1'>
               <Coins size={16} />
@@ -584,11 +643,24 @@ const TopupBillingTable = ({
         render: (money) => <Text type='danger'>¥{formatCurrency(money)}</Text>,
       },
       {
+        title: t('手续费'),
+        dataIndex: 'fee',
+        key: 'fee',
+        render: (fee) =>
+          Number(fee || 0) > 0 ? (
+            <Text type='secondary'>¥{formatCurrency(fee)}</Text>
+          ) : (
+            <Text type='tertiary'>-</Text>
+          ),
+      },
+      {
         title: t('已退款'),
         dataIndex: 'refunded_money',
         key: 'refunded_money',
-        render: (money) =>
-          Number(money || 0) > 0 ? (
+        render: (money, record) =>
+          isAdminManagedTopup(record) && Number(record?.refunded_quota || 0) > 0 ? (
+            <Text type='warning'>{renderQuota(record.refunded_quota)}</Text>
+          ) : Number(money || 0) > 0 ? (
             <Text type='warning'>¥{formatCurrency(money)}</Text>
           ) : (
             <Text type='tertiary'>-</Text>
@@ -693,6 +765,19 @@ const TopupBillingTable = ({
               onClick={() => openRefundModal(record)}
             >
               {userIsAdmin ? t('退款') : t('申请退款')}
+            </Button>,
+          );
+        }
+        if (userIsAdmin && isAdminManagedTopupRefundable(record)) {
+          actions.push(
+            <Button
+              key='admin-refund'
+              size='small'
+              type='warning'
+              theme='outline'
+              onClick={() => openRefundModal(record)}
+            >
+              {t('退款')}
             </Button>,
           );
         }
@@ -812,7 +897,9 @@ const TopupBillingTable = ({
       )}
       <Modal
         title={
-          refundMode === 'approve'
+          refundMode === 'admin_quota'
+            ? t('管理员充值退款')
+            : refundMode === 'approve'
             ? t('审批退款')
             : userIsAdmin
               ? t('官方支付退款')
@@ -833,18 +920,28 @@ const TopupBillingTable = ({
             </div>
           </div>
           <div>
-            <Text type='tertiary'>{t('剩余可退金额')}</Text>
+            <Text type='tertiary'>
+              {refundMode === 'admin_quota'
+                ? t('剩余可退额度')
+                : t('剩余可退金额')}
+            </Text>
             <div>
-              <Text type='danger'>
-                ¥
-                {formatCurrency(
-                  refundPreview?.max_refund_amount ??
-                    getRemainingRefundMoney(refundRecord),
-                )}
-              </Text>
+              {refundMode === 'admin_quota' ? (
+                <Text type='danger'>
+                  {renderQuota(getRemainingAdminRefundQuota(refundRecord))}
+                </Text>
+              ) : (
+                <Text type='danger'>
+                  ¥
+                  {formatCurrency(
+                    refundPreview?.max_refund_amount ??
+                      getRemainingRefundMoney(refundRecord),
+                  )}
+                </Text>
+              )}
             </div>
           </div>
-          {refundPreview?.is_subscription ? (
+          {refundMode !== 'admin_quota' && refundPreview?.is_subscription ? (
             <div>
               <Text type='tertiary'>{t('订阅未使用部分')}</Text>
               <div>
@@ -878,22 +975,35 @@ const TopupBillingTable = ({
               </div>
             </>
           ) : null}
-          <InputNumber
-            prefix='¥'
-            min={0.01}
-            max={
-              refundFull
-                ? getRemainingRefundMoney(refundRecord)
-                : (refundPreview?.max_refund_amount ??
-                  getRemainingRefundMoney(refundRecord))
-            }
-            step={0.01}
-            precision={2}
-            value={refundAmount}
-            onChange={setRefundAmount}
-            placeholder={t('退款金额')}
-            style={{ width: '100%' }}
-          />
+          {refundMode === 'admin_quota' ? (
+            <InputNumber
+              min={1}
+              max={getRemainingAdminRefundQuota(refundRecord)}
+              step={500000}
+              precision={0}
+              value={refundQuota}
+              onChange={setRefundQuota}
+              placeholder={t('退款额度')}
+              style={{ width: '100%' }}
+            />
+          ) : (
+            <InputNumber
+              prefix='¥'
+              min={0.01}
+              max={
+                refundFull
+                  ? getRemainingRefundMoney(refundRecord)
+                  : (refundPreview?.max_refund_amount ??
+                    getRemainingRefundMoney(refundRecord))
+              }
+              step={0.01}
+              precision={2}
+              value={refundAmount}
+              onChange={setRefundAmount}
+              placeholder={t('退款金额')}
+              style={{ width: '100%' }}
+            />
+          )}
           {userIsAdmin ? (
             <label className='flex items-center gap-2 text-sm'>
               <input
@@ -902,14 +1012,22 @@ const TopupBillingTable = ({
                 onChange={(event) => {
                   const checked = event.target.checked;
                   setRefundFull(checked);
-                  if (checked) {
+                  if (refundMode === 'admin_quota') {
+                    if (checked) {
+                      setRefundQuota(getRemainingAdminRefundQuota(refundRecord));
+                    }
+                  } else if (checked) {
                     setRefundAmount(getRemainingRefundMoney(refundRecord));
                   } else if (refundPreview?.max_refund_amount) {
                     setRefundAmount(refundPreview.max_refund_amount);
                   }
                 }}
               />
-              <span>{t('全额退款')}</span>
+              <span>
+                {refundMode === 'admin_quota'
+                  ? t('全额退回剩余额度')
+                  : t('全额退款')}
+              </span>
             </label>
           ) : null}
           <Input

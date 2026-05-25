@@ -81,8 +81,8 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		return
 	}
 
-	payMoney := getEpaySubscriptionPayMoney(plan.PriceAmount, req.PaymentMethod)
-	if payMoney < 0.01 {
+	payMoney := getEpaySubscriptionPayMoneyBreakdown(plan.PriceAmount, req.PaymentMethod)
+	if payMoney.TotalMoney < 0.01 {
 		common.ApiErrorMsg(c, "套餐金额过低")
 		return
 	}
@@ -90,7 +90,8 @@ func SubscriptionRequestEpay(c *gin.Context) {
 	order := &model.SubscriptionOrder{
 		UserId:          userId,
 		PlanId:          plan.Id,
-		Money:           payMoney,
+		Money:           payMoney.EffectiveMoney,
+		Fee:             payMoney.Fee,
 		TradeNo:         tradeNo,
 		PaymentMethod:   req.PaymentMethod,
 		PaymentProvider: model.PaymentProviderEpay,
@@ -109,7 +110,7 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		Type:           req.PaymentMethod,
 		ServiceTradeNo: tradeNo,
 		Name:           fmt.Sprintf("SUB:%s", plan.Title),
-		Money:          formatPayMoneyToCents(payMoney),
+		Money:          formatPayMoneyToCents(payMoney.TotalMoney),
 		Device:         epay.PC,
 		NotifyUrl:      notifyUrl,
 		ReturnUrl:      returnUrl,
@@ -123,6 +124,10 @@ func SubscriptionRequestEpay(c *gin.Context) {
 }
 
 func getEpaySubscriptionPayMoney(priceAmount float64, paymentMethod string) float64 {
+	return getEpaySubscriptionPayMoneyBreakdown(priceAmount, paymentMethod).TotalMoney
+}
+
+func getEpaySubscriptionPayMoneyBreakdown(priceAmount float64, paymentMethod string) payMoneyBreakdown {
 	unitPrice := operation_setting.Price
 	for _, method := range operation_setting.PayMethods {
 		if method["type"] != paymentMethod {
@@ -133,10 +138,9 @@ func getEpaySubscriptionPayMoney(priceAmount float64, paymentMethod string) floa
 		}
 		break
 	}
-	return decimal.NewFromFloat(priceAmount).
-		Mul(decimal.NewFromFloat(unitPrice)).
-		RoundCeil(2).
-		InexactFloat64()
+	payMoney := decimal.NewFromFloat(priceAmount).
+		Mul(decimal.NewFromFloat(unitPrice))
+	return buildPayMoneyBreakdown(payMoney, getEpayServiceFeePercent(paymentMethod))
 }
 
 func SubscriptionEpayNotify(c *gin.Context) {

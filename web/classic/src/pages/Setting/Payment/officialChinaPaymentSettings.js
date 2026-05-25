@@ -42,6 +42,7 @@ export const officialChinaPaymentOptionKeys = [
   'AlipayOfficialNotifyURL',
   'AlipayOfficialReturnURL',
   'AlipayOfficialUnitPrice',
+  'AlipayOfficialServiceFeePercent',
   'AlipayOfficialMinTopUp',
   'AlipayOfficialOrderTimeoutSec',
   'WechatPayOfficialEnabled',
@@ -54,6 +55,7 @@ export const officialChinaPaymentOptionKeys = [
   'WechatPayOfficialNotifyURL',
   'WechatPayOfficialReturnURL',
   'WechatPayOfficialUnitPrice',
+  'WechatPayOfficialServiceFeePercent',
   'WechatPayOfficialMinTopUp',
   'WechatPayOfficialOrderTimeoutSec',
 ];
@@ -93,6 +95,12 @@ export function buildOfficialChinaPaymentOptions(values, options = {}) {
         key === 'WechatPayOfficialUnitPrice'
       ) {
         value = normalizeOfficialChinaUnitPrice(value);
+      }
+      if (
+        key === 'AlipayOfficialServiceFeePercent' ||
+        key === 'WechatPayOfficialServiceFeePercent'
+      ) {
+        value = String(Number(value || 0));
       }
       if (value === undefined || value === null) value = '';
       return { key, value: String(value) };

@@ -105,6 +105,7 @@ const RechargeCard = ({
   getPaymentUnitPrice,
   statusLoading,
   topupInfo,
+  getPaymentServiceFeePercent,
   getPaymentOrderTimeoutSeconds,
   onOpenHistory,
   enableWaffoTopUp,
@@ -330,8 +331,9 @@ const RechargeCard = ({
                               Number(payMethod.min_topup) || 0;
                             const isStripe = payMethod.type === 'stripe';
                             const isWaffo =
-                              typeof payMethod.type === 'string' &&
-                              payMethod.type.startsWith('waffo:');
+                              payMethod.type === 'waffo' ||
+                              (typeof payMethod.type === 'string' &&
+                                payMethod.type.startsWith('waffo:'));
                             const isWaffoPancake =
                               payMethod.type === 'waffo_pancake';
                             const isAlipayOfficial =
@@ -456,6 +458,8 @@ const RechargeCard = ({
                   <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2'>
                     {presetAmounts.map((preset, index) => {
                       const currencyConfig = getCurrencyConfig();
+                      const selectedPaymentMethod =
+                        payWay || regularPayMethods[0]?.type || '';
                       const {
                         displayValue,
                         paymentSymbol,
@@ -467,14 +471,16 @@ const RechargeCard = ({
                       } = buildRechargeAmountDisplay({
                         preset,
                         priceRatio:
-                          getPaymentUnitPrice?.(
-                            payWay || regularPayMethods[0]?.type || '',
-                          ) ?? priceRatio,
+                          getPaymentUnitPrice?.(selectedPaymentMethod) ??
+                          priceRatio,
                         discountConfig: topupInfo?.discount,
                         currencyConfig,
                         usdExchangeRate: getUsdExchangeRate(),
-                        selectedPaymentMethod:
-                          payWay || regularPayMethods[0]?.type || '',
+                        selectedPaymentMethod,
+                        serviceFeePercent:
+                          getPaymentServiceFeePercent?.(
+                            selectedPaymentMethod,
+                          ) || 0,
                       });
                       const { symbol } = currencyConfig;
 
@@ -696,6 +702,7 @@ const RechargeCard = ({
                     enableAlipayOfficialTopUp={enableAlipayOfficialTopUp}
                     enableWechatPayOfficialTopUp={enableWechatPayOfficialTopUp}
                     priceRatio={priceRatio}
+                    getPaymentServiceFeePercent={getPaymentServiceFeePercent}
                     billingPreference={billingPreference}
                     onChangeBillingPreference={onChangeBillingPreference}
                     activeSubscriptions={activeSubscriptions}

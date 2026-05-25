@@ -44,10 +44,12 @@ const retainedOptions = buildOfficialChinaPaymentOptions(
     AlipayOfficialPrivateKey: '',
     AlipayOfficialAlipayPublicKey: '',
     AlipayOfficialUnitPrice: 7.231,
+    AlipayOfficialServiceFeePercent: 0.6,
     AlipayOfficialMinTopUp: 1,
     AlipayOfficialOrderTimeoutSec: 900,
     WechatPayOfficialEnabled: false,
     WechatPayOfficialUnitPrice: '8',
+    WechatPayOfficialServiceFeePercent: '',
     WechatPayOfficialMinTopUp: 1,
     WechatPayOfficialOrderTimeoutSec: 600,
   },
@@ -81,6 +83,18 @@ assert.equal(
   retainedOptions.find((option) => option.key === 'WechatPayOfficialUnitPrice')
     ?.value,
   '8.000',
+);
+assert.equal(
+  retainedOptions.find(
+    (option) => option.key === 'AlipayOfficialServiceFeePercent',
+  )?.value,
+  '0.6',
+);
+assert.equal(
+  retainedOptions.find(
+    (option) => option.key === 'WechatPayOfficialServiceFeePercent',
+  )?.value,
+  '0',
 );
 assert.equal(
   retainedOptions.find(

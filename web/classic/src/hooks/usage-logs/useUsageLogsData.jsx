@@ -380,12 +380,39 @@ export const useLogsData = () => {
       }
       return `${chain.join(' -> ')}`;
     };
+    const adminQuotaOperationType = (log, other) => {
+      const explicitType = other?.admin_info?.operation_type;
+      if (explicitType === 'recharge' || explicitType === 'gift') {
+        return explicitType;
+      }
+      const content = String(log?.content || '');
+      if (
+        content.startsWith('管理员充值用户额度') ||
+        content.startsWith('管理员增加用户额度')
+      ) {
+        return 'recharge';
+      }
+      if (content.startsWith('管理员赠送用户额度')) {
+        return 'gift';
+      }
+      return '';
+    };
+    const adminQuotaOperationLabel = (operationType) => {
+      if (operationType === 'recharge') {
+        return t('充值');
+      }
+      if (operationType === 'gift') {
+        return t('赠送');
+      }
+      return operationType;
+    };
 
     let expandDatesLocal = {};
     for (let i = 0; i < logs.length; i++) {
       logs[i].timestamp2string = timestamp2string(logs[i].created_at);
       logs[i].key = logs[i].id;
       let other = getLogOther(logs[i].other);
+      const quotaOperationType = adminQuotaOperationType(logs[i], other);
       let expandDataLocal = [];
 
       if (canReadAllLogs && (logs[i].type === 0 || logs[i].type === 2)) {
@@ -694,13 +721,17 @@ export const useLogsData = () => {
           ),
         });
       }
-      if (canReadAllLogs && logs[i].type !== 6 && logs[i].type !== 1) {
+      const shouldShowGenericAuditDetails =
+        canReadAllLogs &&
+        logs[i].type !== 6 &&
+        (logs[i].type !== 1 || quotaOperationType !== '');
+      if (shouldShowGenericAuditDetails) {
         expandDataLocal.push({
           key: t('请求转换'),
           value: requestConversionDisplayValue(other?.request_conversion),
         });
       }
-      if (canReadAllLogs && logs[i].type !== 6 && logs[i].type !== 1) {
+      if (shouldShowGenericAuditDetails) {
         let localCountMode = '';
         if (other?.admin_info?.local_count_tokens) {
           localCountMode = t('本地计费');
@@ -711,6 +742,40 @@ export const useLogsData = () => {
           key: t('计费模式'),
           value: localCountMode,
         });
+      }
+      if (
+        canReadAllLogs &&
+        (logs[i].type === 3 || quotaOperationType !== '')
+      ) {
+        const adminInfo = other?.admin_info;
+        const hasUsername =
+          adminInfo?.admin_username !== undefined &&
+          adminInfo?.admin_username !== null &&
+          adminInfo?.admin_username !== '';
+        const hasId =
+          adminInfo?.admin_id !== undefined &&
+          adminInfo?.admin_id !== null &&
+          adminInfo?.admin_id !== '';
+        if (hasUsername || hasId) {
+          let operatorValue = '';
+          if (hasUsername && hasId) {
+            operatorValue = `${adminInfo.admin_username} (ID: ${adminInfo.admin_id})`;
+          } else if (hasUsername) {
+            operatorValue = String(adminInfo.admin_username);
+          } else {
+            operatorValue = `ID: ${adminInfo.admin_id}`;
+          }
+          expandDataLocal.push({
+            key: t('操作管理员'),
+            value: operatorValue,
+          });
+        }
+        if (quotaOperationType !== '') {
+          expandDataLocal.push({
+            key: t('操作类型'),
+            value: adminQuotaOperationLabel(quotaOperationType),
+          });
+        }
       }
       if (canReadAllLogs && logs[i].type === 1) {
         const adminInfo = other?.admin_info;
@@ -761,31 +826,6 @@ export const useLogsData = () => {
                 )}
               </span>
             ),
-          });
-        }
-      }
-      if (canReadAllLogs && logs[i].type === 3 && other?.admin_info) {
-        const adminInfo = other.admin_info;
-        const hasUsername =
-          adminInfo.admin_username !== undefined &&
-          adminInfo.admin_username !== null &&
-          adminInfo.admin_username !== '';
-        const hasId =
-          adminInfo.admin_id !== undefined &&
-          adminInfo.admin_id !== null &&
-          adminInfo.admin_id !== '';
-        if (hasUsername || hasId) {
-          let operatorValue = '';
-          if (hasUsername && hasId) {
-            operatorValue = `${adminInfo.admin_username} (ID: ${adminInfo.admin_id})`;
-          } else if (hasUsername) {
-            operatorValue = String(adminInfo.admin_username);
-          } else {
-            operatorValue = `ID: ${adminInfo.admin_id}`;
-          }
-          expandDataLocal.push({
-            key: t('操作管理员'),
-            value: operatorValue,
           });
         }
       }

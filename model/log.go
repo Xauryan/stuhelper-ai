@@ -123,8 +123,12 @@ func RecordTopupLog(userId int, content string, callerIp string, paymentMethod s
 	recordPaymentAuditLog(userId, LogTypeTopup, content, callerIp, paymentMethod, callbackPaymentMethod)
 }
 
-func RecordOfficialPaymentRefundLog(userId int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {
+func RecordTopupRefundLog(userId int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {
 	recordPaymentAuditLog(userId, LogTypeRefund, content, callerIp, paymentMethod, callbackPaymentMethod)
+}
+
+func RecordOfficialPaymentRefundLog(userId int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {
+	RecordTopupRefundLog(userId, content, callerIp, paymentMethod, callbackPaymentMethod)
 }
 
 func recordPaymentAuditLog(userId int, logType int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {

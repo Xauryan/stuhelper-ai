@@ -70,8 +70,8 @@ func SubscriptionRequestAlipayOfficialPay(c *gin.Context) {
 
 	scene := normalizeOfficialPaymentScene(req.Scene)
 	tradeNo := buildOfficialTradeNo("ALIPAYSUB", userId)
-	payMoney := getAlipayOfficialSubscriptionPayMoney(plan.PriceAmount)
-	if payMoney < 0.01 {
+	payMoney := getAlipayOfficialSubscriptionPayMoneyBreakdown(plan.PriceAmount)
+	if payMoney.TotalMoney < 0.01 {
 		common.ApiErrorMsg(c, "套餐金额过低")
 		return
 	}
@@ -79,7 +79,8 @@ func SubscriptionRequestAlipayOfficialPay(c *gin.Context) {
 	order := &model.SubscriptionOrder{
 		UserId:          userId,
 		PlanId:          plan.Id,
-		Money:           payMoney,
+		Money:           payMoney.EffectiveMoney,
+		Fee:             payMoney.Fee,
 		TradeNo:         tradeNo,
 		PaymentMethod:   model.PaymentMethodAlipayOfficial,
 		PaymentProvider: model.PaymentProviderAlipayOfficial,
@@ -123,7 +124,7 @@ func SubscriptionRequestAlipayOfficialPay(c *gin.Context) {
 		ReturnURL:        returnURL,
 		QuitURL:          paymentReturnPath("/console/topup"),
 		OutTradeNo:       tradeNo,
-		TotalAmount:      formatOfficialPayMoney(payMoney),
+		TotalAmount:      formatOfficialPayMoney(payMoney.TotalMoney),
 		Subject:          fmt.Sprintf("StuHelper AI 订阅 %s", plan.Title),
 		TimeoutExpress:   formatAlipayOfficialTimeoutExpress(setting.AlipayOfficialOrderTimeoutSec),
 	})
@@ -134,7 +135,7 @@ func SubscriptionRequestAlipayOfficialPay(c *gin.Context) {
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方订阅支付 订单创建成功 user_id=%d plan_id=%d trade_no=%s money=%.2f scene=%s", userId, plan.Id, tradeNo, payMoney, scene))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("支付宝官方订阅支付 订单创建成功 user_id=%d plan_id=%d trade_no=%s money=%.2f fee=%.2f total_money=%.2f scene=%s", userId, plan.Id, tradeNo, payMoney.EffectiveMoney, payMoney.Fee, payMoney.TotalMoney, scene))
 	c.JSON(http.StatusOK, gin.H{
 		"message": "success",
 		"data": gin.H{
@@ -147,10 +148,13 @@ func SubscriptionRequestAlipayOfficialPay(c *gin.Context) {
 }
 
 func getAlipayOfficialSubscriptionPayMoney(priceAmount float64) float64 {
-	return decimal.NewFromFloat(priceAmount).
-		Mul(decimal.NewFromFloat(setting.AlipayOfficialUnitPrice)).
-		RoundCeil(2).
-		InexactFloat64()
+	return getAlipayOfficialSubscriptionPayMoneyBreakdown(priceAmount).TotalMoney
+}
+
+func getAlipayOfficialSubscriptionPayMoneyBreakdown(priceAmount float64) payMoneyBreakdown {
+	payMoney := decimal.NewFromFloat(priceAmount).
+		Mul(decimal.NewFromFloat(setting.AlipayOfficialUnitPrice))
+	return buildPayMoneyBreakdown(payMoney, setting.AlipayOfficialServiceFeePercent)
 }
 
 func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
@@ -198,8 +202,8 @@ func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
 		return
 	}
 	tradeNo := buildWechatPayOfficialTradeNo("WXSUB", userId)
-	payMoney := getWechatPayOfficialSubscriptionPayMoney(plan.PriceAmount)
-	if payMoney < 0.01 {
+	payMoney := getWechatPayOfficialSubscriptionPayMoneyBreakdown(plan.PriceAmount)
+	if payMoney.TotalMoney < 0.01 {
 		common.ApiErrorMsg(c, "套餐金额过低")
 		return
 	}
@@ -207,7 +211,8 @@ func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
 	order := &model.SubscriptionOrder{
 		UserId:          userId,
 		PlanId:          plan.Id,
-		Money:           payMoney,
+		Money:           payMoney.EffectiveMoney,
+		Fee:             payMoney.Fee,
 		TradeNo:         tradeNo,
 		PaymentMethod:   model.PaymentMethodWechatPayOfficial,
 		PaymentProvider: model.PaymentProviderWechatPayOfficial,
@@ -247,7 +252,7 @@ func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
 		Description: fmt.Sprintf("StuHelper AI 订阅 %s", plan.Title),
 		OutTradeNo:  tradeNo,
 		NotifyURL:   notifyURL,
-		AmountTotal: yuanToFen(payMoney),
+		AmountTotal: yuanToFen(payMoney.TotalMoney),
 		ClientIP:    c.ClientIP(),
 		WapURL:      wapURL,
 		WapName:     "StuHelper AI",
@@ -261,7 +266,7 @@ func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方订阅支付 订单创建成功 user_id=%d plan_id=%d trade_no=%s money=%.2f scene=%s", userId, plan.Id, tradeNo, payMoney, prepay.Scene))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("微信支付官方订阅支付 订单创建成功 user_id=%d plan_id=%d trade_no=%s money=%.2f fee=%.2f total_money=%.2f scene=%s", userId, plan.Id, tradeNo, payMoney.EffectiveMoney, payMoney.Fee, payMoney.TotalMoney, prepay.Scene))
 	data := gin.H{
 		"order_id":              tradeNo,
 		"scene":                 prepay.Scene,
@@ -281,8 +286,11 @@ func SubscriptionRequestWechatPayOfficialPay(c *gin.Context) {
 }
 
 func getWechatPayOfficialSubscriptionPayMoney(priceAmount float64) float64 {
-	return decimal.NewFromFloat(priceAmount).
-		Mul(decimal.NewFromFloat(setting.WechatPayOfficialUnitPrice)).
-		RoundCeil(2).
-		InexactFloat64()
+	return getWechatPayOfficialSubscriptionPayMoneyBreakdown(priceAmount).TotalMoney
+}
+
+func getWechatPayOfficialSubscriptionPayMoneyBreakdown(priceAmount float64) payMoneyBreakdown {
+	payMoney := decimal.NewFromFloat(priceAmount).
+		Mul(decimal.NewFromFloat(setting.WechatPayOfficialUnitPrice))
+	return buildPayMoneyBreakdown(payMoney, setting.WechatPayOfficialServiceFeePercent)
 }
