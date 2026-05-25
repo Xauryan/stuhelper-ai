@@ -69,7 +69,7 @@
       "get": {
         "summary": "获取初始化状态",
         "deprecated": false,
-        "description": "🔓 无需鉴权",
+        "description": "🔓 无需鉴权。返回运行时站点元信息字段：system_name、system_subtitle、seo_description、seo_keywords、seo_image、logo 等，用于前端标题、favicon、SEO meta 和分享卡片同步。",
         "tags": [
           "系统"
         ],

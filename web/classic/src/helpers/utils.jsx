@@ -33,6 +33,11 @@ import { TABLE_COMPACT_MODES_KEY } from '../constants';
 import { MOBILE_BREAKPOINT } from '../hooks/common/useIsMobile';
 import { USER_ROLES } from '../constants/roles';
 
+const DEFAULT_SYSTEM_NAME = 'StuHelper AI';
+const DEFAULT_SYSTEM_SUBTITLE = '统一的大模型 API 网关';
+const DEFAULT_SEO_DESCRIPTION =
+  'StuHelper AI 是 Xauryan 部署的统一 AI 模型聚合与分发网关，提供高性价比的集中式模型管理与网关服务。';
+
 const HTMLToastContent = ({ htmlContent }) => {
   return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
 };
@@ -67,14 +72,90 @@ export function isRoot() {
 
 export function getSystemName() {
   let system_name = localStorage.getItem('system_name');
-  if (!system_name) return 'StuHelper AI';
+  if (!system_name) return DEFAULT_SYSTEM_NAME;
   return system_name;
+}
+
+export function getSystemSubtitle() {
+  let systemSubtitle = localStorage.getItem('system_subtitle');
+  if (!systemSubtitle) return DEFAULT_SYSTEM_SUBTITLE;
+  return systemSubtitle;
+}
+
+export function getSEODescription() {
+  let description = localStorage.getItem('seo_description');
+  if (!description) return DEFAULT_SEO_DESCRIPTION;
+  return description;
+}
+
+export function getSEOKeywords() {
+  return localStorage.getItem('seo_keywords') || '';
+}
+
+export function getSEOImage() {
+  return localStorage.getItem('seo_image') || getLogo();
 }
 
 export function getLogo() {
   let logo = localStorage.getItem('logo');
   if (!logo) return '/logo.png';
   return logo;
+}
+
+function getMetaContentValue(value, fallback = '') {
+  if (value === undefined || value === null) return fallback;
+  return String(value);
+}
+
+function upsertMetaContent(attrName, attrValue, content) {
+  if (typeof document === 'undefined') return;
+  let element = document.head.querySelector(`meta[${attrName}="${attrValue}"]`);
+  if (!element) {
+    element = document.createElement('meta');
+    element.setAttribute(attrName, attrValue);
+    document.head.appendChild(element);
+  }
+  element.setAttribute('content', content || '');
+}
+
+function setFavicon(href) {
+  if (typeof document === 'undefined' || !href) return;
+  let linkElement = document.querySelector("link[rel~='icon']");
+  if (!linkElement) {
+    linkElement = document.createElement('link');
+    linkElement.setAttribute('rel', 'icon');
+    document.head.appendChild(linkElement);
+  }
+  linkElement.href = href;
+}
+
+export function applySiteMeta(data = {}) {
+  if (typeof document === 'undefined') return;
+
+  const systemName =
+    getMetaContentValue(data.system_name, getSystemName()).trim() ||
+    DEFAULT_SYSTEM_NAME;
+  const description = getMetaContentValue(
+    data.seo_description,
+    getSEODescription(),
+  );
+  const keywords = getMetaContentValue(data.seo_keywords, getSEOKeywords());
+  const logo = getMetaContentValue(data.logo, getLogo()) || '/logo.png';
+  const image = getMetaContentValue(data.seo_image, getSEOImage()) || logo;
+
+  document.title = systemName;
+  setFavicon(logo);
+  upsertMetaContent('name', 'application-name', systemName);
+  upsertMetaContent('name', 'apple-mobile-web-app-title', systemName);
+  upsertMetaContent('name', 'description', description);
+  upsertMetaContent('name', 'keywords', keywords);
+  upsertMetaContent('property', 'og:site_name', systemName);
+  upsertMetaContent('property', 'og:title', systemName);
+  upsertMetaContent('property', 'og:description', description);
+  upsertMetaContent('property', 'og:image', image);
+  upsertMetaContent('name', 'twitter:title', systemName);
+  upsertMetaContent('name', 'twitter:description', description);
+  upsertMetaContent('name', 'twitter:image', image);
 }
 
 export function getUserIdFromLocalStorage() {

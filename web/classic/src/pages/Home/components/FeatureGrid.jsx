@@ -20,7 +20,7 @@ For commercial licensing, please contact support@xauryan.com
 import React, { useCallback, useRef } from 'react';
 import SectionHeader from './SectionHeader';
 
-const FeatureGrid = ({ t }) => {
+const FeatureGrid = ({ t, systemName }) => {
   const features = [
     {
       num: '01',
@@ -71,7 +71,7 @@ const FeatureGrid = ({ t }) => {
   return (
     <section className='sh-section sh-reveal'>
       <SectionHeader
-        eyebrow={t('为什么选 StuHelper AI')}
+        eyebrow={t('为什么选 {{name}}', { name: systemName })}
         title={t('更顺手的 API 中转站，专注稳定与性价比')}
         description={t(
           '我们把模型聚合、网络打通、计费透明这些重活揽下来，让你只关心提示词。',

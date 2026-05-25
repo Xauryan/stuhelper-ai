@@ -72,6 +72,8 @@ const Hero = ({
   isDemoSiteMode,
   docsLink,
   version,
+  systemName,
+  systemSubtitle,
 }) => {
   return (
     <section className='sh-hero sh-reveal'>
@@ -81,9 +83,11 @@ const Hero = ({
       </span>
 
       <h1 className='sh-brand-title'>
-        <span className='sh-brand-text'>StuHelper AI</span>
+        <span className='sh-brand-text'>{systemName}</span>
       </h1>
-      <p className='sh-brand-tagline'>{t('统一的大模型 API 网关')}</p>
+      {systemSubtitle ? (
+        <p className='sh-brand-tagline'>{systemSubtitle}</p>
+      ) : null}
 
       <p className='sh-hero-subtitle'>
         {t(

@@ -47,9 +47,11 @@ const usePrefersReducedMotion = () => {
   return reduced;
 };
 
-const TerminalDemo = ({ t, serverAddress, onCopyBaseURL }) => {
+const TerminalDemo = ({ t, serverAddress, onCopyBaseURL, systemName }) => {
   const curl = useMemo(() => buildCurl(serverAddress), [serverAddress]);
-  const comment = t('// 一行命令，把 StuHelper AI 接到你熟悉的工具');
+  const comment = t('// 一行命令，把 {{name}} 接到你熟悉的工具', {
+    name: systemName,
+  });
   const fullScript = `${comment}\n${curl}`;
   const [ref, inView] = useInViewOnce({ threshold: 0.25 });
   const [typed, setTyped] = useState('');

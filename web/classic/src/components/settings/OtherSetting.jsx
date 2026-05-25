@@ -29,7 +29,13 @@ import {
   Card,
   Checkbox,
 } from '@douyinfe/semi-ui';
-import { API, showError, showSuccess, timestamp2string } from '../../helpers';
+import {
+  API,
+  applySiteMeta,
+  showError,
+  showSuccess,
+  timestamp2string,
+} from '../../helpers';
 import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
 import { StatusContext } from '../../context/Status';
@@ -60,6 +66,10 @@ const OtherSetting = () => {
     [LEGAL_USER_AGREEMENT_KEY]: '',
     [LEGAL_PRIVACY_POLICY_KEY]: '',
     SystemName: '',
+    SystemSubtitle: '',
+    SEODescription: '',
+    SEOKeywords: '',
+    SEOImage: '',
     Logo: '',
     Footer: '',
     FooterTemplateCopyrightYear: '',
@@ -125,6 +135,8 @@ const OtherSetting = () => {
     [LEGAL_USER_AGREEMENT_KEY]: false,
     [LEGAL_PRIVACY_POLICY_KEY]: false,
     SystemName: false,
+    SystemSubtitle: false,
+    SEOSettings: false,
     Logo: false,
     HomePageContent: false,
     About: false,
@@ -209,6 +221,33 @@ const OtherSetting = () => {
     statusDispatch({ type: 'set', payload });
   };
 
+  const refreshSiteMetaStatus = (overrides = {}) => {
+    const currentStatus = statusState?.status || {};
+    const getStatusValue = (optionKey, statusKey) => {
+      if (Object.prototype.hasOwnProperty.call(overrides, optionKey)) {
+        return overrides[optionKey] || '';
+      }
+      return currentStatus[statusKey] ?? inputs[optionKey] ?? '';
+    };
+    const payload = {
+      ...currentStatus,
+      system_name: getStatusValue('SystemName', 'system_name'),
+      system_subtitle: getStatusValue('SystemSubtitle', 'system_subtitle'),
+      seo_description: getStatusValue('SEODescription', 'seo_description'),
+      seo_keywords: getStatusValue('SEOKeywords', 'seo_keywords'),
+      seo_image: getStatusValue('SEOImage', 'seo_image'),
+      logo: getStatusValue('Logo', 'logo'),
+    };
+    localStorage.setItem('system_name', payload.system_name || '');
+    localStorage.setItem('system_subtitle', payload.system_subtitle || '');
+    localStorage.setItem('seo_description', payload.seo_description || '');
+    localStorage.setItem('seo_keywords', payload.seo_keywords || '');
+    localStorage.setItem('seo_image', payload.seo_image || '');
+    localStorage.setItem('logo', payload.logo || '');
+    applySiteMeta(payload);
+    statusDispatch({ type: 'set', payload });
+  };
+
   // 通用设置
   const formAPISettingGeneral = useRef();
   // 通用设置 - UserAgreement
@@ -264,8 +303,11 @@ const OtherSetting = () => {
         ...loadingInput,
         SystemName: true,
       }));
-      await updateOption('SystemName', inputs.SystemName);
-      showSuccess(t('系统名称已更新'));
+      const ok = await updateOption('SystemName', inputs.SystemName);
+      if (ok) {
+        refreshSiteMetaStatus({ SystemName: inputs.SystemName });
+        showSuccess(t('系统名称已更新'));
+      }
     } catch (error) {
       console.error(t('系统名称更新失败'), error);
       showError(t('系统名称更新失败'));
@@ -277,17 +319,71 @@ const OtherSetting = () => {
     }
   };
 
+  const submitSystemSubtitle = async () => {
+    try {
+      setLoadingInput((loadingInput) => ({
+        ...loadingInput,
+        SystemSubtitle: true,
+      }));
+      const ok = await updateOption('SystemSubtitle', inputs.SystemSubtitle);
+      if (ok) {
+        refreshSiteMetaStatus({ SystemSubtitle: inputs.SystemSubtitle });
+        showSuccess(t('站点副标题已更新'));
+      }
+    } catch (error) {
+      console.error(t('站点副标题更新失败'), error);
+      showError(t('站点副标题更新失败'));
+    } finally {
+      setLoadingInput((loadingInput) => ({
+        ...loadingInput,
+        SystemSubtitle: false,
+      }));
+    }
+  };
+
   // 个性化设置 - Logo
   const submitLogo = async () => {
     try {
       setLoadingInput((loadingInput) => ({ ...loadingInput, Logo: true }));
-      await updateOption('Logo', inputs.Logo);
-      showSuccess('Logo 已更新');
+      const ok = await updateOption('Logo', inputs.Logo);
+      if (ok) {
+        refreshSiteMetaStatus({ Logo: inputs.Logo });
+        showSuccess(t('Logo 已更新'));
+      }
     } catch (error) {
-      console.error('Logo 更新失败', error);
-      showError('Logo 更新失败');
+      console.error(t('Logo 更新失败'), error);
+      showError(t('Logo 更新失败'));
     } finally {
       setLoadingInput((loadingInput) => ({ ...loadingInput, Logo: false }));
+    }
+  };
+
+  const submitSEOSettings = async () => {
+    const options = [
+      { key: 'SEODescription', value: inputs.SEODescription || '' },
+      { key: 'SEOKeywords', value: inputs.SEOKeywords || '' },
+      { key: 'SEOImage', value: inputs.SEOImage || '' },
+    ];
+    try {
+      setLoadingInput((loadingInput) => ({
+        ...loadingInput,
+        SEOSettings: true,
+      }));
+      const ok = await updateOptions(options);
+      if (ok) {
+        refreshSiteMetaStatus(
+          Object.fromEntries(options.map(({ key, value }) => [key, value])),
+        );
+        showSuccess(t('SEO 信息已更新'));
+      }
+    } catch (error) {
+      console.error(t('SEO 信息更新失败'), error);
+      showError(t('SEO 信息更新失败'));
+    } finally {
+      setLoadingInput((loadingInput) => ({
+        ...loadingInput,
+        SEOSettings: false,
+      }));
     }
   };
   // 个性化设置 - 首页内容
@@ -563,6 +659,18 @@ const OtherSetting = () => {
                 {t('设置系统名称')}
               </Button>
               <Form.Input
+                label={t('站点副标题')}
+                placeholder={t('在此输入站点副标题')}
+                field={'SystemSubtitle'}
+                onChange={handleInputChange}
+              />
+              <Button
+                onClick={submitSystemSubtitle}
+                loading={loadingInput['SystemSubtitle']}
+              >
+                {t('设置站点副标题')}
+              </Button>
+              <Form.Input
                 label={t('Logo 图片地址')}
                 placeholder={t('在此输入 Logo 图片地址')}
                 field={'Logo'}
@@ -570,6 +678,31 @@ const OtherSetting = () => {
               />
               <Button onClick={submitLogo} loading={loadingInput['Logo']}>
                 {t('设置 Logo')}
+              </Button>
+              <Form.TextArea
+                label={t('SEO 描述')}
+                placeholder={t('在此输入 SEO 描述，用于搜索引擎摘要和分享卡片')}
+                field={'SEODescription'}
+                onChange={handleInputChange}
+                autosize={{ minRows: 3, maxRows: 6 }}
+              />
+              <Form.Input
+                label={t('SEO 关键词')}
+                placeholder={t('多个关键词用英文逗号分隔')}
+                field={'SEOKeywords'}
+                onChange={handleInputChange}
+              />
+              <Form.Input
+                label={t('SEO 分享图片地址')}
+                placeholder={t('留空则使用 Logo 图片地址')}
+                field={'SEOImage'}
+                onChange={handleInputChange}
+              />
+              <Button
+                onClick={submitSEOSettings}
+                loading={loadingInput['SEOSettings']}
+              >
+                {t('设置 SEO 信息')}
               </Button>
               <Form.TextArea
                 label={t('首页内容')}

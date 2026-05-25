@@ -23,7 +23,14 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, BookOpen, Github } from 'lucide-react';
 import openExternal from '../lib/openExternal';
 
-const CTA = ({ t, isMobile, docsLink, isDemoSiteMode, version }) => {
+const CTA = ({
+  t,
+  isMobile,
+  docsLink,
+  isDemoSiteMode,
+  version,
+  systemName,
+}) => {
   return (
     <section className='sh-section sh-reveal'>
       <div className='sh-cta sh-beam-card'>
@@ -31,7 +38,9 @@ const CTA = ({ t, isMobile, docsLink, isDemoSiteMode, version }) => {
           {t('准备好把 AI 接入你的工作流了吗？')}
           <br />
           <span className='sh-cta-title-accent'>
-            {t('一分钟，把 StuHelper AI 接进你的工具链。')}
+            {t('一分钟，把 {{name}} 接进你的工具链。', {
+              name: systemName,
+            })}
           </span>
         </h3>
         <p className='sh-cta-desc'>

@@ -14,6 +14,10 @@ import (
 var StartTime = time.Now().Unix() // unit: second
 var Version = "v0.0.0"            // this hard coding will be replaced automatically when building, no need to manually change
 var SystemName = "StuHelper AI"
+var SystemSubtitle = "统一的大模型 API 网关"
+var SEODescription = "StuHelper AI 是 Xauryan 部署的统一 AI 模型聚合与分发网关，提供高性价比的集中式模型管理与网关服务。"
+var SEOKeywords = ""
+var SEOImage = ""
 var Footer = ""
 var Logo = ""
 var TopUpLink = ""

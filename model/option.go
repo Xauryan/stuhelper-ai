@@ -78,6 +78,10 @@ func InitOptionMap() {
 	common.OptionMap["FooterTemplateTelecomLicenseUrl"] = ""
 	common.OptionMap["FooterTemplateTelecomLicenseTypes"] = ""
 	common.OptionMap["SystemName"] = common.SystemName
+	common.OptionMap["SystemSubtitle"] = common.SystemSubtitle
+	common.OptionMap["SEODescription"] = common.SEODescription
+	common.OptionMap["SEOKeywords"] = common.SEOKeywords
+	common.OptionMap["SEOImage"] = common.SEOImage
 	common.OptionMap["Logo"] = common.Logo
 	common.OptionMap["ServerAddress"] = ""
 	common.OptionMap["WorkerUrl"] = system_setting.WorkerUrl
@@ -594,6 +598,14 @@ func updateOptionMap(key string, value string) (err error) {
 		common.Footer = value
 	case "SystemName":
 		common.SystemName = value
+	case "SystemSubtitle":
+		common.SystemSubtitle = value
+	case "SEODescription":
+		common.SEODescription = value
+	case "SEOKeywords":
+		common.SEOKeywords = value
+	case "SEOImage":
+		common.SEOImage = value
 	case "Logo":
 		common.Logo = value
 	case "WeChatServerAddress":

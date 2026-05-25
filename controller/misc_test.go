@@ -85,3 +85,46 @@ func TestGetStatusIncludesFooterTemplateSettings(t *testing.T) {
 	require.Equal(t, "https://tsm.miit.gov.cn/", response.Data["footer_template_telecom_license_url"])
 	require.Equal(t, "ICP,EDI", response.Data["footer_template_telecom_license_types"])
 }
+
+func TestGetStatusIncludesSiteMetaSettings(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalSystemName := common.SystemName
+	originalSystemSubtitle := common.SystemSubtitle
+	originalSEODescription := common.SEODescription
+	originalSEOKeywords := common.SEOKeywords
+	originalSEOImage := common.SEOImage
+	t.Cleanup(func() {
+		common.SystemName = originalSystemName
+		common.SystemSubtitle = originalSystemSubtitle
+		common.SEODescription = originalSEODescription
+		common.SEOKeywords = originalSEOKeywords
+		common.SEOImage = originalSEOImage
+	})
+
+	common.SystemName = "测试站点"
+	common.SystemSubtitle = "测试副标题"
+	common.SEODescription = "测试 SEO 描述"
+	common.SEOKeywords = "ai,gateway"
+	common.SEOImage = "https://example.com/og.png"
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/status", nil)
+
+	GetStatus(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Success bool                   `json:"success"`
+		Data    map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	require.Equal(t, "测试站点", response.Data["system_name"])
+	require.Equal(t, "测试副标题", response.Data["system_subtitle"])
+	require.Equal(t, "测试 SEO 描述", response.Data["seo_description"])
+	require.Equal(t, "ai,gateway", response.Data["seo_keywords"])
+	require.Equal(t, "https://example.com/og.png", response.Data["seo_image"])
+}

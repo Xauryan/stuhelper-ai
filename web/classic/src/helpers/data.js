@@ -17,11 +17,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@xauryan.com
 */
 
+import { applySiteMeta } from './utils';
+
 export function setStatusData(data) {
   localStorage.setItem('status', JSON.stringify(data));
-  localStorage.setItem('system_name', data.system_name);
-  localStorage.setItem('logo', data.logo);
-  localStorage.setItem('footer_html', data.footer_html);
+  localStorage.setItem('system_name', data.system_name || '');
+  localStorage.setItem('system_subtitle', data.system_subtitle || '');
+  localStorage.setItem('seo_description', data.seo_description || '');
+  localStorage.setItem('seo_keywords', data.seo_keywords || '');
+  localStorage.setItem('seo_image', data.seo_image || '');
+  localStorage.setItem('logo', data.logo || '');
+  localStorage.setItem('footer_html', data.footer_html || '');
   localStorage.setItem(
     'footer_template_copyright_year',
     data.footer_template_copyright_year || '',
@@ -82,6 +88,7 @@ export function setStatusData(data) {
   } else {
     localStorage.removeItem('docs_link');
   }
+  applySiteMeta(data);
 }
 
 export function setUserData(data) {
