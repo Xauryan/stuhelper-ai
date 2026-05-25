@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/Xauryan/stuhelper-ai/common"
@@ -103,6 +104,40 @@ func TestMigrateLegacyAdminTopUpsToRechargeNormalizesPaymentFields(t *testing.T)
 	require.NoError(t, DB.Where("trade_no = ?", "LEGACY_ADMIN_MIGRATE").First(&request).Error)
 	assert.Equal(t, PaymentMethodAdminAdd, request.PaymentMethod)
 	assert.Equal(t, PaymentProviderAdmin, request.PaymentProvider)
+}
+
+func TestMigrateLegacyAdminAddLogsToTopUpsBackfillsBills(t *testing.T) {
+	truncateTables(t)
+
+	insertRankingUser(t, 4206, "legacy-admin-log-user")
+	legacyLog := &Log{
+		UserId:    4206,
+		Username:  "legacy-admin-log-user",
+		CreatedAt: 1900,
+		Type:      LogTypeManage,
+		Content:   "管理员增加用户额度",
+		Quota:     1600,
+	}
+	require.NoError(t, LOG_DB.Create(legacyLog).Error)
+
+	require.NoError(t, migrateAdminAddedQuotaLogsToRecharge(LOG_DB))
+	require.NoError(t, migrateLegacyAdminAddLogsToTopUps(LOG_DB, DB))
+	require.NoError(t, migrateLegacyAdminAddLogsToTopUps(LOG_DB, DB))
+
+	rows, total, err := GetAllTopUpsWithOptions(TopUpQueryOptions{PaymentMethod: PaymentMethodAdminAdd}, &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, rows, 1)
+	assert.Equal(t, fmt.Sprintf("ADMIN_LEGACY_LOG_%d", legacyLog.Id), rows[0].TradeNo)
+	assert.Equal(t, int64(1600), rows[0].Amount)
+	assert.Equal(t, PaymentMethodAdminAdd, rows[0].PaymentMethod)
+	assert.Equal(t, PaymentProviderAdmin, rows[0].PaymentProvider)
+	assert.Equal(t, int64(1900), rows[0].CreateTime)
+
+	var log Log
+	require.NoError(t, LOG_DB.First(&log, legacyLog.Id).Error)
+	assert.Equal(t, LogTypeTopup, log.Type)
+	assert.Equal(t, "管理员充值用户额度", log.Content)
 }
 
 func TestRefundAdminBalanceTopUpRecordsRefundAndDeductsQuota(t *testing.T) {

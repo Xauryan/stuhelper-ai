@@ -298,6 +298,9 @@ func migrateDB() error {
 	if err := migrateLegacyAdminTopUpsToRecharge(DB); err != nil {
 		return err
 	}
+	if err := migrateLegacyAdminAddLogsToTopUps(DB, DB); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -380,6 +383,9 @@ func migrateDBFast() error {
 	if err := migrateLegacyAdminTopUpsToRecharge(DB); err != nil {
 		return err
 	}
+	if err := migrateLegacyAdminAddLogsToTopUps(DB, DB); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -399,6 +405,9 @@ func migrateLOGDB() error {
 		return err
 	}
 	if err = migrateAdminAddedQuotaLogsToRecharge(LOG_DB); err != nil {
+		return err
+	}
+	if err = migrateLegacyAdminAddLogsToTopUps(LOG_DB, DB); err != nil {
 		return err
 	}
 	return nil
@@ -447,6 +456,82 @@ func migrateLegacyAdminTopUpsToRecharge(db *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+func migrateLegacyAdminAddLogsToTopUps(logDB *gorm.DB, appDB *gorm.DB) error {
+	if logDB == nil || appDB == nil ||
+		!logDB.Migrator().HasTable(&Log{}) ||
+		!appDB.Migrator().HasTable(&TopUp{}) {
+		return nil
+	}
+
+	var logs []Log
+	if err := logDB.
+		Where("type = ? AND (content LIKE ? OR content LIKE ?)", LogTypeManage, "管理员充值用户额度%", "管理员增加用户额度%").
+		Order("id asc").
+		Find(&logs).Error; err != nil {
+		return err
+	}
+
+	for _, log := range logs {
+		if log.Id <= 0 || log.UserId <= 0 {
+			continue
+		}
+		quota := log.Quota
+		if quota <= 0 {
+			quota = int(parseAdminRechargeQuotaFromContent(log.Content))
+		}
+		if quota <= 0 {
+			continue
+		}
+
+		tradeNo := legacyAdminTopUpTradeNo(log)
+		var count int64
+		if err := appDB.Model(&TopUp{}).Where("trade_no = ?", tradeNo).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			createdAt := log.CreatedAt
+			if createdAt <= 0 {
+				createdAt = common.GetTimestamp()
+			}
+			if err := appDB.Create(&TopUp{
+				UserId:          log.UserId,
+				Amount:          int64(quota),
+				Money:           0,
+				TradeNo:         tradeNo,
+				PaymentMethod:   PaymentMethodAdminAdd,
+				PaymentProvider: PaymentProviderAdmin,
+				CreateTime:      createdAt,
+				CompleteTime:    createdAt,
+				Status:          common.TopUpStatusSuccess,
+			}).Error; err != nil {
+				return err
+			}
+		}
+
+		content := strings.Replace(log.Content, "管理员增加用户额度", "管理员充值用户额度", 1)
+		if err := logDB.Model(&Log{}).Where("id = ?", log.Id).Updates(map[string]interface{}{
+			"type":    LogTypeTopup,
+			"content": content,
+		}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func legacyAdminTopUpTradeNo(log Log) string {
+	if other, err := common.StrToMap(log.Other); err == nil && other != nil {
+		if adminInfo, ok := other["admin_info"].(map[string]interface{}); ok {
+			if tradeNo, ok := adminInfo["trade_no"].(string); ok {
+				if normalized := strings.TrimSpace(tradeNo); normalized != "" {
+					return normalized
+				}
+			}
+		}
+	}
+	return fmt.Sprintf("ADMIN_LEGACY_LOG_%d", log.Id)
 }
 
 func hasInviterRewardMigrationStateColumns() bool {
