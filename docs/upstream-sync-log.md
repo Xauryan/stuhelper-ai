@@ -9,6 +9,7 @@
 - `合入`：本轮已把上游有效改动移植到本地代码。
 - `语义覆盖`：未直接合入该 commit，但其效果已由其他本地移植或历史同步覆盖。
 - `忽略`：明确不移植，通常为 `web/default` only、上游运营策略不适配，或用户要求跳过。
+- `部分合入`：只移植该 commit 中适配本地的后端/共享逻辑，明确跳过 default-only、Waffo、或与本地产品策略冲突的部分。
 - `待决策`：已核对现状，但等待后续决定是否移植。
 - `历史已处理`：此前同步日志已记录处理结果，本轮不重复评估。
 - `本地提交`：本地为覆盖上游同步、保留分叉覆盖层或实现本地需求产生的 commit。
@@ -72,3 +73,21 @@
 | `2d1ca1538` | 2026-05-20 | 忽略 | 2026-05-19 18:46:21 +0800 | fix: respect dashboard content visibility settings (#4975) | default-only，按本轮要求不移植。 |
 | `20d3e7373` | 2026-05-20 | 合入 | 2026-05-20 11:38:09 +0800 | fix: filter perf metrics summary by active groups (#4976) | 移植性能指标 summary 的 active groups 过滤。数据库聚合和内存 hot bucket 均只统计当前分组倍率中存在的分组以及 `auto`，并补充测试迁移 `PerfMetric` 表。 |
 | `e272ad0e1` | 2026-05-20 | 发布提交 | 2026-05-20 23:14:39 +0800 | chore: sync upstream rc7 updates | 本地 rc7 同步落地提交已推送到 `origin/main`。发布 tag 改用无后缀 `v1.0.0-rc.7`；删除 `v1.0.0-rc.7-stuhelper.1`，并将 `v1.0.0-rc.7` 指向本地最新 `main` 后推送到 `origin`。 |
+| `58ba867d` | 2026-05-25 | 忽略 | 2026-05-21 11:09:51 +0800 | fix: improve channel test failure details UX (#4988) | default-only 渠道测试弹窗与 i18n 体验优化，本地 classic 管理端不移植。 |
+| `6f11d198` | 2026-05-25 | 忽略 | 2026-05-21 11:10:22 +0800 | fix: normalize model pricing display drift (#4985) | default-only 模型价格编辑显示精度修复；classic 如后续出现同类显示问题再单独按本地组件实现，不直接移植 default 文件。 |
+| `006e8016` | 2026-05-25 | 合入 | 2026-05-21 11:16:17 +0800 | fix: resolve model owned_by from active channels (#4416) | 手工移植 `/v1/models` 的 `owned_by` 解析。现在根据当前 token/user group、auto 分组上下文、能力优先级、权重与启用渠道类型选择 owner；同时保留本地用户自定义 auto 分组优先级，高于系统默认 auto 分组。新增 controller/model 测试与 model owner 查询测试。 |
+| `ae6a0336` | 2026-05-25 | 合入 | 2026-05-22 10:32:11 +0800 | perf: optimize request metadata extraction and disabled field filtering (#5009) | 手工移植后端性能优化：JSON 分发阶段用 `gjson` 只读取 `model/group` 并复位请求体；OpenAI stream token 统计边读边处理，不再缓存整个 stream item 列表；禁用字段过滤先快速判断是否存在可移除字段，避免无效整包 unmarshal。 |
+| `e13d6734` | 2026-05-25 | 忽略 | 2026-05-22 10:36:50 +0800 | fix: update default frontend hardcoded route links (#5016) | default-only 路由链接修复，本地 classic 不移植。 |
+| `8e5e89bb` | 2026-05-25 | 忽略 | 2026-05-22 10:39:24 +0800 | 修复 切换新版前端Turnstile 开启后注册页未显示验证的问题 (#5011) | default-only 注册页 Turnstile 修复；classic 注册页为本地独立实现，本轮不移植。 |
+| `19f1821f` | 2026-05-25 | 忽略 | 2026-05-22 11:00:58 +0800 | [Feature Request] Waffo Pancake gateway — full integration with subscription support + admin catalog binding flow (#4935) | 用户确认本项目不用 Waffo/Waffo Pancake 支付。该提交新增 Waffo Pancake 充值、订阅、catalog/store/product 绑定、SDK 与 UI，不适配本地支付策略，明确不合入。 |
+| `f2c7647e` | 2026-05-25 | 忽略 | 2026-05-22 11:48:32 +0800 | fix: enforce Waffo subscription compliance and product ID update (#5038) | Waffo Pancake 订阅合规与产品 ID 修复，依赖上一个 Waffo Pancake 集成；本项目不用该支付，明确不合入。 |
+| `b9bc6f0e` | 2026-05-25 | 忽略 | 2026-05-22 16:19:54 +0800 | Revert "fix: correct usage logs filtering (#4883)" | 上游回滚 `554defe4f` 的日志过滤语义。本地保留已移植的 `LIKE ... ESCAPE '!'` 安全过滤，避免 `%`、`_` 被误当通配符；不跟随回滚。 |
+| `fddf54cc` | 2026-05-25 | 合入 | 2026-05-22 19:08:38 +0800 | perf: reduce heap residency for large base64 relay requests | 手工移植大请求内存优化：`UnmarshalBodyReusable` 对磁盘缓存 JSON 走流式 decode；新增出站 `BodyStorage` 包装并传播 `ContentLength`；多个 relay handler 在转换后释放原始 `jsonData`；参数覆写改为 `[]byte` 热路径；Gemini inline media 响应改用 `strings.Builder`，减少 base64 大字符串中间分配。 |
+| `ebbe3155` | 2026-05-25 | 合入 | 2026-05-23 13:24:56 +0800 | 🐛 fix(channel): evict auto-disabled multi-key channels from cache (#4983) | 手工移植多 key 渠道缓存修复。现在按实际 key 状态判断是否全部不可用，找不到 using key 时记录并跳过错误更新，key 恢复启用时可恢复渠道状态，缓存状态变化时同步更新，减少 auto 路由反复选中无可用 key 渠道的问题。 |
+| `0354c38b` | 2026-05-25 | 忽略 | 2026-05-24 16:19:27 +0800 | [BugFix] fix webhook process (#5047) | Waffo Pancake webhook 订单映射修复；本项目不用 Waffo/Waffo Pancake 支付，明确不合入。 |
+| `49bc3a11` | 2026-05-25 | 忽略 | 2026-05-24 16:37:43 +0800 | fix(payment): hide classic Waffo Pancake settings (#5085) | Waffo Pancake checkout 参数校验与 classic 设置入口移除；本项目不用 Waffo/Waffo Pancake 支付，且移除 classic 设置不适合本地后台策略，明确不合入。 |
+| `92a09594` | 2026-05-25 | 忽略 | 2026-05-24 22:09:05 +0800 | ✨ refactor(web/default): adopt drill-in sidebar pattern for System Settings | default-only 系统设置导航重构，本地 classic 不移植。 |
+| `b08febaa` | 2026-05-25 | 忽略 | 2026-05-25 00:34:26 +0800 | ✨ refactor: system settings UI for consistent, compact layouts | default-only 系统设置 UI 与 default i18n 同步，本地 classic 不移植。 |
+| `88437a18` | 2026-05-25 | 忽略 | 2026-05-25 01:06:42 +0800 | ⬆️ chore(deps): Upgrade default frontend dependencies | default 前端依赖升级，本地 classic 依赖不受影响，不移植。 |
+| `b302be30` | 2026-05-25 | 部分合入 | 2026-05-25 02:42:22 +0800 | 🛠️ fix: v1 interface feedback regressions | 只移植适配本地的后端小修：复制渠道改用 `clone.Insert()`，确保克隆后能力与新 ID 绑定；用户搜索接口新增 `role/status` 服务端过滤。default 前端缓存、表格、认证、Playground、依赖等改动忽略；`password_login_enabled` 别名暂不单独加入，后续与 `b397c58ba` 的注册状态字段一起统一评估。 |
+| `583da452` | 2026-05-25 | 忽略 | 2026-05-25 05:35:44 +0800 | ✨ refactor(ui): Improve usage log filter responsiveness and mobile UX | default-only 使用日志筛选与移动端 UI 优化，本地 classic 使用日志为独立实现，不移植。 |
