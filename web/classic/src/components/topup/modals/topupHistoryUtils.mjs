@@ -25,8 +25,15 @@ export const isOfficialPaymentTopup = (record) =>
   record?.payment_provider === 'wxpay_official' ||
   record?.payment_method === 'wxpay_official';
 
+export const ADMIN_TOPUP_PAYMENT_METHODS = [
+  'admin_add',
+  '管理员增加',
+  '管理员充值',
+];
+
 export const isAdminManagedTopup = (record) =>
-  record?.payment_provider === 'admin' || record?.payment_method === 'admin_add';
+  record?.payment_provider === 'admin' ||
+  ADMIN_TOPUP_PAYMENT_METHODS.includes(record?.payment_method);
 
 export const getRemainingAdminRefundQuota = (record) => {
   const amount = Number(record?.amount || 0);
@@ -90,6 +97,23 @@ export const isAdminManagedTopupRefundable = (record) => {
 };
 
 export const formatCurrency = (value) => Number(value || 0).toFixed(2);
+
+export const TOPUP_PAYMENT_METHOD_LABELS = {
+  stripe: 'Stripe',
+  creem: 'Creem',
+  waffo: 'Waffo',
+  waffo_pancake: 'Waffo Pancake',
+  alipay: '支付宝',
+  wxpay: '微信',
+  alipay_official: '支付宝',
+  wxpay_official: '微信',
+  admin_add: '管理员充值',
+  管理员增加: '管理员充值',
+  管理员充值: '管理员充值',
+};
+
+export const getTopupPaymentMethodLabel = (paymentMethod) =>
+  TOPUP_PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod || '-';
 
 export const BILLING_PAYMENT_METHOD_FILTERS = [
   { value: '', key: '全部' },

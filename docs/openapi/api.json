@@ -1474,7 +1474,7 @@
       "get": {
         "summary": "获取所有充值记录",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）。账单 money 为有效支付金额，fee 为不可退手续费，total_money 汇总 success 账单的有效支付金额。",
+        "description": "👨‍💼 需要管理员权限（Admin）。账单 money 为有效支付金额，fee 为不可退手续费，total_money 汇总 success 账单的有效支付金额。payment_method=admin_add 会同时匹配历史 payment_method=管理员增加/管理员充值 的管理员充值账单。",
         "tags": [
           "用户管理"
         ],
@@ -1632,7 +1632,7 @@
       "post": {
         "summary": "管理员充值退款记账",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）。仅用于 payment_method=admin_add 的管理员充值账单，记录退款并扣回用户额度，不调用第三方支付退款。",
+        "description": "👨‍💼 需要管理员权限（Admin）。仅用于 payment_method=admin_add 的管理员充值账单；历史 payment_method=管理员增加/管理员充值 会按管理员充值兼容处理。该接口记录退款并扣回用户额度，不调用第三方支付退款。",
         "tags": [
           "用户管理"
         ],

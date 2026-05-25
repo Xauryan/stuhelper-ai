@@ -326,7 +326,7 @@ func sortUserRankingRows(rows []UserRankingTotal) {
 }
 
 func topUpCreditedQuota(topUp TopUp) int64 {
-	if topUp.PaymentProvider == PaymentProviderAdmin || topUp.PaymentMethod == PaymentMethodAdminAdd {
+	if IsAdminTopUpRecord(&topUp) {
 		return topUp.Amount
 	}
 	switch topUp.PaymentProvider {

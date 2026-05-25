@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   BILLING_PAYMENT_METHOD_FILTERS,
   canAdminCompleteTopup,
+  getTopupPaymentMethodLabel,
   getRemainingAdminRefundQuota,
   getRemainingRefundMoney,
   isAlipayOfficialRefundable,
@@ -219,6 +220,13 @@ assert.equal(
   }),
   true,
 );
+assert.equal(
+  isAdminManagedTopup({
+    payment_method: '管理员增加',
+  }),
+  true,
+);
+assert.equal(getTopupPaymentMethodLabel('管理员增加'), '管理员充值');
 assert.equal(
   getRemainingAdminRefundQuota({
     amount: 1000,

@@ -54,6 +54,8 @@ const (
 	PaymentMethodAlipayOfficial    = "alipay_official"
 	PaymentMethodWechatPayOfficial = "wxpay_official"
 	PaymentMethodAdminAdd          = "admin_add"
+	PaymentMethodAdminAddLegacy    = "管理员增加"
+	PaymentMethodAdminRecharge     = "管理员充值"
 )
 
 const (
@@ -75,7 +77,32 @@ func IsOfficialPaymentProvider(paymentProvider string) bool {
 func IsAdminTopUpRecord(topUp *TopUp) bool {
 	return topUp != nil &&
 		(topUp.PaymentProvider == PaymentProviderAdmin ||
-			topUp.PaymentMethod == PaymentMethodAdminAdd)
+			IsAdminTopUpPaymentMethod(topUp.PaymentMethod))
+}
+
+func adminTopUpPaymentMethods() []string {
+	return []string{
+		PaymentMethodAdminAdd,
+		PaymentMethodAdminAddLegacy,
+		PaymentMethodAdminRecharge,
+	}
+}
+
+func legacyAdminTopUpPaymentMethods() []string {
+	return []string{
+		PaymentMethodAdminAddLegacy,
+		PaymentMethodAdminRecharge,
+	}
+}
+
+func IsAdminTopUpPaymentMethod(paymentMethod string) bool {
+	paymentMethod = strings.TrimSpace(paymentMethod)
+	for _, method := range adminTopUpPaymentMethods() {
+		if paymentMethod == method {
+			return true
+		}
+	}
+	return false
 }
 
 var (
@@ -1506,7 +1533,12 @@ func applyTopUpExactFilters(query *gorm.DB, options TopUpQueryOptions) (*gorm.DB
 		query = query.Where("trade_no LIKE ? ESCAPE '!'", pattern)
 	}
 	if options.PaymentMethod != "" {
-		query = query.Where("(payment_method = ? OR payment_provider = ?)", options.PaymentMethod, options.PaymentMethod)
+		paymentMethod := strings.TrimSpace(options.PaymentMethod)
+		if paymentMethod == PaymentProviderAdmin || IsAdminTopUpPaymentMethod(paymentMethod) {
+			query = query.Where("(payment_method IN ? OR payment_provider = ?)", adminTopUpPaymentMethods(), PaymentProviderAdmin)
+		} else {
+			query = query.Where("(payment_method = ? OR payment_provider = ?)", paymentMethod, paymentMethod)
+		}
 	}
 	if options.StartTime > 0 {
 		query = query.Where("create_time >= ?", options.StartTime)

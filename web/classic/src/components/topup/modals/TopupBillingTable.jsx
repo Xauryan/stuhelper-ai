@@ -44,6 +44,7 @@ import {
   formatCurrency,
   getRemainingAdminRefundQuota,
   getRemainingRefundMoney,
+  getTopupPaymentMethodLabel,
   isAdminManagedTopup,
   isAdminManagedTopupRefundable,
   isOfficialRefundable,
@@ -59,19 +60,6 @@ const STATUS_CONFIG = {
   expired: { type: 'danger', key: '已超时' },
   partial_refunded: { type: 'warning', key: '部分退款' },
   refunded: { type: 'secondary', key: '已退款' },
-};
-
-// 支付方式映射
-const PAYMENT_METHOD_MAP = {
-  stripe: 'Stripe',
-  creem: 'Creem',
-  waffo: 'Waffo',
-  waffo_pancake: 'Waffo Pancake',
-  alipay: '支付宝',
-  wxpay: '微信',
-  alipay_official: '支付宝',
-  wxpay_official: '微信',
-  admin_add: '管理员充值',
 };
 
 const isOfficialTopupRefundable = (record) =>
@@ -574,8 +562,8 @@ const TopupBillingTable = ({
 
   // 渲染支付方式
   const renderPaymentMethod = (pm) => {
-    const displayName = PAYMENT_METHOD_MAP[pm];
-    return <Text>{displayName ? t(displayName) : pm || '-'}</Text>;
+    const displayName = getTopupPaymentMethodLabel(pm);
+    return <Text>{displayName === '-' ? displayName : t(displayName)}</Text>;
   };
 
   const columns = useMemo(() => {
@@ -658,7 +646,8 @@ const TopupBillingTable = ({
         dataIndex: 'refunded_money',
         key: 'refunded_money',
         render: (money, record) =>
-          isAdminManagedTopup(record) && Number(record?.refunded_quota || 0) > 0 ? (
+          isAdminManagedTopup(record) &&
+          Number(record?.refunded_quota || 0) > 0 ? (
             <Text type='warning'>{renderQuota(record.refunded_quota)}</Text>
           ) : Number(money || 0) > 0 ? (
             <Text type='warning'>¥{formatCurrency(money)}</Text>
@@ -900,10 +889,10 @@ const TopupBillingTable = ({
           refundMode === 'admin_quota'
             ? t('管理员充值退款')
             : refundMode === 'approve'
-            ? t('审批退款')
-            : userIsAdmin
-              ? t('官方支付退款')
-              : t('申请退款')
+              ? t('审批退款')
+              : userIsAdmin
+                ? t('官方支付退款')
+                : t('申请退款')
         }
         visible={refundVisible}
         onCancel={() => setRefundVisible(false)}
@@ -1014,7 +1003,9 @@ const TopupBillingTable = ({
                   setRefundFull(checked);
                   if (refundMode === 'admin_quota') {
                     if (checked) {
-                      setRefundQuota(getRemainingAdminRefundQuota(refundRecord));
+                      setRefundQuota(
+                        getRemainingAdminRefundQuota(refundRecord),
+                      );
                     }
                   } else if (checked) {
                     setRefundAmount(getRemainingRefundMoney(refundRecord));

@@ -295,6 +295,9 @@ func migrateDB() error {
 	if err := migrateAdminAddedQuotaLogsToRecharge(DB); err != nil {
 		return err
 	}
+	if err := migrateLegacyAdminTopUpsToRecharge(DB); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -374,6 +377,9 @@ func migrateDBFast() error {
 	if err := migrateAdminAddedQuotaLogsToRecharge(DB); err != nil {
 		return err
 	}
+	if err := migrateLegacyAdminTopUpsToRecharge(DB); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -405,6 +411,42 @@ func migrateAdminAddedQuotaLogsToRecharge(db *gorm.DB) error {
 	return db.Model(&Log{}).
 		Where("content LIKE ?", "管理员增加用户额度%").
 		Update("content", gorm.Expr("REPLACE(content, ?, ?)", "管理员增加用户额度", "管理员充值用户额度")).Error
+}
+
+func migrateLegacyAdminTopUpsToRecharge(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&TopUp{}) {
+		return nil
+	}
+	legacyMethods := legacyAdminTopUpPaymentMethods()
+	if err := db.Model(&TopUp{}).
+		Where("payment_method IN ? OR payment_provider IN ?", legacyMethods, legacyMethods).
+		Updates(map[string]interface{}{
+			"payment_method":   PaymentMethodAdminAdd,
+			"payment_provider": PaymentProviderAdmin,
+		}).Error; err != nil {
+		return err
+	}
+	if db.Migrator().HasTable(&TopUpRefund{}) {
+		if err := db.Model(&TopUpRefund{}).
+			Where("payment_method IN ? OR payment_provider IN ?", legacyMethods, legacyMethods).
+			Updates(map[string]interface{}{
+				"payment_method":   PaymentMethodAdminAdd,
+				"payment_provider": PaymentProviderAdmin,
+			}).Error; err != nil {
+			return err
+		}
+	}
+	if db.Migrator().HasTable(&TopUpRefundRequest{}) {
+		if err := db.Model(&TopUpRefundRequest{}).
+			Where("payment_method IN ? OR payment_provider IN ?", legacyMethods, legacyMethods).
+			Updates(map[string]interface{}{
+				"payment_method":   PaymentMethodAdminAdd,
+				"payment_provider": PaymentProviderAdmin,
+			}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func hasInviterRewardMigrationStateColumns() bool {
