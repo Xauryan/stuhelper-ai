@@ -1474,7 +1474,7 @@
       "get": {
         "summary": "获取所有充值记录",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）。账单 money 为有效支付金额，fee 为不可退手续费，total_money 汇总 success 账单的有效支付金额。payment_method=admin_add 会同时匹配历史 payment_method=管理员增加/管理员充值 的管理员充值账单；升级迁移会把历史 管理员增加用户额度 日志按日志 ID 回填为 ADMIN_LEGACY_LOG_{id} 管理员充值账单。列表按 create_time desc, id desc 排序。",
+        "description": "👨‍💼 需要管理员权限（Admin）。账单 money 为有效支付金额，fee 为不可退手续费，total_money 汇总 success 账单的有效支付金额。payment_method=admin_add 会同时匹配历史 payment_method=管理员增加/管理员充值 的管理员充值账单；升级迁移会把历史 管理员增加用户额度 日志按日志 ID 回填为 ADMIN_LEGACY_LOG_{id} 管理员充值账单，并在支付配置加载后按支付宝官方充值价格和手续费比例回填零金额管理员充值账单。列表按 create_time desc, id desc 排序。",
         "tags": [
           "用户管理"
         ],
@@ -1628,11 +1628,36 @@
         ]
       }
     },
+    "/api/user/topup/admin/update": {
+      "post": {
+        "summary": "编辑管理员充值账单",
+        "deprecated": false,
+        "description": "👨‍💼 需要管理员权限（Admin）。仅用于 payment_method=admin_add 或 payment_provider=admin 的管理员充值账单。可修改充值额度、有效支付金额 money、不可退手续费 fee 和手续费比例；use_default_money=true 时按 AlipayOfficialUnitPrice 与 AlipayOfficialServiceFeePercent 重新计算。operation_type=gift 会把管理员充值转为管理员赠送，删除 top_ups 账单并同步对应日志，因此不再进入账单管理和充值排行。已有退款记录的管理员充值账单不可编辑。",
+        "tags": [
+          "用户管理"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ]
+      }
+    },
     "/api/user/topup/admin/refund": {
       "post": {
         "summary": "管理员充值退款记账",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）。仅用于 payment_method=admin_add 的管理员充值账单；历史 payment_method=管理员增加/管理员充值 会按管理员充值兼容处理。该接口记录退款并扣回用户额度，不调用第三方支付退款。",
+        "description": "👨‍💼 需要管理员权限（Admin）。仅用于 payment_method=admin_add 的管理员充值账单；历史 payment_method=管理员增加/管理员充值 会按管理员充值兼容处理。该接口记录退款并扣回用户额度，不调用第三方支付退款；退款金额按有效支付金额 money 与退款额度比例记账，fee 手续费不退。",
         "tags": [
           "用户管理"
         ],

@@ -4423,6 +4423,22 @@
     "// 一行命令，把 {{name}} 接到你熟悉的工具": "// Một lệnh để kết nối {{name}} với công cụ quen thuộc của bạn",
     "一分钟，把 {{name}} 接进你的工具链。": "Một phút để đưa {{name}} vào chuỗi công cụ của bạn.",
     "为什么选 {{name}}": "Vì sao chọn {{name}}",
-    "支付完成后将自动刷新": "Trang se tu dong lam moi sau khi thanh toan"
+    "支付完成后将自动刷新": "Trang se tu dong lam moi sau khi thanh toan",
+    "请输入充值额度": "Vui lòng nhập hạn mức nạp",
+    "支付金额不能小于 0": "Số tiền thanh toán không được nhỏ hơn 0",
+    "已转为管理员赠送": "Đã chuyển thành quà tặng quản trị",
+    "账单已更新": "Hóa đơn đã được cập nhật",
+    "编辑管理员充值订单": "Chỉnh sửa đơn nạp của quản trị viên",
+    "当前充值额度": "Hạn mức nạp hiện tại",
+    "管理员赠送": "Quà tặng quản trị",
+    "显示额度": "Hạn mức hiển thị",
+    "按支付宝官方配置自动计算": "Tự động tính theo cấu hình Alipay chính thức",
+    "保存时按支付宝官方充值价格和手续费比例重新计算支付金额；手续费不退。": "Khi lưu, số tiền thanh toán sẽ được tính lại theo giá nạp Alipay chính thức và tỷ lệ phí; phí không được hoàn.",
+    "手动金额会直接写入账单；手续费不退，退款只按支付金额计算。": "Số tiền nhập thủ công sẽ được ghi trực tiếp vào hóa đơn; phí không được hoàn và khoản hoàn tiền chỉ tính theo số tiền thanh toán.",
+    "手续费比例（%）": "Tỷ lệ phí (%)",
+    "当前手续费比例：{{percent}}%，手续费不退": "Tỷ lệ phí hiện tại: {{percent}}%, phí không được hoàn",
+    "转为管理员赠送后会同步修改日志、移出账单管理和充值排行，支付金额与手续费会归零。": "Sau khi chuyển thành quà tặng quản trị, nhật ký sẽ được cập nhật, đơn sẽ bị loại khỏi quản lý hóa đơn và bảng xếp hạng nạp, số tiền thanh toán và phí sẽ về 0.",
+    "调整额度成功，手续费 {{percent}}%，手续费不退": "Điều chỉnh hạn mức thành công, phí {{percent}}%, phí không được hoàn",
+    "管理员充值按支付宝官方充值价格计算支付金额，并按配置比例收取不可退手续费。": "Nạp bởi quản trị viên tính số tiền thanh toán theo giá nạp Alipay chính thức và thu phí không hoàn theo tỷ lệ đã cấu hình."
   }
 }

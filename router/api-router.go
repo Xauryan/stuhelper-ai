@@ -141,6 +141,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/referrals/:invitee_id/commissions", middleware.RequireAuditOrAdminRole(), controller.GetAdminReferralCommissions)
 				adminRoute.GET("/topup", middleware.RequireAdminRole(), controller.GetAllTopUps)
 				adminRoute.POST("/topup/complete", middleware.RequireAdminRole(), controller.AdminCompleteTopUp)
+				adminRoute.POST("/topup/admin/update", middleware.RequireAdminRole(), controller.AdminUpdateAdminTopUp)
 				adminRoute.POST("/topup/admin/refund", middleware.RequireAdminRole(), controller.AdminRefundAdminTopUp)
 				adminRoute.POST("/topup/alipay-official/refund", middleware.RequireAdminRole(), controller.AdminRefundAlipayOfficialTopUp)
 				adminRoute.POST("/topup/alipay-official/query", middleware.RequireAdminRole(), controller.AdminQueryAlipayOfficialTopUp)

@@ -410,6 +410,9 @@ func migrateLOGDB() error {
 	if err = migrateLegacyAdminAddLogsToTopUps(LOG_DB, DB); err != nil {
 		return err
 	}
+	if err = BackfillAdminTopUpMoneyFromAlipayOfficial(DB); err != nil {
+		return err
+	}
 	return nil
 }
 

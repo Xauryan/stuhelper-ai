@@ -1077,6 +1077,7 @@ func ManageUser(c *gin.Context) {
 			"admin_id":       adminId,
 			"admin_username": adminName,
 		}
+		var responseData any
 		switch req.Mode {
 		case "recharge":
 			if req.Value <= 0 {
@@ -1092,8 +1093,18 @@ func ManageUser(c *gin.Context) {
 			adminInfo["payment_method"] = model.PaymentMethodAdminAdd
 			adminInfo["payment_provider"] = model.PaymentProviderAdmin
 			adminInfo["operation_type"] = "recharge"
+			payMoney := model.CalculateAdminTopUpPayMoneyBreakdown(int64(req.Value))
+			adminInfo["money"] = topUp.Money
+			adminInfo["fee"] = topUp.Fee
+			adminInfo["service_fee_percent"] = payMoney.ServiceFeePercent
 			model.RecordLogWithAdminInfo(user.Id, model.LogTypeTopup,
 				fmt.Sprintf("管理员充值用户额度 %s", logger.LogQuota(req.Value)), adminInfo, req.Value)
+			responseData = gin.H{
+				"trade_no":            topUp.TradeNo,
+				"money":               topUp.Money,
+				"fee":                 topUp.Fee,
+				"service_fee_percent": payMoney.ServiceFeePercent,
+			}
 		case "gift":
 			if req.Value <= 0 {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
@@ -1129,10 +1140,7 @@ func ManageUser(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "",
-		})
+		common.ApiSuccess(c, responseData)
 		return
 	default:
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)

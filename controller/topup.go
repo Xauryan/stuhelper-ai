@@ -568,6 +568,16 @@ type AdminRefundTopUpRequest struct {
 	FullRefund   bool    `json:"full_refund"`
 }
 
+type AdminUpdateAdminTopUpRequest struct {
+	TradeNo           string   `json:"trade_no"`
+	OperationType     string   `json:"operation_type"`
+	Amount            int64    `json:"amount"`
+	Money             *float64 `json:"money"`
+	Fee               *float64 `json:"fee"`
+	ServiceFeePercent *float64 `json:"service_fee_percent"`
+	UseDefaultMoney   bool     `json:"use_default_money"`
+}
+
 // AdminCompleteTopUp 管理员补单接口
 func AdminCompleteTopUp(c *gin.Context) {
 	var req AdminCompleteTopupRequest
@@ -624,5 +634,37 @@ func AdminRefundAdminTopUp(c *gin.Context) {
 	common.ApiSuccess(c, gin.H{
 		"trade_no":     refund.TradeNo,
 		"refund_quota": refund.RefundQuota,
+		"refund_money": refund.RefundAmount,
 	})
+}
+
+// AdminUpdateAdminTopUp edits an offline/admin top-up bill or converts it to an admin gift.
+func AdminUpdateAdminTopUp(c *gin.Context) {
+	var req AdminUpdateAdminTopUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.TradeNo == "" || req.Amount <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+
+	LockOrder(req.TradeNo)
+	defer UnlockOrder(req.TradeNo)
+
+	result, err := model.UpdateAdminManagedTopUp(model.AdminTopUpEditParams{
+		TradeNo:           req.TradeNo,
+		OperationType:     req.OperationType,
+		Amount:            req.Amount,
+		Money:             req.Money,
+		Fee:               req.Fee,
+		ServiceFeePercent: req.ServiceFeePercent,
+		UseDefaultMoney:   req.UseDefaultMoney,
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.UpdateAdminTopUpLogForEdit(result, c.GetInt("id"), c.GetString("username")); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
 }

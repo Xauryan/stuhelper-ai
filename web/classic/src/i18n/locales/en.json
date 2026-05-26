@@ -4104,6 +4104,22 @@
     "请在 {{duration}}内支付，超时无效。": "Please pay within {{duration}}. The order becomes invalid after timeout.",
     "订单已停止等待支付结果": "Stopped waiting for payment result",
     "支付完成后将自动刷新余额": "Balance will refresh automatically after payment",
-    "支付完成后将自动刷新": "The page will refresh automatically after payment"
+    "支付完成后将自动刷新": "The page will refresh automatically after payment",
+    "请输入充值额度": "Please enter recharge quota",
+    "支付金额不能小于 0": "Payment amount cannot be less than 0",
+    "已转为管理员赠送": "Converted to admin gift",
+    "账单已更新": "Bill updated",
+    "编辑管理员充值订单": "Edit admin recharge order",
+    "当前充值额度": "Current recharge quota",
+    "管理员赠送": "Admin gift",
+    "显示额度": "Display quota",
+    "按支付宝官方配置自动计算": "Auto-calculate from Alipay official settings",
+    "保存时按支付宝官方充值价格和手续费比例重新计算支付金额；手续费不退。": "On save, the payment amount is recalculated from the Alipay official recharge price and fee rate; the fee is non-refundable.",
+    "手动金额会直接写入账单；手续费不退，退款只按支付金额计算。": "Manual amounts are written directly to the bill; the fee is non-refundable, and refunds are calculated only from the payment amount.",
+    "手续费比例（%）": "Fee rate (%)",
+    "当前手续费比例：{{percent}}%，手续费不退": "Current fee rate: {{percent}}%, non-refundable",
+    "转为管理员赠送后会同步修改日志、移出账单管理和充值排行，支付金额与手续费会归零。": "After conversion to admin gift, the log is updated, the order is removed from billing and recharge rankings, and payment amount and fee are set to zero.",
+    "调整额度成功，手续费 {{percent}}%，手续费不退": "Quota adjusted successfully, fee {{percent}}%, non-refundable",
+    "管理员充值按支付宝官方充值价格计算支付金额，并按配置比例收取不可退手续费。": "Admin recharges calculate the payment amount from the Alipay official recharge price and charge a non-refundable fee at the configured rate."
   }
 }

@@ -3892,6 +3892,22 @@
     "// 一行命令，把 {{name}} 接到你熟悉的工具": "// Une ligne pour connecter {{name}} à vos outils favoris",
     "一分钟，把 {{name}} 接进你的工具链。": "Une minute pour intégrer {{name}} à votre chaîne d'outils.",
     "为什么选 {{name}}": "Pourquoi choisir {{name}}",
-    "支付完成后将自动刷新": "La page sera actualisee automatiquement apres le paiement"
+    "支付完成后将自动刷新": "La page sera actualisee automatiquement apres le paiement",
+    "请输入充值额度": "Veuillez saisir le quota de recharge",
+    "支付金额不能小于 0": "Le montant payé ne peut pas être inférieur à 0",
+    "已转为管理员赠送": "Converti en don administrateur",
+    "账单已更新": "Facture mise à jour",
+    "编辑管理员充值订单": "Modifier la commande de recharge administrateur",
+    "当前充值额度": "Quota de recharge actuel",
+    "管理员赠送": "Don administrateur",
+    "显示额度": "Quota affiché",
+    "按支付宝官方配置自动计算": "Calculer automatiquement selon la configuration officielle Alipay",
+    "保存时按支付宝官方充值价格和手续费比例重新计算支付金额；手续费不退。": "Lors de l’enregistrement, le montant payé sera recalculé selon le prix de recharge officiel Alipay et le taux de frais ; les frais ne sont pas remboursables.",
+    "手动金额会直接写入账单；手续费不退，退款只按支付金额计算。": "Les montants saisis manuellement sont écrits directement dans la facture ; les frais ne sont pas remboursables et les remboursements sont calculés uniquement sur le montant payé.",
+    "手续费比例（%）": "Taux de frais (%)",
+    "当前手续费比例：{{percent}}%，手续费不退": "Taux de frais actuel : {{percent}} %, non remboursable",
+    "转为管理员赠送后会同步修改日志、移出账单管理和充值排行，支付金额与手续费会归零。": "Après conversion en don administrateur, le journal est mis à jour, la commande est retirée de la gestion des factures et du classement des recharges, et le montant payé ainsi que les frais sont remis à zéro.",
+    "调整额度成功，手续费 {{percent}}%，手续费不退": "Quota ajusté avec succès, frais {{percent}} %, non remboursables",
+    "管理员充值按支付宝官方充值价格计算支付金额，并按配置比例收取不可退手续费。": "Les recharges administrateur calculent le montant payé selon le prix de recharge officiel Alipay et appliquent des frais non remboursables au taux configuré."
   }
 }

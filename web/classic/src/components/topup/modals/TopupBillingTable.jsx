@@ -29,13 +29,16 @@ import {
   InputNumber,
   Tag,
   Space,
+  Checkbox,
+  Radio,
+  RadioGroup,
 } from '@douyinfe/semi-ui';
 import {
   IllustrationNoResult,
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
 import { Coins } from 'lucide-react';
-import { IconSearch } from '@douyinfe/semi-icons';
+import { IconEdit, IconSearch } from '@douyinfe/semi-icons';
 import { API, timestamp2string, renderQuota } from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
 import CardTable from '../../common/ui/CardTable';
@@ -72,6 +75,23 @@ const ACTIONABLE_PAYMENT_STATUSES = ['pending', 'expired'];
 const isPendingOrExpired = (record) =>
   ACTIONABLE_PAYMENT_STATUSES.includes(record?.status);
 
+const getAdminTopupFeePercent = (record) => {
+  const money = Number(record?.money || 0);
+  const fee = Number(record?.fee || 0);
+  if (!Number.isFinite(money) || !Number.isFinite(fee) || money <= 0) {
+    return 0;
+  }
+  return Math.round((fee / money) * 100000) / 1000;
+};
+
+const formatPercent = (value) => {
+  const percent = Number(value || 0);
+  if (!Number.isFinite(percent)) {
+    return '0';
+  }
+  return percent.toFixed(3).replace(/\.?0+$/, '');
+};
+
 const TopupBillingTable = ({
   active = true,
   compactMode = false,
@@ -103,6 +123,17 @@ const TopupBillingTable = ({
   const [refundPreview, setRefundPreview] = useState(null);
   const [refundMode, setRefundMode] = useState('direct');
   const [refundFull, setRefundFull] = useState(false);
+  const [editVisible, setEditVisible] = useState(false);
+  const [editRecord, setEditRecord] = useState(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editForm, setEditForm] = useState({
+    operationType: 'recharge',
+    amount: 0,
+    money: 0,
+    fee: 0,
+    serviceFeePercent: 0,
+    useDefaultMoney: true,
+  });
   const isPageVariant = variant === 'page';
   // hideFilters 模式（独立账单页）下，关键词由父组件 submit 后传入，不需要再做内部 debounce；
   // 否则在弹窗内是逐字输入，加 300ms debounce 避免每按一个字符就打一次 API。
@@ -259,6 +290,90 @@ const TopupBillingTable = ({
     },
     [handleAdminComplete, t],
   );
+
+  const openEditModal = useCallback((record) => {
+    if (!record) {
+      return;
+    }
+    setEditRecord(record);
+    setEditForm({
+      operationType: 'recharge',
+      amount: Math.round(Number(record.amount || 0)),
+      money: Number(record.money || 0),
+      fee: Number(record.fee || 0),
+      serviceFeePercent: getAdminTopupFeePercent(record),
+      useDefaultMoney: true,
+    });
+    setEditVisible(true);
+  }, []);
+
+  const setEditField = useCallback((field, value) => {
+    setEditForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }, []);
+
+  const handleEditAdminTopup = async () => {
+    if (!editRecord) {
+      return;
+    }
+    const amount = Math.round(Number(editForm.amount || 0));
+    if (!amount || amount <= 0) {
+      Toast.error({ content: t('请输入充值额度') });
+      return;
+    }
+    const operationType = editForm.operationType || 'recharge';
+    const payload = {
+      trade_no: editRecord.trade_no,
+      operation_type: operationType,
+      amount,
+      use_default_money:
+        operationType === 'recharge' ? Boolean(editForm.useDefaultMoney) : true,
+    };
+    if (operationType === 'recharge') {
+      const serviceFeePercent = Number(editForm.serviceFeePercent || 0);
+      if (!Number.isFinite(serviceFeePercent) || serviceFeePercent < 0) {
+        Toast.error({ content: t('支付手续费不能小于 0') });
+        return;
+      }
+      payload.service_fee_percent = serviceFeePercent;
+      if (!editForm.useDefaultMoney) {
+        const money = Math.round(Number(editForm.money || 0) * 100) / 100;
+        const fee = Math.round(Number(editForm.fee || 0) * 100) / 100;
+        if (!Number.isFinite(money) || money < 0) {
+          Toast.error({ content: t('支付金额不能小于 0') });
+          return;
+        }
+        if (!Number.isFinite(fee) || fee < 0) {
+          Toast.error({ content: t('支付手续费不能小于 0') });
+          return;
+        }
+        payload.money = money;
+        payload.fee = fee;
+      }
+    }
+
+    setEditLoading(true);
+    try {
+      const res = await API.post('/api/user/topup/admin/update', payload);
+      const { success, message } = res.data;
+      if (success) {
+        Toast.success({
+          content:
+            operationType === 'gift' ? t('已转为管理员赠送') : t('账单已更新'),
+        });
+        setEditVisible(false);
+        await loadTopups(page, pageSize);
+      } else {
+        Toast.error({ content: message || t('操作失败') });
+      }
+    } catch (e) {
+      Toast.error({ content: t('操作失败') });
+    } finally {
+      setEditLoading(false);
+    }
+  };
 
   const openRefundModal = useCallback(
     async (record) => {
@@ -757,6 +872,19 @@ const TopupBillingTable = ({
             </Button>,
           );
         }
+        if (userIsAdmin && isAdminManagedTopup(record)) {
+          actions.push(
+            <Button
+              key='admin-edit'
+              size='small'
+              theme='outline'
+              icon={<IconEdit />}
+              onClick={() => openEditModal(record)}
+            >
+              {t('编辑')}
+            </Button>,
+          );
+        }
         if (userIsAdmin && isAdminManagedTopupRefundable(record)) {
           actions.push(
             <Button
@@ -824,6 +952,7 @@ const TopupBillingTable = ({
     handleQueryWechatPayOfficial,
     confirmCloseAlipayOfficial,
     confirmCloseWechatPayOfficial,
+    openEditModal,
     openRefundModal,
     handleRejectRefundRequest,
   ]);
@@ -884,6 +1013,135 @@ const TopupBillingTable = ({
       ) : (
         <Table {...tableProps} pagination={pagination} />
       )}
+      <Modal
+        title={t('编辑管理员充值订单')}
+        visible={editVisible}
+        onCancel={() => setEditVisible(false)}
+        onOk={handleEditAdminTopup}
+        confirmLoading={editLoading}
+        okText={t('保存')}
+        cancelText={t('取消')}
+      >
+        <div className='space-y-4'>
+          <div>
+            <Text type='tertiary'>{t('订单号')}</Text>
+            <div>
+              <Text copyable>{editRecord?.trade_no || '-'}</Text>
+            </div>
+          </div>
+          <div>
+            <Text type='tertiary'>{t('当前充值额度')}</Text>
+            <div>
+              <Text>{renderQuota(editRecord?.amount || 0)}</Text>
+            </div>
+          </div>
+          <div>
+            <Text type='tertiary'>{t('操作类型')}</Text>
+            <RadioGroup
+              type='button'
+              value={editForm.operationType}
+              onChange={(event) =>
+                setEditField('operationType', event.target.value)
+              }
+              style={{ width: '100%', marginTop: 6 }}
+            >
+              <Radio value='recharge'>{t('管理员充值')}</Radio>
+              <Radio value='gift'>{t('管理员赠送')}</Radio>
+            </RadioGroup>
+          </div>
+          <div>
+            <Text type='tertiary'>{t('充值额度')}</Text>
+            <InputNumber
+              min={1}
+              precision={0}
+              step={500000}
+              value={editForm.amount}
+              onChange={(value) => setEditField('amount', value)}
+              placeholder={t('请输入充值额度')}
+              style={{ width: '100%', marginTop: 6 }}
+            />
+            <Text type='secondary' size='small'>
+              {t('显示额度')}：{renderQuota(editForm.amount || 0)}
+            </Text>
+          </div>
+          {editForm.operationType === 'recharge' ? (
+            <>
+              <Checkbox
+                checked={editForm.useDefaultMoney}
+                onChange={(event) =>
+                  setEditField('useDefaultMoney', event.target.checked)
+                }
+              >
+                {t('按支付宝官方配置自动计算')}
+              </Checkbox>
+              <div className='rounded-md border border-dashed border-[var(--semi-color-border)] p-3'>
+                <Text type='secondary' size='small'>
+                  {editForm.useDefaultMoney
+                    ? t(
+                        '保存时按支付宝官方充值价格和手续费比例重新计算支付金额；手续费不退。',
+                      )
+                    : t(
+                        '手动金额会直接写入账单；手续费不退，退款只按支付金额计算。',
+                      )}
+                </Text>
+              </div>
+              <div>
+                <Text type='tertiary'>{t('手续费比例（%）')}</Text>
+                <InputNumber
+                  min={0}
+                  precision={3}
+                  step={0.1}
+                  value={editForm.serviceFeePercent}
+                  onChange={(value) => setEditField('serviceFeePercent', value)}
+                  placeholder={t('例如：0.6')}
+                  style={{ width: '100%', marginTop: 6 }}
+                />
+                <Text type='secondary' size='small'>
+                  {t('当前手续费比例：{{percent}}%，手续费不退', {
+                    percent: formatPercent(editForm.serviceFeePercent),
+                  })}
+                </Text>
+              </div>
+              <div>
+                <Text type='tertiary'>{t('支付金额')}</Text>
+                <InputNumber
+                  prefix='¥'
+                  min={0}
+                  precision={2}
+                  step={0.01}
+                  value={editForm.money}
+                  disabled={editForm.useDefaultMoney}
+                  onChange={(value) => setEditField('money', value)}
+                  placeholder={t('支付金额')}
+                  style={{ width: '100%', marginTop: 6 }}
+                />
+              </div>
+              <div>
+                <Text type='tertiary'>{t('手续费')}</Text>
+                <InputNumber
+                  prefix='¥'
+                  min={0}
+                  precision={2}
+                  step={0.01}
+                  value={editForm.fee}
+                  disabled={editForm.useDefaultMoney}
+                  onChange={(value) => setEditField('fee', value)}
+                  placeholder={t('手续费')}
+                  style={{ width: '100%', marginTop: 6 }}
+                />
+              </div>
+            </>
+          ) : (
+            <div className='rounded-md border border-dashed border-[var(--semi-color-border)] p-3'>
+              <Text type='warning' size='small'>
+                {t(
+                  '转为管理员赠送后会同步修改日志、移出账单管理和充值排行，支付金额与手续费会归零。',
+                )}
+              </Text>
+            </div>
+          )}
+        </div>
+      </Modal>
       <Modal
         title={
           refundMode === 'admin_quota'

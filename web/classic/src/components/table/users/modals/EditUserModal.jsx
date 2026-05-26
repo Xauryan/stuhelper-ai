@@ -205,9 +205,16 @@ const EditUserModal = (props) => {
         mode: adjustMode,
         value: adjustMode === 'override' ? quotaVal : Math.abs(quotaVal),
       });
-      const { success, message } = res.data;
+      const { success, message, data } = res.data;
       if (success) {
-        showSuccess(t('调整额度成功'));
+        const feePercent = Number(data?.service_fee_percent || 0);
+        showSuccess(
+          adjustMode === 'recharge'
+            ? t('调整额度成功，手续费 {{percent}}%，手续费不退', {
+                percent: Number.isFinite(feePercent) ? feePercent : 0,
+              })
+            : t('调整额度成功'),
+        );
         setAdjustModalOpen(false);
         setAdjustQuotaLocal('');
         setAdjustAmountLocal('');
@@ -532,6 +539,13 @@ const EditUserModal = (props) => {
           <Text type='secondary' className='block mb-2'>
             {getPreviewText()}
           </Text>
+          {adjustMode === 'recharge' ? (
+            <Text type='secondary' size='small'>
+              {t(
+                '管理员充值按支付宝官方充值价格计算支付金额，并按配置比例收取不可退手续费。',
+              )}
+            </Text>
+          ) : null}
         </div>
         <div className='mb-3'>
           <div className='mb-1'>

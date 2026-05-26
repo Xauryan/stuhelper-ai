@@ -233,6 +233,9 @@ func InitOptionMap() {
 
 	common.OptionMapRWMutex.Unlock()
 	loadOptionsFromDatabase()
+	if err := BackfillAdminTopUpMoneyFromAlipayOfficial(DB); err != nil {
+		common.SysLog("failed to backfill admin topup money: " + err.Error())
+	}
 }
 
 func loadOptionsFromDatabase() {
@@ -287,7 +290,15 @@ func UpdateOption(key string, value string) error {
 		return err
 	}
 	// Update OptionMap
-	return updateOptionMap(key, value)
+	if err := updateOptionMap(key, value); err != nil {
+		return err
+	}
+	if key == "AlipayOfficialUnitPrice" || key == "AlipayOfficialServiceFeePercent" {
+		if err := BackfillAdminTopUpMoneyFromAlipayOfficial(DB); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func updateOptionMap(key string, value string) (err error) {

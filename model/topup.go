@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/logger"
+	"github.com/Xauryan/stuhelper-ai/setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -110,6 +112,41 @@ var (
 	ErrTopUpNotFound         = errors.New("topup not found")
 	ErrTopUpStatusInvalid    = errors.New("topup status invalid")
 )
+
+const (
+	AdminTopUpOperationRecharge = "recharge"
+	AdminTopUpOperationGift     = "gift"
+)
+
+type AdminTopUpPayMoneyBreakdown struct {
+	EffectiveMoney    float64 `json:"effective_money"`
+	Fee               float64 `json:"fee"`
+	TotalMoney        float64 `json:"total_money"`
+	ServiceFeePercent float64 `json:"service_fee_percent"`
+	UnitPrice         float64 `json:"unit_price"`
+}
+
+type AdminTopUpEditParams struct {
+	TradeNo           string
+	OperationType     string
+	Amount            int64
+	Money             *float64
+	Fee               *float64
+	ServiceFeePercent *float64
+	UseDefaultMoney   bool
+}
+
+type AdminTopUpEditResult struct {
+	TradeNo           string  `json:"trade_no"`
+	UserId            int     `json:"user_id"`
+	OperationType     string  `json:"operation_type"`
+	Amount            int64   `json:"amount"`
+	Money             float64 `json:"money"`
+	Fee               float64 `json:"fee"`
+	ServiceFeePercent float64 `json:"service_fee_percent"`
+	ConvertedToGift   bool    `json:"converted_to_gift"`
+	TopUp             *TopUp  `json:"topup,omitempty"`
+}
 
 const (
 	TopUpRefundStatusPending = "pending"
@@ -1762,6 +1799,77 @@ func adminTopUpRefundNo() string {
 	return fmt.Sprintf("ADMIN_RF_%d_%s", common.GetTimestamp(), strings.ToUpper(common.GetUUID()[:8]))
 }
 
+func normalizeAdminTopUpServiceFeePercent(serviceFeePercent float64) float64 {
+	if math.IsNaN(serviceFeePercent) || math.IsInf(serviceFeePercent, 0) || serviceFeePercent < 0 {
+		return 0
+	}
+	return serviceFeePercent
+}
+
+func roundMoneyCeilToCents(money decimal.Decimal) decimal.Decimal {
+	money = money.RoundCeil(2)
+	if money.IsNegative() {
+		return decimal.Zero
+	}
+	return money
+}
+
+func roundMoneyToCents(money float64) float64 {
+	value := decimal.NewFromFloat(money).Round(2)
+	if value.IsNegative() {
+		return 0
+	}
+	return value.InexactFloat64()
+}
+
+func buildAdminTopUpPayMoneyBreakdown(effectiveMoney decimal.Decimal, serviceFeePercent float64) AdminTopUpPayMoneyBreakdown {
+	effectiveMoney = roundMoneyCeilToCents(effectiveMoney)
+	feePercentValue := normalizeAdminTopUpServiceFeePercent(serviceFeePercent)
+	feePercent := decimal.NewFromFloat(feePercentValue)
+
+	totalMoney := effectiveMoney
+	if feePercent.IsPositive() {
+		totalMoney = effectiveMoney.
+			Mul(decimal.NewFromInt(1).Add(feePercent.Div(decimal.NewFromInt(100)))).
+			RoundCeil(2)
+	}
+	fee := totalMoney.Sub(effectiveMoney).Round(2)
+	if fee.IsNegative() {
+		fee = decimal.Zero
+	}
+
+	return AdminTopUpPayMoneyBreakdown{
+		EffectiveMoney:    effectiveMoney.InexactFloat64(),
+		Fee:               fee.InexactFloat64(),
+		TotalMoney:        totalMoney.InexactFloat64(),
+		ServiceFeePercent: feePercentValue,
+		UnitPrice:         setting.AlipayOfficialUnitPrice,
+	}
+}
+
+func CalculateAdminTopUpPayMoneyBreakdown(quota int64, serviceFeePercentOverride ...float64) AdminTopUpPayMoneyBreakdown {
+	if quota <= 0 {
+		return buildAdminTopUpPayMoneyBreakdown(decimal.Zero, firstAdminServiceFeePercent(serviceFeePercentOverride))
+	}
+	quotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+	if !quotaPerUnit.IsPositive() {
+		quotaPerUnit = decimal.NewFromInt(1)
+	}
+	unitPrice := decimal.NewFromFloat(setting.AlipayOfficialUnitPrice)
+	if unitPrice.IsNegative() {
+		unitPrice = decimal.Zero
+	}
+	effectiveMoney := decimal.NewFromInt(quota).Div(quotaPerUnit).Mul(unitPrice)
+	return buildAdminTopUpPayMoneyBreakdown(effectiveMoney, firstAdminServiceFeePercent(serviceFeePercentOverride))
+}
+
+func firstAdminServiceFeePercent(values []float64) float64 {
+	if len(values) > 0 {
+		return values[0]
+	}
+	return setting.AlipayOfficialServiceFeePercent
+}
+
 func CreateAdminBalanceTopUp(userId int, quota int) (*TopUp, error) {
 	if userId <= 0 {
 		return nil, errors.New("无效用户")
@@ -1771,10 +1879,12 @@ func CreateAdminBalanceTopUp(userId int, quota int) (*TopUp, error) {
 	}
 
 	now := common.GetTimestamp()
+	payMoney := CalculateAdminTopUpPayMoneyBreakdown(int64(quota))
 	topUp := &TopUp{
 		UserId:          userId,
 		Amount:          int64(quota),
-		Money:           0,
+		Money:           payMoney.EffectiveMoney,
+		Fee:             payMoney.Fee,
 		TradeNo:         adminTopUpTradeNo(),
 		PaymentMethod:   PaymentMethodAdminAdd,
 		PaymentProvider: PaymentProviderAdmin,
@@ -1835,6 +1945,21 @@ func RefundAdminBalanceTopUp(tradeNo string, refundQuota int64, reason string) (
 			return errors.New("退款额度超过可退额度")
 		}
 
+		orderMoney := decimal.NewFromFloat(topUp.Money).Round(2)
+		refundedMoney := decimal.NewFromFloat(topUp.RefundedMoney).Round(2)
+		remainingMoney := orderMoney.Sub(refundedMoney)
+		if remainingMoney.IsNegative() {
+			remainingMoney = decimal.Zero
+		}
+		refundAmount := decimal.Zero
+		if orderMoney.IsPositive() {
+			if refundQuota >= remainingQuota {
+				refundAmount = remainingMoney
+			} else {
+				refundAmount = decimal.NewFromFloat(refundAmountForQuota(refundQuota, totalQuota, orderMoney, remainingMoney)).Round(2)
+			}
+		}
+
 		result := tx.Model(&User{}).
 			Where("id = ? AND quota >= ?", topUp.UserId, refundQuota).
 			Update("quota", gorm.Expr("quota - ?", refundQuota))
@@ -1853,7 +1978,7 @@ func RefundAdminBalanceTopUp(tradeNo string, refundQuota int64, reason string) (
 			OutRequestNo:    adminTopUpRefundNo(),
 			PaymentMethod:   topUp.PaymentMethod,
 			PaymentProvider: topUp.PaymentProvider,
-			RefundAmount:    0,
+			RefundAmount:    refundAmount.InexactFloat64(),
 			RefundQuota:     refundQuota,
 			Reason:          normalizeRefundRequestReason(reason),
 			Status:          TopUpRefundStatusSuccess,
@@ -1865,6 +1990,10 @@ func RefundAdminBalanceTopUp(tradeNo string, refundQuota int64, reason string) (
 		}
 
 		topUp.RefundedQuota += refundQuota
+		topUp.RefundedMoney = refundedMoney.Add(refundAmount).Round(2).InexactFloat64()
+		if topUp.RefundedMoney > topUp.Money {
+			topUp.RefundedMoney = topUp.Money
+		}
 		if topUp.RefundedQuota >= totalQuota {
 			topUp.Status = common.TopUpStatusRefunded
 		} else {
@@ -1876,6 +2005,292 @@ func RefundAdminBalanceTopUp(tradeNo string, refundQuota int64, reason string) (
 		return nil, err
 	}
 	return refund, nil
+}
+
+func normalizeAdminTopUpOperationType(operationType string) string {
+	switch strings.ToLower(strings.TrimSpace(operationType)) {
+	case "", AdminTopUpOperationRecharge:
+		return AdminTopUpOperationRecharge
+	case AdminTopUpOperationGift:
+		return AdminTopUpOperationGift
+	default:
+		return ""
+	}
+}
+
+func adminTopUpHasRefundRecordsTx(tx *gorm.DB, topUp TopUp) (bool, error) {
+	var refundCount int64
+	if err := tx.Model(&TopUpRefund{}).
+		Where("top_up_id = ? OR trade_no = ?", topUp.Id, topUp.TradeNo).
+		Count(&refundCount).Error; err != nil {
+		return false, err
+	}
+	if refundCount > 0 {
+		return true, nil
+	}
+	var requestCount int64
+	if err := tx.Model(&TopUpRefundRequest{}).
+		Where("top_up_id = ? OR trade_no = ?", topUp.Id, topUp.TradeNo).
+		Count(&requestCount).Error; err != nil {
+		return false, err
+	}
+	return requestCount > 0, nil
+}
+
+func applyAdminTopUpQuotaDeltaTx(tx *gorm.DB, userId int, delta int64) error {
+	if delta == 0 {
+		return nil
+	}
+	if delta > 0 {
+		return tx.Model(&User{}).Where("id = ?", userId).Update("quota", gorm.Expr("quota + ?", delta)).Error
+	}
+	decrease := -delta
+	result := tx.Model(&User{}).
+		Where("id = ? AND quota >= ?", userId, decrease).
+		Update("quota", gorm.Expr("quota - ?", decrease))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("用户当前余额不足以扣回调整额度")
+	}
+	return nil
+}
+
+func resolveAdminTopUpEditMoney(params AdminTopUpEditParams) (float64, float64, float64) {
+	if params.UseDefaultMoney || params.Money == nil || params.Fee == nil {
+		var breakdown AdminTopUpPayMoneyBreakdown
+		if params.ServiceFeePercent != nil {
+			breakdown = CalculateAdminTopUpPayMoneyBreakdown(params.Amount, *params.ServiceFeePercent)
+		} else {
+			breakdown = CalculateAdminTopUpPayMoneyBreakdown(params.Amount)
+		}
+		return breakdown.EffectiveMoney, breakdown.Fee, breakdown.ServiceFeePercent
+	}
+	money := roundMoneyToCents(*params.Money)
+	fee := roundMoneyToCents(*params.Fee)
+	serviceFeePercent := 0.0
+	if params.ServiceFeePercent != nil {
+		serviceFeePercent = normalizeAdminTopUpServiceFeePercent(*params.ServiceFeePercent)
+	} else if money > 0 && fee > 0 {
+		serviceFeePercent = decimal.NewFromFloat(fee).Mul(decimal.NewFromInt(100)).Div(decimal.NewFromFloat(money)).Round(3).InexactFloat64()
+	}
+	return money, fee, serviceFeePercent
+}
+
+func UpdateAdminManagedTopUp(params AdminTopUpEditParams) (*AdminTopUpEditResult, error) {
+	params.TradeNo = strings.TrimSpace(params.TradeNo)
+	if params.TradeNo == "" {
+		return nil, errors.New("未提供订单号")
+	}
+	params.OperationType = normalizeAdminTopUpOperationType(params.OperationType)
+	if params.OperationType == "" {
+		return nil, errors.New("无效的操作类型")
+	}
+	if params.Amount <= 0 {
+		return nil, errors.New("无效的充值额度")
+	}
+
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	var result *AdminTopUpEditResult
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		topUp := &TopUp{}
+		if err := withRowLock(tx).Where(refCol+" = ?", params.TradeNo).First(topUp).Error; err != nil {
+			return ErrTopUpNotFound
+		}
+		if !IsAdminTopUpRecord(topUp) {
+			return ErrPaymentMethodMismatch
+		}
+		if topUp.Status != common.TopUpStatusSuccess {
+			return ErrTopUpStatusInvalid
+		}
+		if topUp.RefundedQuota > 0 || topUp.RefundedMoney > 0 {
+			return errors.New("已有退款记录的管理员充值订单不能编辑")
+		}
+		hasRefundRecords, err := adminTopUpHasRefundRecordsTx(tx, *topUp)
+		if err != nil {
+			return err
+		}
+		if hasRefundRecords {
+			return errors.New("已有退款记录的管理员充值订单不能编辑")
+		}
+
+		oldAmount := topUpCreditedQuota(*topUp)
+		if err := applyAdminTopUpQuotaDeltaTx(tx, topUp.UserId, params.Amount-oldAmount); err != nil {
+			return err
+		}
+
+		money, fee, serviceFeePercent := resolveAdminTopUpEditMoney(params)
+		result = &AdminTopUpEditResult{
+			TradeNo:           topUp.TradeNo,
+			UserId:            topUp.UserId,
+			OperationType:     params.OperationType,
+			Amount:            params.Amount,
+			Money:             money,
+			Fee:               fee,
+			ServiceFeePercent: serviceFeePercent,
+		}
+
+		if params.OperationType == AdminTopUpOperationGift {
+			result.Money = 0
+			result.Fee = 0
+			result.ServiceFeePercent = 0
+			result.ConvertedToGift = true
+			return tx.Delete(topUp).Error
+		}
+
+		topUp.Amount = params.Amount
+		topUp.Money = money
+		topUp.Fee = fee
+		topUp.PaymentMethod = PaymentMethodAdminAdd
+		topUp.PaymentProvider = PaymentProviderAdmin
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+		topUpCopy := *topUp
+		result.TopUp = &topUpCopy
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func adminTopUpLogContent(operationType string, amount int64) string {
+	if operationType == AdminTopUpOperationGift {
+		return fmt.Sprintf("管理员赠送用户额度 %s", logger.LogQuota(int(amount)))
+	}
+	return fmt.Sprintf("管理员充值用户额度 %s", logger.LogQuota(int(amount)))
+}
+
+func adminTopUpLogType(operationType string) int {
+	if operationType == AdminTopUpOperationGift {
+		return LogTypeManage
+	}
+	return LogTypeTopup
+}
+
+func legacyAdminTopUpLogID(tradeNo string) (int, bool) {
+	value := strings.TrimPrefix(strings.TrimSpace(tradeNo), "ADMIN_LEGACY_LOG_")
+	if value == tradeNo || value == "" {
+		return 0, false
+	}
+	id, err := strconv.Atoi(value)
+	if err != nil || id <= 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+func adminInfoMapFromLog(log Log) map[string]interface{} {
+	other, err := common.StrToMap(log.Other)
+	if err != nil || other == nil {
+		return map[string]interface{}{}
+	}
+	adminInfo, ok := other["admin_info"].(map[string]interface{})
+	if !ok || adminInfo == nil {
+		return map[string]interface{}{}
+	}
+	return adminInfo
+}
+
+func buildAdminTopUpEditedLogOther(log Log, result AdminTopUpEditResult, adminId int, adminUsername string) string {
+	other, err := common.StrToMap(log.Other)
+	if err != nil || other == nil {
+		other = map[string]interface{}{}
+	}
+	adminInfo := adminInfoMapFromLog(log)
+	if adminId > 0 {
+		adminInfo["admin_id"] = adminId
+	}
+	if strings.TrimSpace(adminUsername) != "" {
+		adminInfo["admin_username"] = strings.TrimSpace(adminUsername)
+	}
+	adminInfo["operation_type"] = result.OperationType
+	if result.OperationType == AdminTopUpOperationRecharge {
+		adminInfo["trade_no"] = result.TradeNo
+		adminInfo["payment_method"] = PaymentMethodAdminAdd
+		adminInfo["payment_provider"] = PaymentProviderAdmin
+		adminInfo["money"] = result.Money
+		adminInfo["fee"] = result.Fee
+		adminInfo["service_fee_percent"] = result.ServiceFeePercent
+	} else {
+		delete(adminInfo, "trade_no")
+		delete(adminInfo, "payment_method")
+		delete(adminInfo, "payment_provider")
+		delete(adminInfo, "money")
+		delete(adminInfo, "fee")
+		delete(adminInfo, "service_fee_percent")
+	}
+	other["admin_info"] = adminInfo
+	return common.MapToJsonStr(other)
+}
+
+func UpdateAdminTopUpLogForEdit(result *AdminTopUpEditResult, adminId int, adminUsername string) error {
+	if result == nil || LOG_DB == nil || !LOG_DB.Migrator().HasTable(&Log{}) {
+		return nil
+	}
+	var logs []Log
+	if logId, ok := legacyAdminTopUpLogID(result.TradeNo); ok {
+		if err := LOG_DB.Where("id = ?", logId).Find(&logs).Error; err != nil {
+			return err
+		}
+	} else {
+		pattern, err := sanitizeLikePattern(result.TradeNo)
+		if err != nil {
+			return err
+		}
+		if err := LOG_DB.
+			Where("user_id = ? AND other LIKE ? ESCAPE '!'", result.UserId, "%"+pattern+"%").
+			Order("id asc").
+			Find(&logs).Error; err != nil {
+			return err
+		}
+	}
+	if len(logs) == 0 {
+		return nil
+	}
+	content := adminTopUpLogContent(result.OperationType, result.Amount)
+	logType := adminTopUpLogType(result.OperationType)
+	for _, log := range logs {
+		if err := LOG_DB.Model(&Log{}).Where("id = ?", log.Id).Updates(map[string]interface{}{
+			"type":    logType,
+			"content": content,
+			"quota":   int(result.Amount),
+			"other":   buildAdminTopUpEditedLogOther(log, *result, adminId, adminUsername),
+		}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func BackfillAdminTopUpMoneyFromAlipayOfficial(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&TopUp{}) {
+		return nil
+	}
+	var topUps []TopUp
+	if err := db.
+		Where("(payment_provider = ? OR payment_method IN ?) AND (money IS NULL OR money <= 0) AND amount > 0",
+			PaymentProviderAdmin, adminTopUpPaymentMethods()).
+		Find(&topUps).Error; err != nil {
+		return err
+	}
+	for _, topUp := range topUps {
+		breakdown := CalculateAdminTopUpPayMoneyBreakdown(topUp.Amount)
+		if err := db.Model(&TopUp{}).Where("id = ?", topUp.Id).Updates(map[string]interface{}{
+			"money": breakdown.EffectiveMoney,
+			"fee":   breakdown.Fee,
+		}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ManualCompleteTopUp 管理员手动完成订单并给用户充值
