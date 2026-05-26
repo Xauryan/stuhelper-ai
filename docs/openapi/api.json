@@ -1474,7 +1474,7 @@
       "get": {
         "summary": "获取所有充值记录",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）。账单 money 为有效支付金额，fee 为不可退手续费，total_money 汇总 success 账单的有效支付金额。payment_method=admin_add 会同时匹配历史 payment_method=管理员增加/管理员充值 的管理员充值账单；升级迁移会把历史 管理员增加用户额度 日志按日志 ID 回填为 ADMIN_LEGACY_LOG_{id} 管理员充值账单。",
+        "description": "👨‍💼 需要管理员权限（Admin）。账单 money 为有效支付金额，fee 为不可退手续费，total_money 汇总 success 账单的有效支付金额。payment_method=admin_add 会同时匹配历史 payment_method=管理员增加/管理员充值 的管理员充值账单；升级迁移会把历史 管理员增加用户额度 日志按日志 ID 回填为 ADMIN_LEGACY_LOG_{id} 管理员充值账单。列表按 create_time desc, id desc 排序。",
         "tags": [
           "用户管理"
         ],

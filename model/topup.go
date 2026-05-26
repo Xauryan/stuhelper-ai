@@ -1645,6 +1645,10 @@ func shouldLimitTopUpCount(options TopUpQueryOptions) bool {
 	return options.Keyword != "" || options.Username != "" || options.TradeNo != ""
 }
 
+func orderTopUpList(query *gorm.DB) *gorm.DB {
+	return query.Order("create_time desc").Order("id desc")
+}
+
 func GetUserTopUpsResultWithOptions(userId int, options TopUpQueryOptions, pageInfo *common.PageInfo) (result TopUpQueryResult, err error) {
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		query, qErr := applyUserTopUpQueryOptions(tx, tx.Model(&TopUp{}), userId, options)
@@ -1663,7 +1667,7 @@ func GetUserTopUpsResultWithOptions(userId int, options TopUpQueryOptions, pageI
 			return sErr
 		}
 
-		return query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&result.Items).Error
+		return orderTopUpList(query).Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&result.Items).Error
 	}, topUpReadTxOptions())
 	if err != nil {
 		return TopUpQueryResult{}, err
@@ -1714,7 +1718,7 @@ func GetAllTopUpsResultWithOptions(options TopUpQueryOptions, pageInfo *common.P
 			return sErr
 		}
 
-		return query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&result.Items).Error
+		return orderTopUpList(query).Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&result.Items).Error
 	}, topUpReadTxOptions())
 	if err != nil {
 		return TopUpQueryResult{}, err

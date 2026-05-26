@@ -140,6 +140,50 @@ func TestMigrateLegacyAdminAddLogsToTopUpsBackfillsBills(t *testing.T) {
 	assert.Equal(t, "管理员充值用户额度", log.Content)
 }
 
+func TestBackfilledAdminTopUpsAreSortedByCreateTime(t *testing.T) {
+	truncateTables(t)
+
+	insertRankingUser(t, 4207, "legacy-admin-sort-user")
+	logs := []Log{
+		{
+			UserId:    4207,
+			Username:  "legacy-admin-sort-user",
+			CreatedAt: 1000,
+			Type:      LogTypeManage,
+			Content:   "管理员增加用户额度",
+			Quota:     100,
+		},
+		{
+			UserId:    4207,
+			Username:  "legacy-admin-sort-user",
+			CreatedAt: 3000,
+			Type:      LogTypeManage,
+			Content:   "管理员增加用户额度",
+			Quota:     300,
+		},
+		{
+			UserId:    4207,
+			Username:  "legacy-admin-sort-user",
+			CreatedAt: 2000,
+			Type:      LogTypeManage,
+			Content:   "管理员增加用户额度",
+			Quota:     200,
+		},
+	}
+	require.NoError(t, LOG_DB.Create(&logs).Error)
+
+	require.NoError(t, migrateAdminAddedQuotaLogsToRecharge(LOG_DB))
+	require.NoError(t, migrateLegacyAdminAddLogsToTopUps(LOG_DB, DB))
+
+	rows, total, err := GetAllTopUpsWithOptions(TopUpQueryOptions{PaymentMethod: PaymentMethodAdminAdd}, &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), total)
+	require.Len(t, rows, 3)
+	assert.Equal(t, int64(3000), rows[0].CreateTime)
+	assert.Equal(t, int64(2000), rows[1].CreateTime)
+	assert.Equal(t, int64(1000), rows[2].CreateTime)
+}
+
 func TestRefundAdminBalanceTopUpRecordsRefundAndDeductsQuota(t *testing.T) {
 	truncateTables(t)
 
