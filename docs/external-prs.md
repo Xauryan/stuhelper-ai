@@ -2,6 +2,48 @@
 
 本文档记录不是通过常规上游 release 同步引入的 PR 或补丁。
 
+## Xauryan/stuhelper-ai#2 - Dependabot electron tmp 安全更新
+
+- 来源 PR：https://github.com/Xauryan/stuhelper-ai/pull/2
+- 本地导入日期：2026-05-29
+- 导入方式：手工移植 PR 的有效锁文件变更。PR 分支基于旧的 `0a88175b`，
+  不能直接 merge 到已同步 rc10 的 `main`，否则会反向移除 rc10 上游同步内容。
+- 本地涉及文件：
+  - `electron/package-lock.json`
+
+### 原因
+
+GitHub Dependabot 在默认分支提示 1 个 high severity 漏洞，对应 `electron`
+目录的间接开发依赖 `tmp`。PR #2 将 `tmp` 从 `0.2.5` 更新到 `0.2.7`。
+
+### 本地行为
+
+- 仅更新 `electron/package-lock.json` 中 `node_modules/tmp` 的锁定版本、
+  tarball URL 和 integrity。
+- `electron/package.json` 未改动；`tmp` 仍由 `tmp-promise` / `electron-builder`
+  间接引入。
+- 不改变主后端、classic 前端或 Electron 打包脚本行为。
+
+### 验证
+
+```powershell
+Set-Location electron
+npm ls tmp --package-lock-only
+```
+
+注：当前 npm registry 配置指向 `npmmirror`，`npm audit --package-lock-only`
+调用安全审计接口时返回 `[NOT_IMPLEMENTED] /-/npm/v1/security/* not implemented yet`，
+因此本地无法用该 registry 完成 audit 验证；以 lockfile 解析结果和 GitHub
+Dependabot 状态作为该安全补丁的验证来源。
+
+### 未来上游同步检查点
+
+每次同步上游 release 或 Electron 依赖时：
+
+- 保留 `tmp >= 0.2.7`，除非上游锁文件已经升级到更高安全版本。
+- 如果 Dependabot 后续关闭 PR #2 或更新 advisories，确认本地 lockfile 仍满足
+  GitHub 安全告警要求。
+
 ## 官方支付订阅购买与 classic 订阅展示控制
 
 - 来源：StuHelper AI 本地补丁。
