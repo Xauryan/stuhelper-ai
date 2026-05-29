@@ -226,3 +226,102 @@ func TestSubscriptionOrderInsertAllowsExpiredPendingOrderReplacement(t *testing.
 
 	require.NoError(t, order.Insert())
 }
+
+func TestPurchaseSubscriptionWithBalanceDeductsQuotaAndCreatesSubscriptionOrder(t *testing.T) {
+	truncateTables(t)
+	setReferralCommissionSettingsForTest(t, true, 10, 0)
+
+	common.QuotaPerUnit = 1000
+	require.NoError(t, DB.Create(&User{
+		Id:        3008,
+		Username:  "balance-subscription-user",
+		Status:    common.UserStatusEnabled,
+		Quota:     2500,
+		Group:     "default",
+		InviterId: 99,
+		AffCode:   "balance-subscription-user",
+	}).Error)
+	require.NoError(t, DB.Create(&User{
+		Id:       99,
+		Username: "balance-subscription-inviter",
+		Status:   common.UserStatusEnabled,
+		Group:    "default",
+		AffCode:  "balance-subscription-inviter",
+	}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1008, 100, false, "")
+	plan.PriceAmount = 1.25
+	plan.UpgradeGroup = "vip"
+	require.NoError(t, DB.Save(plan).Error)
+
+	err := PurchaseSubscriptionWithBalance(3008, plan.Id)
+
+	require.NoError(t, err)
+	var user User
+	require.NoError(t, DB.Where("id = ?", 3008).First(&user).Error)
+	assert.Equal(t, 1250, user.Quota)
+	assert.Equal(t, "vip", user.Group)
+
+	var sub UserSubscription
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3008, plan.Id).First(&sub).Error)
+	assert.Equal(t, "active", sub.Status)
+	assert.Equal(t, "order", sub.Source)
+	assert.Equal(t, "vip", sub.UpgradeGroup)
+	assert.Equal(t, "default", sub.PrevUserGroup)
+
+	var order SubscriptionOrder
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3008, plan.Id).First(&order).Error)
+	assert.Equal(t, PaymentMethodBalance, order.PaymentMethod)
+	assert.Equal(t, PaymentProviderBalance, order.PaymentProvider)
+	assert.Equal(t, common.TopUpStatusSuccess, order.Status)
+	assert.Contains(t, order.ProviderPayload, "charged_quota=1250")
+
+	var topUp TopUp
+	require.NoError(t, DB.Where("trade_no = ?", order.TradeNo).First(&topUp).Error)
+	assert.Equal(t, PaymentMethodBalance, topUp.PaymentMethod)
+	assert.Equal(t, PaymentProviderBalance, topUp.PaymentProvider)
+	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
+	assert.Equal(t, order.Money, topUp.Money)
+
+	var commissionCount int64
+	require.NoError(t, DB.Model(&ReferralCommission{}).Count(&commissionCount).Error)
+	assert.EqualValues(t, 0, commissionCount)
+}
+
+func TestPurchaseSubscriptionWithBalanceInsufficientQuotaDoesNotCreateSubscription(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 1000
+	require.NoError(t, DB.Create(&User{
+		Id:       3009,
+		Username: "balance-subscription-low-quota-user",
+		Status:   common.UserStatusEnabled,
+		Quota:    999,
+		Group:    "default",
+		AffCode:  "balance-subscription-low-quota-user",
+	}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1009, 100, false, "")
+	plan.PriceAmount = 1
+	require.NoError(t, DB.Save(plan).Error)
+
+	err := PurchaseSubscriptionWithBalance(3009, plan.Id)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "余额不足")
+	assert.Equal(t, 999, getUserQuotaForPaymentGuardTest(t, 3009))
+
+	var subCount int64
+	require.NoError(t, DB.Model(&UserSubscription{}).Where("user_id = ?", 3009).Count(&subCount).Error)
+	assert.EqualValues(t, 0, subCount)
+
+	var orderCount int64
+	require.NoError(t, DB.Model(&SubscriptionOrder{}).Where("user_id = ?", 3009).Count(&orderCount).Error)
+	assert.EqualValues(t, 0, orderCount)
+
+	var topUpCount int64
+	require.NoError(t, DB.Model(&TopUp{}).Where("user_id = ?", 3009).Count(&topUpCount).Error)
+	assert.EqualValues(t, 0, topUpCount)
+}

@@ -4120,6 +4120,11 @@
     "当前手续费比例：{{percent}}%，手续费不退": "Current fee rate: {{percent}}%, non-refundable",
     "转为管理员赠送后会同步修改日志、移出账单管理和充值排行，支付金额与手续费会归零。": "After conversion to admin gift, the log is updated, the order is removed from billing and recharge rankings, and payment amount and fee are set to zero.",
     "调整额度成功，手续费 {{percent}}%，手续费不退": "Quota adjusted successfully, fee {{percent}}%, non-refundable",
-    "管理员充值按支付宝官方充值价格计算支付金额，并按配置比例收取不可退手续费。": "Admin recharges calculate the payment amount from the Alipay official recharge price and charge a non-refundable fee at the configured rate."
+    "管理员充值按支付宝官方充值价格计算支付金额，并按配置比例收取不可退手续费。": "Admin recharges calculate the payment amount from the Alipay official recharge price and charge a non-refundable fee at the configured rate.",
+    "余额支付": "Pay with Balance",
+    "可用余额": "Available balance",
+    "所需余额": "Required balance",
+    "余额不足": "Insufficient balance",
+    "订阅购买成功": "Subscription purchased successfully"
   }
 }

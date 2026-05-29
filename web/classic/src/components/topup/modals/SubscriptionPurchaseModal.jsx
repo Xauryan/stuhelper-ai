@@ -58,6 +58,9 @@ const SubscriptionPurchaseModal = ({
   selectedPaymentMethod,
   displayPayAmount,
   purchaseLimitInfo = null,
+  balanceCost = 0,
+  availableBalance = 0,
+  insufficientBalance = false,
   onConfirm,
 }) => {
   const plan = selectedPlan?.plan;
@@ -83,7 +86,11 @@ const SubscriptionPurchaseModal = ({
       maskClosable={false}
       confirmLoading={paying}
       okButtonProps={{
-        disabled: !selectedPaymentMethod || purchaseLimitReached,
+        disabled:
+          !selectedPaymentMethod ||
+          purchaseLimitReached ||
+          (selectedPaymentMethod?.provider === 'balance' &&
+            insufficientBalance),
       }}
     >
       {plan ? (
@@ -177,6 +184,29 @@ const SubscriptionPurchaseModal = ({
                   <Text type='tertiary'>{t('请选择支付方式')}</Text>
                 )}
               </div>
+              {selectedPaymentMethod?.provider === 'balance' && (
+                <>
+                  <div className='flex justify-between items-center'>
+                    <Text strong className='text-slate-700 dark:text-slate-200'>
+                      {t('所需余额')}：
+                    </Text>
+                    <Text className='text-slate-900 dark:text-slate-100'>
+                      {renderQuota(balanceCost)}
+                    </Text>
+                  </div>
+                  <div className='flex justify-between items-center'>
+                    <Text strong className='text-slate-700 dark:text-slate-200'>
+                      {t('可用余额')}：
+                    </Text>
+                    <Text
+                      type={insufficientBalance ? 'danger' : 'secondary'}
+                      className='text-slate-900 dark:text-slate-100'
+                    >
+                      {renderQuota(availableBalance)}
+                    </Text>
+                  </div>
+                </>
+              )}
             </div>
           </Card>
 
@@ -196,6 +226,15 @@ const SubscriptionPurchaseModal = ({
               closeIcon={null}
             />
           )}
+          {selectedPaymentMethod?.provider === 'balance' &&
+            insufficientBalance && (
+              <Banner
+                type='danger'
+                description={t('余额不足')}
+                className='!rounded-xl'
+                closeIcon={null}
+              />
+            )}
         </div>
       ) : null}
     </Modal>

@@ -1385,6 +1385,7 @@ const TopUp = () => {
           activeSubscriptions={activeSubscriptions}
           allSubscriptions={allSubscriptions}
           reloadSubscriptionSelf={getSubscriptionSelf}
+          reloadUserQuota={getUserQuota}
         />
         <InvitationCard
           t={t}

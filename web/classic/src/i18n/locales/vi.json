@@ -4439,6 +4439,11 @@
     "当前手续费比例：{{percent}}%，手续费不退": "Tỷ lệ phí hiện tại: {{percent}}%, phí không được hoàn",
     "转为管理员赠送后会同步修改日志、移出账单管理和充值排行，支付金额与手续费会归零。": "Sau khi chuyển thành quà tặng quản trị, nhật ký sẽ được cập nhật, đơn sẽ bị loại khỏi quản lý hóa đơn và bảng xếp hạng nạp, số tiền thanh toán và phí sẽ về 0.",
     "调整额度成功，手续费 {{percent}}%，手续费不退": "Điều chỉnh hạn mức thành công, phí {{percent}}%, phí không được hoàn",
-    "管理员充值按支付宝官方充值价格计算支付金额，并按配置比例收取不可退手续费。": "Nạp bởi quản trị viên tính số tiền thanh toán theo giá nạp Alipay chính thức và thu phí không hoàn theo tỷ lệ đã cấu hình."
+    "管理员充值按支付宝官方充值价格计算支付金额，并按配置比例收取不可退手续费。": "Nạp bởi quản trị viên tính số tiền thanh toán theo giá nạp Alipay chính thức và thu phí không hoàn theo tỷ lệ đã cấu hình.",
+    "余额支付": "Thanh toán bằng số dư",
+    "可用余额": "Số dư khả dụng",
+    "所需余额": "Số dư cần thiết",
+    "余额不足": "Số dư không đủ",
+    "订阅购买成功": "Đã mua gói đăng ký thành công"
   }
 }

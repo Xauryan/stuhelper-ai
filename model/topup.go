@@ -55,6 +55,7 @@ const (
 	PaymentMethodWaffoPancake      = "waffo_pancake"
 	PaymentMethodAlipayOfficial    = "alipay_official"
 	PaymentMethodWechatPayOfficial = "wxpay_official"
+	PaymentMethodBalance           = "balance"
 	PaymentMethodAdminAdd          = "admin_add"
 	PaymentMethodAdminAddLegacy    = "管理员增加"
 	PaymentMethodAdminRecharge     = "管理员充值"
@@ -68,6 +69,7 @@ const (
 	PaymentProviderWaffoPancake      = "waffo_pancake"
 	PaymentProviderAlipayOfficial    = "alipay_official"
 	PaymentProviderWechatPayOfficial = "wxpay_official"
+	PaymentProviderBalance           = "balance"
 	PaymentProviderAdmin             = "admin"
 )
 

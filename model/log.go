@@ -160,7 +160,7 @@ func recordPaymentAuditLog(userId int, logType int, content string, callerIp str
 
 func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int,
 	isStream bool, group string, other map[string]interface{}) {
-	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, content))
+	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, common.LocalLogPreview(content)))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
@@ -323,9 +323,15 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 		tx = LOG_DB.Where("logs.type = ?", logType)
 	}
 
-	tx = applyLogContainsFilter(tx, "logs.model_name", modelName)
-	tx = applyLogContainsFilter(tx, "logs.username", username)
-	tx = applyLogContainsFilter(tx, "logs.token_name", tokenName)
+	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
+		return nil, 0, err
+	}
+	if tx, err = applyExplicitLogTextFilter(tx, "logs.username", username); err != nil {
+		return nil, 0, err
+	}
+	if tokenName != "" {
+		tx = tx.Where("logs.token_name = ?", tokenName)
+	}
 	if requestId != "" {
 		tx = tx.Where("logs.request_id = ?", requestId)
 	}
@@ -406,8 +412,12 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		tx = LOG_DB.Where("logs.user_id = ? and logs.type = ?", userId, logType)
 	}
 
-	tx = applyLogContainsFilter(tx, "logs.model_name", modelName)
-	tx = applyLogContainsFilter(tx, "logs.token_name", tokenName)
+	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
+		return nil, 0, err
+	}
+	if tokenName != "" {
+		tx = tx.Where("logs.token_name = ?", tokenName)
+	}
 	if requestId != "" {
 		tx = tx.Where("logs.request_id = ?", requestId)
 	}
@@ -444,21 +454,18 @@ type Stat struct {
 	Tpm   int `json:"tpm"`
 }
 
-func logContainsPattern(input string) (string, bool) {
-	input = strings.TrimSpace(input)
-	if input == "" {
-		return "", false
+func applyExplicitLogTextFilter(tx *gorm.DB, column string, value string) (*gorm.DB, error) {
+	if value == "" {
+		return tx, nil
 	}
-	replacer := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_")
-	return "%" + replacer.Replace(input) + "%", true
-}
-
-func applyLogContainsFilter(tx *gorm.DB, column string, value string) *gorm.DB {
-	pattern, ok := logContainsPattern(value)
-	if !ok {
-		return tx
+	if strings.Contains(value, "%") {
+		pattern, err := sanitizeLikePattern(value)
+		if err != nil {
+			return nil, err
+		}
+		return tx.Where(column+" LIKE ? ESCAPE '!'", pattern), nil
 	}
-	return tx.Where(column+" LIKE ? ESCAPE '!'", pattern)
+	return tx.Where(column+" = ?", value), nil
 }
 
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
@@ -467,18 +474,28 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	// 为rpm和tpm创建单独的查询
 	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, sum(prompt_tokens) + sum(completion_tokens) tpm")
 
-	tx = applyLogContainsFilter(tx, "username", username)
-	rpmTpmQuery = applyLogContainsFilter(rpmTpmQuery, "username", username)
-	tx = applyLogContainsFilter(tx, "token_name", tokenName)
-	rpmTpmQuery = applyLogContainsFilter(rpmTpmQuery, "token_name", tokenName)
+	if tx, err = applyExplicitLogTextFilter(tx, "username", username); err != nil {
+		return stat, err
+	}
+	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "username", username); err != nil {
+		return stat, err
+	}
+	if tokenName != "" {
+		tx = tx.Where("token_name = ?", tokenName)
+		rpmTpmQuery = rpmTpmQuery.Where("token_name = ?", tokenName)
+	}
 	if startTimestamp != 0 {
 		tx = tx.Where("created_at >= ?", startTimestamp)
 	}
 	if endTimestamp != 0 {
 		tx = tx.Where("created_at <= ?", endTimestamp)
 	}
-	tx = applyLogContainsFilter(tx, "model_name", modelName)
-	rpmTpmQuery = applyLogContainsFilter(rpmTpmQuery, "model_name", modelName)
+	if tx, err = applyExplicitLogTextFilter(tx, "model_name", modelName); err != nil {
+		return stat, err
+	}
+	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "model_name", modelName); err != nil {
+		return stat, err
+	}
 	if channel != 0 {
 		tx = tx.Where("channel_id = ?", channel)
 		rpmTpmQuery = rpmTpmQuery.Where("channel_id = ?", channel)

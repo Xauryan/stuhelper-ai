@@ -34,6 +34,7 @@ import {
 } from '@douyinfe/semi-ui';
 import {
   API,
+  getQuotaPerUnit,
   getSubscriptionModelLimits,
   showError,
   showSuccess,
@@ -103,6 +104,8 @@ const SubscriptionPlansCard = ({
   activeSubscriptions = [],
   allSubscriptions = [],
   reloadSubscriptionSelf,
+  userQuota = 0,
+  reloadUserQuota,
   getPaymentOrderTimeoutSeconds,
   withCard = true,
 }) => {
@@ -193,9 +196,17 @@ const SubscriptionPlansCard = ({
     return false;
   };
 
-  const subscriptionPaymentMethods = useMemo(
-    () =>
-      buildSubscriptionPaymentMethods({
+  const subscriptionPaymentMethods = useMemo(() => {
+    const methods = [
+      {
+        key: 'balance',
+        type: 'balance',
+        provider: 'balance',
+        name: t('余额支付'),
+      },
+    ];
+    methods.push(
+      ...buildSubscriptionPaymentMethods({
         plan: selectedPlan?.plan,
         payMethods,
         epayMethods,
@@ -208,20 +219,22 @@ const SubscriptionPlansCard = ({
         hasAlipayOfficial,
         hasWechatPayOfficial,
       }),
-    [
-      selectedPlan?.plan,
-      payMethods,
-      epayMethods,
-      priceRatio,
-      enableOnlineTopUp,
-      enableStripeTopUp,
-      enableCreemTopUp,
-      enableAlipayOfficialTopUp,
-      enableWechatPayOfficialTopUp,
-      hasAlipayOfficial,
-      hasWechatPayOfficial,
-    ],
-  );
+    );
+    return methods;
+  }, [
+    selectedPlan?.plan,
+    payMethods,
+    epayMethods,
+    priceRatio,
+    enableOnlineTopUp,
+    enableStripeTopUp,
+    enableCreemTopUp,
+    enableAlipayOfficialTopUp,
+    enableWechatPayOfficialTopUp,
+    hasAlipayOfficial,
+    hasWechatPayOfficial,
+    t,
+  ]);
   const selectedPaymentMethod = useMemo(
     () =>
       subscriptionPaymentMethods.find(
@@ -229,6 +242,13 @@ const SubscriptionPlansCard = ({
       ) || null,
     [subscriptionPaymentMethods, selectedPaymentKey],
   );
+  const quotaPerUnit = Number(getQuotaPerUnit()) || 500000;
+  const balanceCost = Math.max(
+    0,
+    Math.ceil(Number(selectedPlan?.plan?.price_amount || 0) * quotaPerUnit),
+  );
+  const availableBalance = Math.max(0, Number(userQuota || 0));
+  const insufficientBalance = availableBalance < balanceCost;
 
   React.useEffect(() => {
     if (!selectedPlan?.plan) {
@@ -268,6 +288,10 @@ const SubscriptionPlansCard = ({
       0,
     paymentMethod: selectedPaymentMethod?.type,
   });
+  const selectedPayAmountDisplay =
+    selectedPaymentMethod?.provider === 'balance'
+      ? renderQuota(balanceCost)
+      : selectedPayAmount;
 
   const renderPaymentIcon = (method) => {
     if (method?.type === 'alipay' || method?.type === 'alipay_official') {
@@ -278,6 +302,9 @@ const SubscriptionPlansCard = ({
     }
     if (method?.type === 'stripe') {
       return <SiStripe size={18} color='#635BFF' />;
+    }
+    if (method?.type === 'balance') {
+      return <CreditCard size={18} color='var(--semi-color-primary)' />;
     }
     if (method?.icon) {
       return (
@@ -376,6 +403,38 @@ const SubscriptionPlansCard = ({
         submitEpayForm({ url: res.data.url, params: res.data.data });
         showSuccess(t('已发起支付'));
         closeBuy();
+      } else {
+        const errorMsg =
+          typeof res.data?.data === 'string'
+            ? res.data.data
+            : res.data?.message || t('支付失败');
+        showError(errorMsg);
+      }
+    } catch (e) {
+      showError(t('支付请求失败'));
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const payBalance = async () => {
+    if (!selectedPlan?.plan?.id) {
+      showError(t('请选择订阅套餐'));
+      return;
+    }
+    if (insufficientBalance) {
+      showError(t('余额不足'));
+      return;
+    }
+    setPaying(true);
+    try {
+      const res = await API.post('/api/subscription/balance/pay', {
+        plan_id: selectedPlan.plan.id,
+      });
+      if (res.data?.message === 'success') {
+        showSuccess(t('订阅购买成功'));
+        closeBuy();
+        await Promise.all([reloadSubscriptionSelf?.(), reloadUserQuota?.()]);
       } else {
         const errorMsg =
           typeof res.data?.data === 'string'
@@ -610,6 +669,10 @@ const SubscriptionPlansCard = ({
       showError(t('请选择支付方式'));
       return;
     }
+    if (selectedPaymentMethod.provider === 'balance' && insufficientBalance) {
+      showError(t('余额不足'));
+      return;
+    }
     if (
       shouldBlockOfficialWechatMobilePayment(
         selectedPaymentMethod.provider,
@@ -627,6 +690,10 @@ const SubscriptionPlansCard = ({
   const confirmSubscriptionPurchase = async () => {
     if (!selectedPaymentMethod) {
       showError(t('请选择支付方式'));
+      return;
+    }
+    if (selectedPaymentMethod.provider === 'balance') {
+      await payBalance();
       return;
     }
     if (selectedPaymentMethod.provider === 'stripe') {
@@ -1105,6 +1172,9 @@ const SubscriptionPlansCard = ({
                           type='primary'
                           icon={renderPaymentIcon(method)}
                           onClick={() => setSelectedPaymentKey(method.key)}
+                          disabled={
+                            method.provider === 'balance' && insufficientBalance
+                          }
                           className='!rounded-lg !px-4 !py-2'
                         >
                           {method.name}
@@ -1119,8 +1189,13 @@ const SubscriptionPlansCard = ({
                           {t('应付金额')}
                         </Text>
                         <div className='text-2xl font-bold text-purple-600'>
-                          {selectedPayAmount}
+                          {selectedPayAmountDisplay}
                         </div>
+                        {selectedPaymentMethod?.provider === 'balance' && (
+                          <Text type='tertiary' size='small'>
+                            {t('可用余额')}：{renderQuota(availableBalance)}
+                          </Text>
+                        )}
                       </div>
                       <Button
                         theme='solid'
@@ -1128,7 +1203,9 @@ const SubscriptionPlansCard = ({
                         loading={paying}
                         disabled={
                           !selectedPaymentMethod ||
-                          selectedPlanPurchaseLimitReached
+                          selectedPlanPurchaseLimitReached ||
+                          (selectedPaymentMethod.provider === 'balance' &&
+                            insufficientBalance)
                         }
                         onClick={openBuy}
                       >
@@ -1141,6 +1218,12 @@ const SubscriptionPlansCard = ({
                         {selectedPlanPurchaseLimit})
                       </Text>
                     )}
+                    {selectedPaymentMethod?.provider === 'balance' &&
+                      insufficientBalance && (
+                        <Text type='danger' size='small'>
+                          {t('余额不足')}
+                        </Text>
+                      )}
                   </>
                 ) : (
                   <Banner
@@ -1176,8 +1259,11 @@ const SubscriptionPlansCard = ({
         selectedPlan={selectedPlan}
         paying={paying}
         selectedPaymentMethod={selectedPaymentMethod}
-        displayPayAmount={selectedPayAmount}
+        displayPayAmount={selectedPayAmountDisplay}
         purchaseLimitInfo={selectedPlanPurchaseInfo}
+        balanceCost={balanceCost}
+        availableBalance={availableBalance}
+        insufficientBalance={insufficientBalance}
         onConfirm={confirmSubscriptionPurchase}
       />
 

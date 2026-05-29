@@ -3908,6 +3908,11 @@
     "当前手续费比例：{{percent}}%，手续费不退": "Taux de frais actuel : {{percent}} %, non remboursable",
     "转为管理员赠送后会同步修改日志、移出账单管理和充值排行，支付金额与手续费会归零。": "Après conversion en don administrateur, le journal est mis à jour, la commande est retirée de la gestion des factures et du classement des recharges, et le montant payé ainsi que les frais sont remis à zéro.",
     "调整额度成功，手续费 {{percent}}%，手续费不退": "Quota ajusté avec succès, frais {{percent}} %, non remboursables",
-    "管理员充值按支付宝官方充值价格计算支付金额，并按配置比例收取不可退手续费。": "Les recharges administrateur calculent le montant payé selon le prix de recharge officiel Alipay et appliquent des frais non remboursables au taux configuré."
+    "管理员充值按支付宝官方充值价格计算支付金额，并按配置比例收取不可退手续费。": "Les recharges administrateur calculent le montant payé selon le prix de recharge officiel Alipay et appliquent des frais non remboursables au taux configuré.",
+    "余额支付": "Payer avec le solde",
+    "可用余额": "Solde disponible",
+    "所需余额": "Solde requis",
+    "余额不足": "Solde insuffisant",
+    "订阅购买成功": "Abonnement acheté avec succès"
   }
 }

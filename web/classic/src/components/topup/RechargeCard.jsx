@@ -119,6 +119,7 @@ const RechargeCard = ({
   activeSubscriptions = [],
   allSubscriptions = [],
   reloadSubscriptionSelf,
+  reloadUserQuota,
 }) => {
   const onlineFormApiRef = useRef(null);
   const redeemFormApiRef = useRef(null);
@@ -708,6 +709,8 @@ const RechargeCard = ({
                     activeSubscriptions={activeSubscriptions}
                     allSubscriptions={allSubscriptions}
                     reloadSubscriptionSelf={reloadSubscriptionSelf}
+                    userQuota={userState?.user?.quota || 0}
+                    reloadUserQuota={reloadUserQuota}
                     getPaymentOrderTimeoutSeconds={
                       getPaymentOrderTimeoutSeconds
                     }
