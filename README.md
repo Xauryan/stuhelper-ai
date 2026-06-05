@@ -15,13 +15,15 @@ ghcr.io/xauryan/stuhelper-ai:latest
 
 ## Development
 
-Backend code is written in Go. The product frontend is `web/classic` and uses Bun.
+Backend code is written in Go. The product frontend is `web/classic`; install frontend dependencies from the `web` workspace root.
 
 ```powershell
-cd web/classic
+cd web
 bun install
 bun run dev
 ```
+
+The frontend dev server listens on `http://localhost:3001` and proxies API traffic to the backend on `:3000`.
 
 For local container testing:
 

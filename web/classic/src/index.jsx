@@ -18,9 +18,11 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import React from 'react';
-import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import '@douyinfe/semi-ui/react19-adapter';
 import '@douyinfe/semi-ui/dist/css/semi.css';
+import { createRoot } from 'react-dom/client';
+import semiGlobal from '@douyinfe/semi-ui/lib/es/_utils/semi-global';
 import { UserProvider } from './context/User';
 import 'react-toastify/dist/ReactToastify.css';
 import { StatusProvider } from './context/Status';
@@ -32,6 +34,8 @@ import { LocaleProvider } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import zh_CN from '@douyinfe/semi-ui/lib/es/locale/source/zh_CN';
 import en_GB from '@douyinfe/semi-ui/lib/es/locale/source/en_GB';
+
+semiGlobal.config.createRoot = createRoot;
 
 // 欢迎信息（二次开发者未经允许不准将此移除）
 // Welcome message (Do not remove this without permission from the original developer)
@@ -54,7 +58,7 @@ function SemiLocaleWrapper({ children }) {
 
 // initialization
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const root = createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
     <StatusProvider>

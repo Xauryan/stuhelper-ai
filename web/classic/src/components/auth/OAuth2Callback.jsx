@@ -36,7 +36,7 @@ const OAuth2Callback = (props) => {
   const [, userDispatch] = useContext(UserContext);
   const navigate = useNavigate();
 
-  // 防止 React 18 Strict Mode 下重复执行
+  // 防止 React Strict Mode 下重复执行
   const hasExecuted = useRef(false);
 
   // 最大重试次数
@@ -82,7 +82,7 @@ const OAuth2Callback = (props) => {
   };
 
   useEffect(() => {
-    // 防止 React 18 Strict Mode 下重复执行
+    // 防止 React Strict Mode 下重复执行
     if (hasExecuted.current) {
       return;
     }

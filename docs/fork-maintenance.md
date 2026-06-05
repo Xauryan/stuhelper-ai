@@ -122,8 +122,11 @@ git merge <upstream-tag>
 ```powershell
 go test ./...
 go test ./middleware -count=1
-Set-Location web/classic; bun run build
-Set-Location web/classic; bun run i18n:status
+Set-Location web
+bun install --frozen-lockfile
+Set-Location classic
+bun run build
+bun run i18n:status
 ```
 
 如果全量命令因为仓库已有状态失败，应记录失败原因，以及能够证明本次变更范围的

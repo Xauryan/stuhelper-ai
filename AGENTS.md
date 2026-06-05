@@ -7,7 +7,7 @@ This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI pro
 ## Tech Stack
 
 - **Backend**: Go 1.22+, Gin web framework, GORM v2 ORM
-- **Frontend**: React 18, Vite, Semi Design, Tailwind CSS
+- **Frontend**: React 19, Rsbuild, Semi Design, Tailwind CSS
 - **Databases**: SQLite, MySQL, PostgreSQL (all three must be supported)
 - **Cache**: Redis (go-redis) + in-memory cache
 - **Auth**: JWT, WebAuthn/Passkeys, OAuth (GitHub, Discord, OIDC, etc.)
@@ -34,7 +34,7 @@ i18n/          — Backend internationalization (go-i18n, en/zh)
 oauth/         — OAuth provider implementations
 pkg/           — Internal packages (cachex, perf metrics, billing helpers)
 web/             — Frontend themes container
- web/classic/   — Classic frontend (React 18, Vite, Semi Design)
+ web/classic/   — Classic frontend (React 19, Rsbuild, Semi Design)
   web/classic/src/i18n/ — Frontend internationalization (i18next, zh/en/fr/ru/ja/vi)
 ```
 
@@ -49,7 +49,7 @@ web/             — Frontend themes container
 - Languages: en (base), zh (fallback), fr, ru, ja, vi
 - Translation files: `web/classic/src/i18n/locales/{lang}.json` — flat JSON, keys are English source strings
 - Usage: `useTranslation()` hook, call `t('English key')` in components
-- CLI tools: `bun run i18n:sync` (from `web/classic/`)
+- CLI tools: `bun run i18n:sync` (from `web/classic/` after installing from `web/`)
 
 ## Rules
 
@@ -93,11 +93,11 @@ All database code MUST be fully compatible with all three databases simultaneous
 
 ### Rule 3: Frontend — Prefer Bun
 
-Use `bun` as the preferred package manager and script runner for the frontend (`web/classic/` directory):
-- `bun install` for dependency installation
-- `bun run dev` for development server
-- `bun run build` for production build
-- `bun run i18n:*` for i18n tooling
+Use `bun` as the preferred package manager and script runner for the frontend (`web/` workspace root with `classic` workspace):
+- `cd web && bun install` for dependency installation; the lock file lives at `web/bun.lock`.
+- `cd web && bun run dev` for the classic development server on port 3001.
+- `cd web && bun run build` for the classic production build.
+- `cd web/classic && bun run i18n:*` for i18n tooling after installing dependencies from `web/`.
 
 ### Rule 4: New Channel StreamOptions Support
 

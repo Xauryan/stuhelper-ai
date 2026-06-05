@@ -137,30 +137,32 @@ const Home = () => {
   }, [homePageRawContent, postIframePreferences]);
 
   return (
-    <div className='w-full overflow-x-hidden'>
+    <div className='classic-page-fill classic-home-page w-full overflow-x-hidden'>
       {homePageContentLoaded && homePageRawContent === '' ? (
-        <QuantumHome
-          t={t}
-          isChinese={isChinese}
-          isMobile={isMobile}
-          serverAddress={serverAddress}
-          endpointItems={endpointItems}
-          endpointIndex={endpointIndex}
-          onSelectEndpoint={setEndpointIndex}
-          onCopyBaseURL={handleCopyBaseURL}
-          isDemoSiteMode={isDemoSiteMode}
-          docsLink={docsLink}
-          version={version}
-          systemName={systemName}
-          systemSubtitle={systemSubtitle}
-        />
+        <div className='classic-home-default w-full overflow-x-hidden'>
+          <QuantumHome
+            t={t}
+            isChinese={isChinese}
+            isMobile={isMobile}
+            serverAddress={serverAddress}
+            endpointItems={endpointItems}
+            endpointIndex={endpointIndex}
+            onSelectEndpoint={setEndpointIndex}
+            onCopyBaseURL={handleCopyBaseURL}
+            isDemoSiteMode={isDemoSiteMode}
+            docsLink={docsLink}
+            version={version}
+            systemName={systemName}
+            systemSubtitle={systemSubtitle}
+          />
+        </div>
       ) : (
-        <div className='overflow-x-hidden w-full'>
+        <div className='classic-page-fill overflow-x-hidden w-full'>
           {homePageRawContent.startsWith('https://') ? (
             <iframe
               ref={iframeRef}
               src={homePageRawContent}
-              className='w-full h-screen border-none'
+              className='w-full h-full border-none'
               onLoad={postIframePreferences}
               title={t('Custom homepage')}
             />

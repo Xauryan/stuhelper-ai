@@ -124,15 +124,15 @@
 | `15880270` | 2026-06-05 | 合入 | 2026-05-29 12:54:00 +0800 | feat: add subscription balance redemption toggle (#3071) | 手工合入套餐级余额兑换开关。后端新增 `SubscriptionPlan.allow_balance_pay`、迁移默认值和余额购买校验；classic 订阅管理增加“允许余额支付”，用户订阅购买页按套餐隐藏余额支付，后台列表展示余额支付配置，并补齐多语言文案。 |
 | `afb470e4` | 2026-06-05 | 合入 | 2026-05-30 19:54:02 +0800 | fix(model): correct idx_created_at_id index column order to (created_at, id) (#5191) | 合入 `logs.created_at,id` 复合索引顺序修正，使后续按 `created_at desc, id desc` 排序能命中索引。 |
 | `230a3592` | 2026-06-05 | 合入 | 2026-05-30 20:00:02 +0800 | perf: order admin logs by created_at to use composite index (#5116) | 合入管理员日志排序优化。`GetAllLogs` 改为按 `created_at desc, id desc` 排序，避免只按自增 ID 时无法充分利用时间索引。 |
-| `b2e25b7d` | 2026-06-05 | 合入 | 2026-05-31 13:49:50 +0800 | chore(deps): bump axios from 1.15.2 to 1.16.0 in /web/classic (#5185) | 合入 classic axios 依赖更新，并通过 `bun install` 刷新 `web/classic/bun.lock`。 |
+| `b2e25b7d` | 2026-06-05 | 合入 | 2026-05-31 13:49:50 +0800 | chore(deps): bump axios from 1.15.2 to 1.16.0 in /web/classic (#5185) | 合入 classic axios 依赖更新；当时刷新 classic 锁文件，后续 Rsbuild workspace 迁移已统一到 `web/bun.lock`。 |
 | `0c7aceb8` | 2026-06-05 | 合入 | 2026-05-31 13:50:52 +0800 | feat: add claude opus 4.8 support (#5177) | 合入 Claude Opus 4.8 支持。补充 Claude/AWS/Vertex 模型映射、倍率与缓存倍率，并把 4.8 系列纳入 adaptive thinking 后缀处理和测试。 |
 | `08604465` | 2026-06-05 | 忽略 | 2026-06-01 17:58:02 +0800 | fix(pricing): sync custom model icons | default-only 定价图标同步。本地 classic 价格展示未复用 default 图标映射，不移植。 |
 | `45d54c16` | 2026-06-05 | merge-only | 2026-06-01 18:17:58 +0800 | fix(pricing): sync custom model icons #5224 | 上游 PR merge commit，实际内容由 `08604465` 处理；不单独移植。 |
-| `b596de73` | 2026-06-05 | 忽略 | 2026-06-01 19:12:39 +0800 | chore(web): centralize shared frontend dependency versions | 上游把 default/classic 共享依赖版本集中到统一前端锁文件；本地保留 classic-only Vite/Bun overlay 和 `web/classic/bun.lock`，不合入共享锁文件结构。 |
-| `9a2e60df` | 2026-06-05 | merge-only | 2026-06-01 19:19:13 +0800 | chore(web): centralize shared frontend dependency versions #5227 | 上游 PR merge commit，实际内容由 `b596de73` 处理；不单独移植。 |
-| `1e9ff8a0` | 2026-06-05 | 忽略 | 2026-06-02 00:32:16 +0800 | feat(web): support classic Rsbuild dev and build | 上游 classic 构建链迁移到 Rsbuild 的准备项；本地 AGENTS 明确 classic 使用 Vite/Bun，且已有 Vite 8 覆盖，不合入。 |
-| `0bbcaa89` | 2026-06-05 | 忽略 | 2026-06-02 00:50:29 +0800 | fix(classic): inject Semi React 19 adapter | 依赖上游 React 19/Rsbuild 迁移。本地 classic 仍为 React 18 + Semi/Vite，不需要 Semi React 19 adapter。 |
-| `0ff9c35e` | 2026-06-05 | merge-only | 2026-06-02 11:33:33 +0800 | feat(web): support classic Rsbuild dev and build | 上游 PR merge commit，实际内容由 `1e9ff8a0` 和 `0bbcaa89` 处理；不单独移植。 |
+| `b596de73` | 2026-06-06 | 合入 | 2026-06-01 19:12:39 +0800 | chore(web): centralize shared frontend dependency versions | 手工合入前端 workspace 依赖集中管理。本地没有 `web/default`，因此 `web/package.json` 只声明 `classic` workspace，锁文件迁移为 `web/bun.lock`，workspace 包名保持 StuHelper AI 品牌。 |
+| `9a2e60df` | 2026-06-06 | merge-only | 2026-06-01 19:19:13 +0800 | chore(web): centralize shared frontend dependency versions #5227 | 上游 PR merge commit，实际内容由 `b596de73` 处理；本地按 classic-only workspace 适配。 |
+| `1e9ff8a0` | 2026-06-06 | 合入 | 2026-06-02 00:32:16 +0800 | feat(web): support classic Rsbuild dev and build | 手工合入 classic Rsbuild dev/build。删除 Vite 配置，新增 `web/classic/rsbuild.config.ts`，React 依赖升至 19，并把 Dockerfile、makefile 和开发文档调整为从 `web` 根 workspace 安装依赖。 |
+| `0bbcaa89` | 2026-06-06 | 合入 | 2026-06-02 00:50:29 +0800 | fix(classic): inject Semi React 19 adapter | 合入 classic 入口 `@douyinfe/semi-ui/react19-adapter` 注入，配合 React 19 运行。 |
+| `0ff9c35e` | 2026-06-06 | merge-only | 2026-06-02 11:33:33 +0800 | feat(web): support classic Rsbuild dev and build | 上游 PR merge commit，实际内容由 `1e9ff8a0` 和 `0bbcaa89` 处理；本地已按 classic-only 适配。 |
 | `4d20e053` | 2026-06-05 | 忽略 | 2026-06-02 12:09:47 +0800 | fix(channels): reveal advanced validation errors | default-only 渠道表单校验展示优化。本地 classic 渠道表单为独立实现，不直接移植 default 组件。 |
 | `cb5c0453` | 2026-06-05 | 忽略 | 2026-06-02 12:31:32 +0800 | fix(channels): avoid expanding advanced settings for model mapping | default-only 渠道高级设置展开逻辑修复。本地 classic 不移植。 |
 | `7791b784` | 2026-06-05 | 忽略 | 2026-06-02 14:28:35 +0800 | chore(fd): delete the test file | 上游前端临时测试文件清理，本地没有对应 default/Rsbuild 测试文件，不移植。 |
@@ -150,3 +150,5 @@
 | `189913b7` | 2026-06-05 | 合入 | 2026-06-05 11:54:57 +0800 | fix(i18n): clarify thinking adapter copy (#5242) | 合入 classic 全局模型设置文案调整，将“禁用思考处理的模型列表”改为“不自动处理思考后缀的模型列表”，并补齐多语言翻译。 |
 | `01c2128e` | 2026-06-05 | 合入 | 2026-06-05 12:12:45 +0800 | fix: 收窄 OpenAI o 系列模型适配范围 (#5293) | 合入 OpenAI reasoning 模型识别收窄。只将 `o1/o3/o4` 系列按 reasoning 模型处理，避免 `omni-*` 等以 `o` 开头的非 reasoning 模型被错误改 system role 或温度参数。 |
 | `32805849` | 2026-06-05 | 合入 | 2026-06-05 12:18:57 +0800 | fix: reuse stream scanner buffer in channel handlers (#5225) | 合入 stream scanner buffer 复用。新增 `helper.NewStreamScanner` 并切换 Cloudflare、Cohere、Coze、Ollama、Tencent、Zhipu 等流式适配器，统一使用可配置的大行缓冲，补充大行 scanner 测试。 |
+| `b5331936` | 2026-06-06 | 忽略 | 2026-06-05 06:34:22 +0800 | feat(web): show user id on profile page | default-only profile header 展示用户 ID。本地已删除 `web/default`，classic 用户资料页不复用该组件，不移植。 |
+| `adc390c5` | 2026-06-06 | merge-only | 2026-06-06 00:45:13 +0800 | feat(web): show user id on profile page (#5317) | 上游 PR merge commit，实际内容由 `b5331936` 处理；default-only，不单独移植。 |
