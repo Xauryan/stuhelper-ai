@@ -231,6 +231,10 @@ func TestPurchaseSubscriptionWithBalanceDeductsQuotaAndCreatesSubscriptionOrder(
 	truncateTables(t)
 	setReferralCommissionSettingsForTest(t, true, 10, 0)
 
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
 	common.QuotaPerUnit = 1000
 	require.NoError(t, DB.Create(&User{
 		Id:        3008,
@@ -285,6 +289,48 @@ func TestPurchaseSubscriptionWithBalanceDeductsQuotaAndCreatesSubscriptionOrder(
 	var commissionCount int64
 	require.NoError(t, DB.Model(&ReferralCommission{}).Count(&commissionCount).Error)
 	assert.EqualValues(t, 0, commissionCount)
+}
+
+func TestPurchaseSubscriptionWithBalanceRejectsDisabledBalancePayPlan(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 1000
+	require.NoError(t, DB.Create(&User{
+		Id:       3010,
+		Username: "balance-subscription-disabled-user",
+		Status:   common.UserStatusEnabled,
+		Quota:    2500,
+		Group:    "default",
+		AffCode:  "balance-subscription-disabled-user",
+	}).Error)
+
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1010, 100, false, "")
+	plan.PriceAmount = 1.25
+	plan.AllowBalancePay = common.GetPointer(false)
+	require.NoError(t, DB.Save(plan).Error)
+	InvalidateSubscriptionPlanCache(plan.Id)
+
+	err := PurchaseSubscriptionWithBalance(3010, plan.Id)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "不允许使用余额兑换")
+	assert.Equal(t, 2500, getUserQuotaForPaymentGuardTest(t, 3010))
+
+	var subCount int64
+	require.NoError(t, DB.Model(&UserSubscription{}).Where("user_id = ?", 3010).Count(&subCount).Error)
+	assert.EqualValues(t, 0, subCount)
+
+	var orderCount int64
+	require.NoError(t, DB.Model(&SubscriptionOrder{}).Where("user_id = ?", 3010).Count(&orderCount).Error)
+	assert.EqualValues(t, 0, orderCount)
+
+	var topUpCount int64
+	require.NoError(t, DB.Model(&TopUp{}).Where("user_id = ?", 3010).Count(&topUpCount).Error)
+	assert.EqualValues(t, 0, topUpCount)
 }
 
 func TestPurchaseSubscriptionWithBalanceInsufficientQuotaDoesNotCreateSubscription(t *testing.T) {

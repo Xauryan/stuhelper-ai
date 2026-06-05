@@ -4125,6 +4125,10 @@
     "可用余额": "Available balance",
     "所需余额": "Required balance",
     "余额不足": "Insufficient balance",
-    "订阅购买成功": "Subscription purchased successfully"
+    "订阅购买成功": "Subscription purchased successfully",
+    "渠道禁用后保留亲和": "Keep Affinity When Channel Is Disabled",
+    "开启后，亲和到的渠道被禁用，或不再适用于当前分组/模型时，仍保留这条亲和；关闭时会删除并重新选择渠道。": "When enabled, keep the affinity entry even if the affinity channel is disabled or no longer usable for the current group/model. When disabled, the entry will be deleted and another channel will be selected.",
+    "允许余额支付": "Allow Balance Payment",
+    "不自动处理思考后缀的模型列表": "Models That Skip Automatic Thinking Suffix Processing"
   }
 }

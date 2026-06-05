@@ -120,3 +120,33 @@
 | `63ead2bf` | 2026-05-29 | 合入 | 2026-05-28 15:02:00 +0800 | chore(repo): ignore playwright mcp artifacts | 手工合入仓库维护项，在 `.gitignore` 增加 `.playwright-mcp`，避免 Playwright MCP 临时产物进入工作区。 |
 | `e79cee1e` | 2026-05-29 | 忽略 | 2026-05-28 15:10:17 +0800 | perf(form): focus first validation error on submit | default-only 表单校验失败自动聚焦实现。本地 classic 使用 Semi Design 表单体系，不移植 default 组件。 |
 | `e8c836d7` | 2026-05-29 | merge-only | 2026-05-28 23:34:02 +0800 | fix(web): improve form validation error focus #5163 | 上游 PR merge commit，内容为 `e79cee1e` 和 `.gitignore` 变更；按对应提交处理，不单独移植。 |
+| `38bf2d8d` | 2026-06-05 | 忽略 | 2026-05-29 12:18:52 +0800 | feat(keys/cc-switch-dialog): 修复自定义cc-switch名称失焦后重置问题 (#5170) | default-only API key / cc-switch dialog 前端修复；本地 classic 令牌页面未复用该组件，不移植。 |
+| `15880270` | 2026-06-05 | 合入 | 2026-05-29 12:54:00 +0800 | feat: add subscription balance redemption toggle (#3071) | 手工合入套餐级余额兑换开关。后端新增 `SubscriptionPlan.allow_balance_pay`、迁移默认值和余额购买校验；classic 订阅管理增加“允许余额支付”，用户订阅购买页按套餐隐藏余额支付，后台列表展示余额支付配置，并补齐多语言文案。 |
+| `afb470e4` | 2026-06-05 | 合入 | 2026-05-30 19:54:02 +0800 | fix(model): correct idx_created_at_id index column order to (created_at, id) (#5191) | 合入 `logs.created_at,id` 复合索引顺序修正，使后续按 `created_at desc, id desc` 排序能命中索引。 |
+| `230a3592` | 2026-06-05 | 合入 | 2026-05-30 20:00:02 +0800 | perf: order admin logs by created_at to use composite index (#5116) | 合入管理员日志排序优化。`GetAllLogs` 改为按 `created_at desc, id desc` 排序，避免只按自增 ID 时无法充分利用时间索引。 |
+| `b2e25b7d` | 2026-06-05 | 合入 | 2026-05-31 13:49:50 +0800 | chore(deps): bump axios from 1.15.2 to 1.16.0 in /web/classic (#5185) | 合入 classic axios 依赖更新，并通过 `bun install` 刷新 `web/classic/bun.lock`。 |
+| `0c7aceb8` | 2026-06-05 | 合入 | 2026-05-31 13:50:52 +0800 | feat: add claude opus 4.8 support (#5177) | 合入 Claude Opus 4.8 支持。补充 Claude/AWS/Vertex 模型映射、倍率与缓存倍率，并把 4.8 系列纳入 adaptive thinking 后缀处理和测试。 |
+| `08604465` | 2026-06-05 | 忽略 | 2026-06-01 17:58:02 +0800 | fix(pricing): sync custom model icons | default-only 定价图标同步。本地 classic 价格展示未复用 default 图标映射，不移植。 |
+| `45d54c16` | 2026-06-05 | merge-only | 2026-06-01 18:17:58 +0800 | fix(pricing): sync custom model icons #5224 | 上游 PR merge commit，实际内容由 `08604465` 处理；不单独移植。 |
+| `b596de73` | 2026-06-05 | 忽略 | 2026-06-01 19:12:39 +0800 | chore(web): centralize shared frontend dependency versions | 上游把 default/classic 共享依赖版本集中到统一前端锁文件；本地保留 classic-only Vite/Bun overlay 和 `web/classic/bun.lock`，不合入共享锁文件结构。 |
+| `9a2e60df` | 2026-06-05 | merge-only | 2026-06-01 19:19:13 +0800 | chore(web): centralize shared frontend dependency versions #5227 | 上游 PR merge commit，实际内容由 `b596de73` 处理；不单独移植。 |
+| `1e9ff8a0` | 2026-06-05 | 忽略 | 2026-06-02 00:32:16 +0800 | feat(web): support classic Rsbuild dev and build | 上游 classic 构建链迁移到 Rsbuild 的准备项；本地 AGENTS 明确 classic 使用 Vite/Bun，且已有 Vite 8 覆盖，不合入。 |
+| `0bbcaa89` | 2026-06-05 | 忽略 | 2026-06-02 00:50:29 +0800 | fix(classic): inject Semi React 19 adapter | 依赖上游 React 19/Rsbuild 迁移。本地 classic 仍为 React 18 + Semi/Vite，不需要 Semi React 19 adapter。 |
+| `0ff9c35e` | 2026-06-05 | merge-only | 2026-06-02 11:33:33 +0800 | feat(web): support classic Rsbuild dev and build | 上游 PR merge commit，实际内容由 `1e9ff8a0` 和 `0bbcaa89` 处理；不单独移植。 |
+| `4d20e053` | 2026-06-05 | 忽略 | 2026-06-02 12:09:47 +0800 | fix(channels): reveal advanced validation errors | default-only 渠道表单校验展示优化。本地 classic 渠道表单为独立实现，不直接移植 default 组件。 |
+| `cb5c0453` | 2026-06-05 | 忽略 | 2026-06-02 12:31:32 +0800 | fix(channels): avoid expanding advanced settings for model mapping | default-only 渠道高级设置展开逻辑修复。本地 classic 不移植。 |
+| `7791b784` | 2026-06-05 | 忽略 | 2026-06-02 14:28:35 +0800 | chore(fd): delete the test file | 上游前端临时测试文件清理，本地没有对应 default/Rsbuild 测试文件，不移植。 |
+| `7aaa5332` | 2026-06-05 | merge-only | 2026-06-02 14:30:20 +0800 | fix(channels): reveal advanced validation errors #5239 | 上游 PR merge commit，实际内容由 `4d20e053`、`cb5c0453`、`7791b784` 处理；不单独移植。 |
+| `d17b566b` | 2026-06-05 | 忽略 | 2026-06-03 12:04:40 +0800 | docs: refine issue templates (#5271) | 上游 GitHub issue template 流程不适配本地 StuHelper AI/Xauryan 维护策略，不移植。 |
+| `b0ac0429` | 2026-06-05 | 忽略 | 2026-06-03 12:37:36 +0800 | fix(web): resolve TypeScript errors in usage logs mobile card | default-only usage logs TypeScript 修复。本地 classic 不使用 default usage logs mobile card。 |
+| `580ad97c` | 2026-06-05 | 合入 | 2026-06-03 22:23:12 +0800 | fix: convert usd amount by exchange rate in classic quota display | 合入 classic 额度金额展示修复。`renderQuotaWithAmount` 现在复用 `getCurrencyConfig()` 并按汇率换算金额，避免只切换货币符号不换算数值。 |
+| `00d23abf` | 2026-06-05 | merge-only | 2026-06-04 02:55:23 +0800 | fix: 修复余额显示时只切换了单位未切换数值 #5296 | 上游 PR merge commit，实际内容由 `580ad97c` 处理；不单独移植。 |
+| `3aa113b5` | 2026-06-05 | 合入 | 2026-06-04 18:21:35 +0800 | fix(dify): initialize file pointer before remote-image field assignment (#5134) | 合入 Dify 远程图片 nil pointer 修复，远程图片文件对象先初始化再设置类型、传输方式和 URL。 |
+| `87cc22d7` | 2026-06-05 | 合入 | 2026-06-04 18:48:30 +0800 | fix(distributor): resolve model for GET /v1/video/generations/:task_id (#5133) | 合入视频任务 GET 分发模型解析修复。`/v1/videos` 与 `/v1/video/generations` 查询任务时从任务记录恢复原始模型名，避免 token 模型限制场景选路错误。 |
+| `933ea0cd` | 2026-06-05 | 合入 | 2026-06-05 11:30:08 +0800 | fix: add relay idle connection timeout config (#5309) | 合入 `RELAY_IDLE_CONN_TIMEOUT` 配置，默认 90 秒，并补充 `.env.example`、Docker Compose 和 README 说明。 |
+| `4a188dee` | 2026-06-05 | 合入 | 2026-06-05 11:30:29 +0800 | feat: 支持配置渠道被禁用后是否清空渠道粘性 (#5306) | 合入渠道亲和缓存清理配置。默认在亲和渠道禁用或不适用于当前分组/模型时清除当前粘性并重新选路；新增 `keep_on_channel_disabled` 后端配置、classic 设置开关、测试和多语言文案。 |
+| `83068d11` | 2026-06-05 | 合入 | 2026-06-05 11:31:20 +0800 | fix(relay): fix Anthropic-compatible compatibility for GLM (avoid chunked encoding) (#5307) | 合入 Claude/Anthropic 兼容修复，透传上游请求体时记录 `UpstreamRequestBodySize`，避免 GLM 等兼容服务端因 chunked encoding 处理不兼容出错。 |
+| `d2f7f9ee` | 2026-06-05 | 合入 | 2026-06-05 11:39:29 +0800 | fix: limit anonymous request body (#5244) | 合入匿名公开接口请求体限制，新增 `ANONYMOUS_REQUEST_BODY_LIMIT_KB`，对注册、登录、找回、OAuth 绑定、支付回调等未认证 POST 路由施加默认 512KB 限制；本地官方支付宝/微信回调也纳入同一中间件。 |
+| `189913b7` | 2026-06-05 | 合入 | 2026-06-05 11:54:57 +0800 | fix(i18n): clarify thinking adapter copy (#5242) | 合入 classic 全局模型设置文案调整，将“禁用思考处理的模型列表”改为“不自动处理思考后缀的模型列表”，并补齐多语言翻译。 |
+| `01c2128e` | 2026-06-05 | 合入 | 2026-06-05 12:12:45 +0800 | fix: 收窄 OpenAI o 系列模型适配范围 (#5293) | 合入 OpenAI reasoning 模型识别收窄。只将 `o1/o3/o4` 系列按 reasoning 模型处理，避免 `omni-*` 等以 `o` 开头的非 reasoning 模型被错误改 system role 或温度参数。 |
+| `32805849` | 2026-06-05 | 合入 | 2026-06-05 12:18:57 +0800 | fix: reuse stream scanner buffer in channel handlers (#5225) | 合入 stream scanner buffer 复用。新增 `helper.NewStreamScanner` 并切换 Cloudflare、Cohere、Coze、Ollama、Tencent、Zhipu 等流式适配器，统一使用可配置的大行缓冲，补充大行 scanner 测试。 |

@@ -3913,6 +3913,10 @@
     "可用余额": "Solde disponible",
     "所需余额": "Solde requis",
     "余额不足": "Solde insuffisant",
-    "订阅购买成功": "Abonnement acheté avec succès"
+    "订阅购买成功": "Abonnement acheté avec succès",
+    "渠道禁用后保留亲和": "Conserver l'affinité après désactivation du canal",
+    "开启后，亲和到的渠道被禁用，或不再适用于当前分组/模型时，仍保留这条亲和；关闭时会删除并重新选择渠道。": "Lorsque cette option est activée, l'entrée d'affinité est conservée même si le canal associé est désactivé ou n'est plus utilisable pour le groupe/modèle actuel. Lorsqu'elle est désactivée, l'entrée est supprimée et un autre canal est sélectionné.",
+    "允许余额支付": "Autoriser le paiement par solde",
+    "不自动处理思考后缀的模型列表": "Modèles ignorant le traitement automatique du suffixe de réflexion"
   }
 }

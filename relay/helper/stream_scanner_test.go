@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,6 +55,22 @@ func buildSSEBody(n int) string {
 	}
 	b.WriteString("data: [DONE]\n")
 	return b.String()
+}
+
+func TestNewStreamScanner_AllowsLargeStreamLine(t *testing.T) {
+	oldMaxBufferMB := constant.StreamScannerMaxBufferMB
+	constant.StreamScannerMaxBufferMB = 2
+	t.Cleanup(func() {
+		constant.StreamScannerMaxBufferMB = oldMaxBufferMB
+	})
+
+	largePayload := strings.Repeat("x", 1<<20)
+	scanner := NewStreamScanner(strings.NewReader("data: " + largePayload + "\n"))
+	scanner.Split(bufio.ScanLines)
+
+	require.True(t, scanner.Scan())
+	require.Equal(t, "data: "+largePayload, scanner.Text())
+	require.NoError(t, scanner.Err())
 }
 
 type slowReader struct {

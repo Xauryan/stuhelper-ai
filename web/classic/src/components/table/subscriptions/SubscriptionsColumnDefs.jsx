@@ -258,9 +258,15 @@ const renderPaymentConfig = (text, record, t, enableEpay) => {
   const hasStripe = !!record?.plan?.stripe_price_id;
   const hasCreem = !!record?.plan?.creem_product_id;
   const hasEpay = !!enableEpay;
+  const allowBalancePay = record?.plan?.allow_balance_pay !== false;
 
   return (
     <Space spacing={4}>
+      {allowBalancePay && (
+        <Tag color='amber' shape='circle'>
+          {t('余额支付')}
+        </Tag>
+      )}
       {hasStripe && (
         <Tag color='violet' shape='circle'>
           Stripe
@@ -398,7 +404,7 @@ export const getSubscriptionsColumns = ({
     },
     {
       title: t('支付渠道'),
-      width: 180,
+      width: 220,
       render: (text, record) =>
         renderPaymentConfig(text, record, t, enableEpay),
     },

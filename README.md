@@ -44,6 +44,17 @@ docker compose pull
 docker compose up -d
 ```
 
+## Runtime Environment
+
+The following runtime variables are commonly adjusted in production:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `RELAY_TIMEOUT` | `0` | Overall upstream request timeout in seconds. `0` means no timeout. |
+| `RELAY_IDLE_CONN_TIMEOUT` | `90` | Upstream HTTP idle connection timeout in seconds. |
+| `STREAMING_TIMEOUT` | `300` | No-response timeout for streaming relay requests in seconds. |
+| `ANONYMOUS_REQUEST_BODY_LIMIT_KB` | `512` | Request body limit for unauthenticated public endpoints, in KB. Negative values fall back to the default. |
+
 ## Release
 
 Create and push a version tag:

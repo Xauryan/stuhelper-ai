@@ -197,14 +197,15 @@ const SubscriptionPlansCard = ({
   };
 
   const subscriptionPaymentMethods = useMemo(() => {
-    const methods = [
-      {
+    const methods = [];
+    if (selectedPlan?.plan?.allow_balance_pay !== false) {
+      methods.push({
         key: 'balance',
         type: 'balance',
         provider: 'balance',
         name: t('余额支付'),
-      },
-    ];
+      });
+    }
     methods.push(
       ...buildSubscriptionPaymentMethods({
         plan: selectedPlan?.plan,
