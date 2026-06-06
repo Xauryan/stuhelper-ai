@@ -27,9 +27,12 @@ type siteMeta struct {
 	Description string
 	Keywords    string
 	Image       string
+	Icon        string
 }
 
 var titleTagPattern = regexp.MustCompile(`(?is)<title>.*?</title>`)
+var linkIconPattern = regexp.MustCompile(`(?is)<link\b[^>]*\brel="[^"]*\bicon\b[^"]*"[^>]*>`)
+var hrefAttrPattern = regexp.MustCompile(`(?is)\bhref="[^"]*"`)
 
 func currentSiteMeta() siteMeta {
 	common.OptionMapRWMutex.RLock()
@@ -40,12 +43,14 @@ func currentSiteMeta() siteMeta {
 		title = "StuHelper AI"
 	}
 
+	icon := strings.TrimSpace(common.Logo)
+	if icon == "" || icon == "/favicon.ico" {
+		icon = "/logo.png"
+	}
+
 	image := strings.TrimSpace(common.SEOImage)
 	if image == "" {
-		image = strings.TrimSpace(common.Logo)
-	}
-	if image == "" {
-		image = "/logo.png"
+		image = icon
 	}
 
 	return siteMeta{
@@ -53,6 +58,7 @@ func currentSiteMeta() siteMeta {
 		Description: common.SEODescription,
 		Keywords:    common.SEOKeywords,
 		Image:       publicAssetURL(image),
+		Icon:        publicAssetURL(icon),
 	}
 }
 
@@ -100,6 +106,32 @@ func replaceTitle(page string, title string) string {
 	return strings.Replace(page, "</head>", "<title>"+escaped+"</title>\n</head>", 1)
 }
 
+func replaceIconLink(page string, href string) string {
+	if strings.TrimSpace(href) == "" {
+		return page
+	}
+	escaped := html.EscapeString(href)
+	if linkIconPattern.MatchString(page) {
+		return linkIconPattern.ReplaceAllStringFunc(page, func(match string) string {
+			if hrefAttrPattern.MatchString(match) {
+				return hrefAttrPattern.ReplaceAllString(match, `href="`+escaped+`"`)
+			}
+			end := strings.LastIndex(match, ">")
+			if end < 0 {
+				return match
+			}
+			return match[:end] + ` href="` + escaped + `"` + match[end:]
+		})
+	}
+
+	link := `    <link rel="icon" href="` + escaped + `" />` + "\n"
+	marker := `    <meta name="viewport"`
+	if strings.Contains(page, marker) {
+		return strings.Replace(page, marker, link+marker, 1)
+	}
+	return strings.Replace(page, "</head>", link+"</head>", 1)
+}
+
 func upsertKeywordsMeta(page string, keywords string) string {
 	if strings.Contains(page, `name="keywords"`) {
 		return replaceMetaContent(page, `name="keywords"`, keywords)
@@ -119,6 +151,7 @@ func renderClassicIndexPage(indexPage []byte) []byte {
 	page := string(indexPage)
 	meta := currentSiteMeta()
 
+	page = replaceIconLink(page, meta.Icon)
 	page = replaceMetaContent(page, `name="application-name"`, meta.Title)
 	page = replaceMetaContent(page, `name="apple-mobile-web-app-title"`, meta.Title)
 	page = replaceMetaContent(page, `name="description"`, meta.Description)
@@ -135,12 +168,26 @@ func renderClassicIndexPage(indexPage []byte) []byte {
 	return []byte(page)
 }
 
+func serveConfiguredFavicon(c *gin.Context) {
+	icon := currentSiteMeta().Icon
+	if icon == "" {
+		icon = "/logo.png"
+	}
+	c.Header("Cache-Control", "no-cache")
+	if strings.HasPrefix(strings.ToLower(icon), "data:") {
+		c.Status(http.StatusNoContent)
+		return
+	}
+	c.Redirect(http.StatusFound, icon)
+}
+
 func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 	classicFS := common.EmbedFolder(assets.ClassicBuildFS, "web/classic/dist")
 
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GlobalWebRateLimit())
 	router.Use(middleware.Cache())
+	router.GET("/favicon.ico", serveConfiguredFavicon)
 	router.Use(static.Serve("/", classicFS))
 	router.NoRoute(func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")

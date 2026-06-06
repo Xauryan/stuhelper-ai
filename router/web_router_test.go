@@ -1,10 +1,13 @@
 package router
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/setting/system_setting"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,6 +41,7 @@ func TestRenderClassicIndexPageInjectsConfiguredSiteMeta(t *testing.T) {
 <html>
   <head>
     <meta name="application-name" content="StuHelper AI" />
+    <link rel="icon" href="/logo.png" />
     <meta name="apple-mobile-web-app-title" content="StuHelper AI" />
     <meta
       name="description"
@@ -61,8 +65,32 @@ func TestRenderClassicIndexPageInjectsConfiguredSiteMeta(t *testing.T) {
 	require.Contains(t, rendered, `name="application-name" content="Xauryan &#34;Gateway&#34;"`)
 	require.Contains(t, rendered, `name="description"`+"\n"+`      content="AI gateway &amp; billing"`)
 	require.Contains(t, rendered, `<meta name="keywords" content="ai,gateway,billing" />`)
+	require.Contains(t, rendered, `<link rel="icon" href="https://example.com/custom-logo.png" />`)
 	require.Contains(t, rendered, `property="og:title" content="Xauryan &#34;Gateway&#34;"`)
 	require.Contains(t, rendered, `property="og:description" content="AI gateway &amp; billing"`)
 	require.Contains(t, rendered, `property="og:image" content="https://example.com/custom-logo.png"`)
 	require.Contains(t, rendered, `name="twitter:image" content="https://example.com/custom-logo.png"`)
+}
+
+func TestServeConfiguredFaviconRedirectsToConfiguredLogo(t *testing.T) {
+	originalLogo := common.Logo
+	originalServerAddress := system_setting.ServerAddress
+	t.Cleanup(func() {
+		common.Logo = originalLogo
+		system_setting.ServerAddress = originalServerAddress
+	})
+
+	common.Logo = "/custom-logo.png"
+	system_setting.ServerAddress = "https://example.com"
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/favicon.ico", nil)
+
+	serveConfiguredFavicon(c)
+
+	require.Equal(t, http.StatusFound, w.Code)
+	require.Equal(t, "https://example.com/custom-logo.png", w.Header().Get("Location"))
+	require.Equal(t, "no-cache", w.Header().Get("Cache-Control"))
 }
