@@ -158,3 +158,10 @@
 - 上游状态：执行 `git fetch upstream main --no-tags --prune` 后，`upstream/main` 仍为 `adc390c5`，没有比上表已记录的 `b5331936` / `adc390c5` 更新的提交。
 - 本地修复：迁移到 Rsbuild / React 19 / Semi adapter 后，补齐 classic 前端 lint 闭环。`web/classic/.prettierignore` 排除 `node_modules`、`dist`、`build`、`coverage`，避免 Prettier 扫描 Rsbuild 构建产物；同时格式化 `web/classic/src/components/topup/subscriptionPaymentDisplay.test.mjs` 和 `web/classic/src/hooks/usage-logs/useUsageLogsData.jsx`。
 - 验证结果：`cd web && bun run --cwd classic lint`、`cd web && bun run build`、`cd web && bun run --cwd classic i18n:status`、`git diff --check` 均通过。
+
+## 2026-06-06 rc10 Docker 镜像构建修复
+
+- 现象：`v1.0.0-rc.10` tag 已触发 `Publish Docker image` workflow，但镜像没有产出；失败点在 Dockerfile 前端 builder 阶段：`cd classic && VITE_REACT_APP_VERSION=$(cat /build/VERSION) bun run build`，Rspack 报错链路落到 `@lobehub/icons/es/features/ProviderIcon/DefaultIcon.js`。
+- 原因：本地 classic-only workspace 在同步上游 `b596de73` 依赖集中管理时继承了 `@lobehub/icons ^5.10.0`。该版本面向上游 default 前端依赖图，peer dependency 要求 `@lobehub/ui ^5` 与 `antd ^6`；StuHelper AI classic 当前实际是 `@lobehub/ui 2.x` / `antd 5.x`。本机旧依赖目录可掩盖问题，clean Docker build 使用冻结锁文件重新安装后暴露该 peer graph 不匹配。
+- 处理：`web/package.json` catalog 将 `@lobehub/icons` 固定回 classic 兼容的 `^2.1.0`，并刷新 `web/bun.lock`，使图标库、`@lobehub/ui` 与 `antd-style` 回到同一代 `antd 5` 依赖线。同步上游前端 workspace 时继续保留 classic-only 和该依赖约束，除非未来完整升级 `@lobehub/ui` / `antd` 并通过容器构建验证。
+- 验证结果：`cd web && bun install --frozen-lockfile`、`cd web && bun run --cwd classic lint`、`cd web && bun run build`、`docker build --target builder --progress=plain -t stuhelper-ai-frontend-builder-test .` 均通过。

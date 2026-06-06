@@ -128,7 +128,13 @@ Set-Location classic
 bun run lint
 bun run build
 bun run i18n:status
+Set-Location ../..
+docker build --target builder --progress=plain -t stuhelper-ai-frontend-builder-test .
 ```
+
+涉及发布 tag、Dockerfile、前端 workspace 依赖或构建链路时，必须额外执行上面的
+`docker build --target builder`，确认 clean Docker 前端构建和本机
+`node_modules` 状态无关。
 
 如果全量命令因为仓库已有状态失败，应记录失败原因，以及能够证明本次变更范围的
 更窄验证命令。

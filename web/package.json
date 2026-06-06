@@ -10,7 +10,7 @@
     "preview": "bun run --cwd classic preview"
   },
   "catalog": {
-    "@lobehub/icons": "^5.10.0",
+    "@lobehub/icons": "^2.1.0",
     "axios": "^1.16.1",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.20",
