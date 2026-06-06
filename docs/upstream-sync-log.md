@@ -165,3 +165,10 @@
 - 原因：本地 classic-only workspace 在同步上游 `b596de73` 依赖集中管理时继承了 `@lobehub/icons ^5.10.0`。该版本面向上游 default 前端依赖图，peer dependency 要求 `@lobehub/ui ^5` 与 `antd ^6`；StuHelper AI classic 当前实际是 `@lobehub/ui 2.x` / `antd 5.x`。本机旧依赖目录可掩盖问题，clean Docker build 使用冻结锁文件重新安装后暴露该 peer graph 不匹配。
 - 处理：`web/package.json` catalog 将 `@lobehub/icons` 固定回 classic 兼容的 `^2.1.0`，并刷新 `web/bun.lock`，使图标库、`@lobehub/ui` 与 `antd-style` 回到同一代 `antd 5` 依赖线。同步上游前端 workspace 时继续保留 classic-only 和该依赖约束，除非未来完整升级 `@lobehub/ui` / `antd` 并通过容器构建验证。
 - 验证结果：`cd web && bun install --frozen-lockfile`、`cd web && bun run --cwd classic lint`、`cd web && bun run build`、`docker build --target builder --progress=plain -t stuhelper-ai-frontend-builder-test .` 均通过。
+
+## 2026-06-06 上游同步后代码质量审查
+
+- 审查范围：核对本轮上游同步、classic Rsbuild 迁移、站点元信息注入和支付通道相关覆盖层。重点检查是否存在已在同步台账中判定“不合入”的支付路径仍被运行时暴露，以及维护文档中未替换的覆盖层占位。
+- Waffo Pancake：此前台账已明确上游 Waffo Pancake 支付提交不适配本地支付策略。审查发现 `/api/user/topup/info`、classic 支付设置和充值页仍存在可见或半可见分支；本轮移除 classic Waffo Pancake 设置组件、充值页创建/询价分支和 stale 注释路由，并让后端充值信息过滤历史 `PayMethods` 中的 `waffo_pancake`。保留底层历史支付方式识别，避免旧账单展示丢失，但不再提供新订单入口。
+- 站点元信息：复查 `/favicon.ico` 动态处理后，将默认 favicon 选择集中到单一 helper，避免服务端 meta 注入和 favicon handler 出现重复兜底。
+- 维护文档：清理 `docs/local-overlays.md` 中前序提交留下的 `uncommitted` / `本次兼容` / `本次排序修复` 占位，并记录 Waffo Pancake 不暴露为本地在线支付通道的同步保留点。

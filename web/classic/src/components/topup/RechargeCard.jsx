@@ -109,7 +109,6 @@ const RechargeCard = ({
   getPaymentOrderTimeoutSeconds,
   onOpenHistory,
   enableWaffoTopUp,
-  enableWaffoPancakeTopUp,
   enableAlipayOfficialTopUp,
   enableWechatPayOfficialTopUp,
   subscriptionLoading = false,
@@ -133,7 +132,6 @@ const RechargeCard = ({
     enableOnlineTopUp ||
     enableStripeTopUp ||
     enableWaffoTopUp ||
-    enableWaffoPancakeTopUp ||
     enableAlipayOfficialTopUp ||
     enableWechatPayOfficialTopUp ||
     regularPayMethods.length > 0;
@@ -268,7 +266,6 @@ const RechargeCard = ({
                         !enableOnlineTopUp &&
                         !enableStripeTopUp &&
                         !enableWaffoTopUp &&
-                        !enableWaffoPancakeTopUp &&
                         !enableAlipayOfficialTopUp &&
                         !enableWechatPayOfficialTopUp
                       }
@@ -335,8 +332,6 @@ const RechargeCard = ({
                               payMethod.type === 'waffo' ||
                               (typeof payMethod.type === 'string' &&
                                 payMethod.type.startsWith('waffo:'));
-                            const isWaffoPancake =
-                              payMethod.type === 'waffo_pancake';
                             const isAlipayOfficial =
                               payMethod.type === 'alipay_official';
                             const isWechatPayOfficial =
@@ -345,12 +340,10 @@ const RechargeCard = ({
                               (!enableOnlineTopUp &&
                                 !isStripe &&
                                 !isWaffo &&
-                                !isWaffoPancake &&
                                 !isAlipayOfficial &&
                                 !isWechatPayOfficial) ||
                               (!enableStripeTopUp && isStripe) ||
                               (!enableWaffoTopUp && isWaffo) ||
-                              (!enableWaffoPancakeTopUp && isWaffoPancake) ||
                               (!enableAlipayOfficialTopUp &&
                                 isAlipayOfficial) ||
                               (!enableWechatPayOfficialTopUp &&
@@ -385,11 +378,6 @@ const RechargeCard = ({
                                         height: 18,
                                         objectFit: 'contain',
                                       }}
-                                    />
-                                  ) : payMethod.type === 'waffo_pancake' ? (
-                                    <CreditCard
-                                      size={18}
-                                      color='var(--semi-color-primary)'
                                     />
                                   ) : (
                                     <CreditCard

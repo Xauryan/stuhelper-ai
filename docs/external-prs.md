@@ -291,8 +291,9 @@ git diff --check
   用户行缺失时仍按被邀请用户的 `inviter_id` 展示审计关系。受旧缺陷影响的生产
   历史数据若 `users.inviter_id = 0`，需要从注册请求、系统日志或邀请奖励日志中
   人工回填后，才能出现在邀请管理并参与后续返佣。
-- 返佣覆盖的支付完成路径包括 Stripe、Creem、Epay、Waffo、Waffo Pancake、
-  支付宝官方、微信支付官方、管理员补单和订阅订单完成。
+- 返佣覆盖的支付完成路径包括 Stripe、Creem、Epay、Waffo、支付宝官方、
+  微信支付官方、管理员补单和订阅订单完成。Waffo Pancake 当前不作为本地在线
+  支付通道暴露，历史账单只保留支付方式识别和展示。
 - 返佣额度按 `recharge_amount * QuotaPerUnit * rate / 100` 计算，向下取整；
   邀请人单用户覆盖比例优先于全局比例。新返佣记录写入 `recharge_sequence`
   用于审计和最大返佣次数判断；历史记录没有序号时按已有记录数量兜底，避免

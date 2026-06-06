@@ -65,6 +65,67 @@ func TestGetTopUpInfoDoesNotExposeEpayMethodsWhenEpayDisabled(t *testing.T) {
 	require.Empty(t, payload.Data.PayMethods)
 }
 
+func TestGetTopUpInfoDoesNotExposeWaffoPancake(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalPayAddress := operation_setting.PayAddress
+	originalEpayID := operation_setting.EpayId
+	originalEpayKey := operation_setting.EpayKey
+	originalPayMethods := operation_setting.PayMethods
+	originalWaffoPancakeEnabled := setting.WaffoPancakeEnabled
+	originalWaffoPancakeMerchantID := setting.WaffoPancakeMerchantID
+	originalWaffoPancakePrivateKey := setting.WaffoPancakePrivateKey
+	originalWaffoPancakeStoreID := setting.WaffoPancakeStoreID
+	originalWaffoPancakeProductID := setting.WaffoPancakeProductID
+	originalWaffoPancakeWebhookPublicKey := setting.WaffoPancakeWebhookPublicKey
+	t.Cleanup(func() {
+		operation_setting.PayAddress = originalPayAddress
+		operation_setting.EpayId = originalEpayID
+		operation_setting.EpayKey = originalEpayKey
+		operation_setting.PayMethods = originalPayMethods
+		setting.WaffoPancakeEnabled = originalWaffoPancakeEnabled
+		setting.WaffoPancakeMerchantID = originalWaffoPancakeMerchantID
+		setting.WaffoPancakePrivateKey = originalWaffoPancakePrivateKey
+		setting.WaffoPancakeStoreID = originalWaffoPancakeStoreID
+		setting.WaffoPancakeProductID = originalWaffoPancakeProductID
+		setting.WaffoPancakeWebhookPublicKey = originalWaffoPancakeWebhookPublicKey
+	})
+
+	operation_setting.PayAddress = "https://pay.example.com"
+	operation_setting.EpayId = "pid"
+	operation_setting.EpayKey = "key"
+	operation_setting.PayMethods = []map[string]string{
+		{"name": "支付宝", "type": "alipay"},
+		{"name": "Waffo Pancake", "type": model.PaymentMethodWaffoPancake},
+	}
+	setting.WaffoPancakeEnabled = true
+	setting.WaffoPancakeMerchantID = "merchant"
+	setting.WaffoPancakePrivateKey = "private"
+	setting.WaffoPancakeStoreID = "store"
+	setting.WaffoPancakeProductID = "product"
+	setting.WaffoPancakeWebhookPublicKey = "webhook"
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/user/topup/info", nil)
+
+	GetTopUpInfo(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var payload struct {
+		Success bool `json:"success"`
+		Data    struct {
+			PayMethods              []map[string]string `json:"pay_methods"`
+			EnableWaffoPancakeTopUp *bool               `json:"enable_waffo_pancake_topup"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	require.Nil(t, payload.Data.EnableWaffoPancakeTopUp)
+	require.Len(t, payload.Data.PayMethods, 1)
+	require.Equal(t, "alipay", payload.Data.PayMethods[0]["type"])
+}
+
 func TestGetTopUpInfoIncludesOfficialUnitPrice(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

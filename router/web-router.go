@@ -34,6 +34,8 @@ var titleTagPattern = regexp.MustCompile(`(?is)<title>.*?</title>`)
 var linkIconPattern = regexp.MustCompile(`(?is)<link\b[^>]*\brel="[^"]*\bicon\b[^"]*"[^>]*>`)
 var hrefAttrPattern = regexp.MustCompile(`(?is)\bhref="[^"]*"`)
 
+const defaultSiteIcon = "/logo.png"
+
 func currentSiteMeta() siteMeta {
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()
@@ -43,10 +45,7 @@ func currentSiteMeta() siteMeta {
 		title = "StuHelper AI"
 	}
 
-	icon := strings.TrimSpace(common.Logo)
-	if icon == "" || icon == "/favicon.ico" {
-		icon = "/logo.png"
-	}
+	icon := configuredSiteIcon(common.Logo)
 
 	image := strings.TrimSpace(common.SEOImage)
 	if image == "" {
@@ -60,6 +59,14 @@ func currentSiteMeta() siteMeta {
 		Image:       publicAssetURL(image),
 		Icon:        publicAssetURL(icon),
 	}
+}
+
+func configuredSiteIcon(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || strings.EqualFold(value, "/favicon.ico") {
+		return defaultSiteIcon
+	}
+	return value
 }
 
 func publicAssetURL(raw string) string {
@@ -170,9 +177,6 @@ func renderClassicIndexPage(indexPage []byte) []byte {
 
 func serveConfiguredFavicon(c *gin.Context) {
 	icon := currentSiteMeta().Icon
-	if icon == "" {
-		icon = "/logo.png"
-	}
 	c.Header("Cache-Control", "no-cache")
 	if strings.HasPrefix(strings.ToLower(icon), "data:") {
 		c.Status(http.StatusNoContent)

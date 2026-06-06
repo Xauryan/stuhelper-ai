@@ -80,8 +80,6 @@ const TopUp = () => {
   const [enableWaffoTopUp, setEnableWaffoTopUp] = useState(false);
   const [waffoPayMethods, setWaffoPayMethods] = useState([]);
   const [waffoMinTopUp, setWaffoMinTopUp] = useState(1);
-  const [enableWaffoPancakeTopUp, setEnableWaffoPancakeTopUp] = useState(false);
-  const [waffoPancakeMinTopUp, setWaffoPancakeMinTopUp] = useState(1);
   const [enableAlipayOfficialTopUp, setEnableAlipayOfficialTopUp] =
     useState(false);
   const [enableWechatPayOfficialTopUp, setEnableWechatPayOfficialTopUp] =
@@ -188,9 +186,6 @@ const TopUp = () => {
     if (payment === 'wxpay_official') {
       return getWechatPayOfficialAmount(value);
     }
-    if (payment === 'waffo_pancake') {
-      return getWaffoPancakeAmount(value);
-    }
     if (
       payment === 'waffo' ||
       (typeof payment === 'string' && payment.startsWith('waffo:'))
@@ -287,11 +282,6 @@ const TopUp = () => {
         );
         return;
       }
-    } else if (payment === 'waffo_pancake') {
-      if (!enableWaffoPancakeTopUp) {
-        showError(t('管理员未开启 Waffo Pancake 充值！'));
-        return;
-      }
     } else if (payment === 'waffo' || payment.startsWith('waffo:')) {
       if (!enableWaffoTopUp) {
         showError(t('管理员未开启 Waffo 充值！'));
@@ -327,17 +317,6 @@ const TopUp = () => {
       setConfirmLoading(true);
       try {
         await officialTopUp(payWay);
-      } finally {
-        setOpen(false);
-        setConfirmLoading(false);
-      }
-      return;
-    }
-
-    if (payWay === 'waffo_pancake') {
-      setConfirmLoading(true);
-      try {
-        await waffoPancakeTopUp();
       } finally {
         setOpen(false);
         setConfirmLoading(false);
@@ -545,42 +524,6 @@ const TopUp = () => {
     }
   };
 
-  const waffoPancakeTopUp = async () => {
-    const minTopUpValue = Number(waffoPancakeMinTopUp || 1);
-    if (topUpCount < minTopUpValue) {
-      showError(t('充值数量不能小于') + minTopUpValue);
-      return;
-    }
-
-    setPaymentLoading(true);
-    try {
-      const res = await API.post('/api/user/waffo-pancake/pay', {
-        amount: parseInt(topUpCount),
-      });
-      if (res !== undefined) {
-        const { message, data } = res.data;
-        if (message === 'success') {
-          const checkoutUrl = data?.checkout_url || '';
-          if (checkoutUrl) {
-            window.open(checkoutUrl, '_blank');
-          } else {
-            showError(t('支付请求失败'));
-          }
-        } else {
-          const errorMsg =
-            typeof data === 'string' ? data : message || t('支付请求失败');
-          showError(errorMsg);
-        }
-      } else {
-        showError(res);
-      }
-    } catch (e) {
-      showError(t('支付请求失败'));
-    } finally {
-      setPaymentLoading(false);
-    }
-  };
-
   const isMobilePaymentScene = () => {
     const userAgent = navigator.userAgent || '';
     return (
@@ -717,33 +660,6 @@ const TopUp = () => {
       // 轮询失败时保持二维码，等待下一次查询。
     }
     return false;
-  };
-
-  const getWaffoPancakeAmount = async (value) => {
-    if (value === undefined) {
-      value = topUpCount;
-    }
-    setAmountLoading(true);
-    try {
-      const res = await API.post('/api/user/waffo-pancake/amount', {
-        amount: parseInt(value),
-      });
-      if (res !== undefined) {
-        const { message, data } = res.data;
-        if (message === 'success') {
-          setAmount(parseFloat(data));
-        } else {
-          setAmount(0);
-          Toast.error({ content: '错误：' + data, id: 'getAmount' });
-        }
-      } else {
-        showError(res);
-      }
-    } catch (err) {
-      // amount fetch failed silently
-    } finally {
-      setAmountLoading(false);
-    }
   };
 
   const getAlipayOfficialAmount = async (value) => {
@@ -951,8 +867,6 @@ const TopUp = () => {
           const enableOnlineTopUp = data.enable_online_topup || false;
           const enableCreemTopUp = data.enable_creem_topup || false;
           const enableWaffoTopUp = data.enable_waffo_topup || false;
-          const enableWaffoPancakeTopUp =
-            data.enable_waffo_pancake_topup || false;
           const enableAlipayOfficialTopUp =
             data.enable_alipay_official_topup || false;
           const enableWechatPayOfficialTopUp =
@@ -963,13 +877,11 @@ const TopUp = () => {
               ? data.stripe_min_topup
               : enableWaffoTopUp
                 ? data.waffo_min_topup
-                : enableWaffoPancakeTopUp
-                  ? data.waffo_pancake_min_topup
-                  : enableAlipayOfficialTopUp
-                    ? data.alipay_official_min_topup
-                    : enableWechatPayOfficialTopUp
-                      ? data.wechat_pay_official_min_topup
-                      : 1;
+                : enableAlipayOfficialTopUp
+                  ? data.alipay_official_min_topup
+                  : enableWechatPayOfficialTopUp
+                    ? data.wechat_pay_official_min_topup
+                    : 1;
           setEnableOnlineTopUp(enableOnlineTopUp);
           setEnableStripeTopUp(enableStripeTopUp);
           setEnableCreemTopUp(enableCreemTopUp);
@@ -989,8 +901,6 @@ const TopUp = () => {
             }),
           );
           setWaffoMinTopUp(data.waffo_min_topup || 1);
-          setEnableWaffoPancakeTopUp(enableWaffoPancakeTopUp);
-          setWaffoPancakeMinTopUp(data.waffo_pancake_min_topup || 1);
           setEnableAlipayOfficialTopUp(enableAlipayOfficialTopUp);
           setEnableWechatPayOfficialTopUp(enableWechatPayOfficialTopUp);
           setMinTopUp(minTopUpValue);
@@ -1016,8 +926,6 @@ const TopUp = () => {
             requestAmountByPayment(payMethods[0].type, minTopUpValue);
           } else if (enableWaffoTopUp) {
             getWaffoAmount(minTopUpValue, 0);
-          } else if (enableWaffoPancakeTopUp) {
-            getWaffoPancakeAmount(minTopUpValue);
           } else if (enableOnlineTopUp) {
             getAmount(minTopUpValue);
           }
@@ -1344,7 +1252,6 @@ const TopUp = () => {
           creemProducts={creemProducts}
           creemPreTopUp={creemPreTopUp}
           enableWaffoTopUp={enableWaffoTopUp}
-          enableWaffoPancakeTopUp={enableWaffoPancakeTopUp}
           enableAlipayOfficialTopUp={enableAlipayOfficialTopUp}
           enableWechatPayOfficialTopUp={enableWechatPayOfficialTopUp}
           presetAmounts={presetAmounts}
