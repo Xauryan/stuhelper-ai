@@ -53,6 +53,8 @@ func GetStatus(c *gin.Context) {
 		"email_verification":                     common.EmailVerificationEnabled,
 		"password_login":                         common.PasswordLoginEnabled,
 		"password_register":                      common.PasswordRegisterEnabled,
+		"password_register_enabled":              common.PasswordRegisterEnabled,
+		"register_enabled":                       common.RegisterEnabled,
 		"github_oauth":                           common.GitHubOAuthEnabled,
 		"github_client_id":                       common.GitHubClientId,
 		"discord_oauth":                          system_setting.GetDiscordSettings().Enabled,

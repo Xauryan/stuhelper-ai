@@ -60,7 +60,7 @@
 | `0936e2504` | 2026-05-20 | 合入 | 2026-05-19 12:11:24 +0800 | perf: avoid eager formatting in debug log calls (#4929) | 移植有价值的 debug 日志延迟格式化和无条件调试输出清理。未移植上游权限语义调整和 `model.User.AccessToken` JSON tag 改动，因为本地已有更严格的角色管理、`audit_admin` 权限边界和敏感字段脱敏逻辑。 |
 | `04b4483d7` | 2026-05-20 | 忽略 | 2026-05-19 16:14:08 +0800 | fix(web): normalize model detail tabs layout (#4938) | default-only，按本轮要求不移植。 |
 | `8ae095c3b` | 2026-05-20 | 合入 | 2026-05-19 16:14:11 +0800 | fix user create and delete handling (#4818) | 移植后端 `DeleteUser` 错误处理修复。硬删除失败时返回 `common.ApiError`，成功时才返回 success；default users drawer 改动忽略。 |
-| `b397c58ba` | 2026-05-20 | 待决策 | 2026-05-19 16:14:34 +0800 | fix(auth): expose register_enabled in /api/status and gate sign-up link (#4871) | 已检查但未合入。本地已有 `password_login` / `password_register` 状态字段，classic 注册页也会根据 `password_register` 禁用密码注册；但 `/api/status` 仍未暴露全局 `register_enabled` / `password_register_enabled`，classic 登录页“注册”入口仍只按 `self_use_mode_enabled` 判断。因此本地只部分修复，和上游提交不完全等价。 |
+| `b397c58ba` | 2026-06-06 | 合入 | 2026-05-19 16:14:34 +0800 | fix(auth): expose register_enabled in /api/status and gate sign-up link (#4871) | 手工移植到本地 classic 语义。`/api/status` 新增 `register_enabled` 与 `password_register_enabled`，保留既有 `password_register`；classic 登录页和顶栏注册按钮同时受 `register_enabled` 与 `self_use_mode_enabled` 控制，注册页内部继续用 `password_register` 控制用户名/密码注册方式。 |
 | `fc08c133e` | 2026-05-20 | 忽略 | 2026-05-19 16:14:37 +0800 | fix(web/default): update pagination button labels in ModelCardGrid (#4675) | default-only，按本轮要求不移植。 |
 | `cb9270ed2` | 2026-05-20 | 忽略 | 2026-05-19 01:14:49 -0700 | fix(auth): localize reset password confirmation (#4769) | default-only，按本轮要求不移植。 |
 | `8db32213e` | 2026-05-20 | 忽略 | 2026-05-19 16:14:56 +0800 | fix(web/default/wallet): make recharge preset selection visible in dark mode (#4897) | default-only，按本轮要求不移植。 |
@@ -89,7 +89,7 @@
 | `92a09594` | 2026-05-25 | 忽略 | 2026-05-24 22:09:05 +0800 | ✨ refactor(web/default): adopt drill-in sidebar pattern for System Settings | default-only 系统设置导航重构，本地 classic 不移植。 |
 | `b08febaa` | 2026-05-25 | 忽略 | 2026-05-25 00:34:26 +0800 | ✨ refactor: system settings UI for consistent, compact layouts | default-only 系统设置 UI 与 default i18n 同步，本地 classic 不移植。 |
 | `88437a18` | 2026-05-25 | 忽略 | 2026-05-25 01:06:42 +0800 | ⬆️ chore(deps): Upgrade default frontend dependencies | default 前端依赖升级，本地 classic 依赖不受影响，不移植。 |
-| `b302be30` | 2026-05-25 | 部分合入 | 2026-05-25 02:42:22 +0800 | 🛠️ fix: v1 interface feedback regressions | 只移植适配本地的后端小修：复制渠道改用 `clone.Insert()`，确保克隆后能力与新 ID 绑定；用户搜索接口新增 `role/status` 服务端过滤。default 前端缓存、表格、认证、Playground、依赖等改动忽略；`password_login_enabled` 别名暂不单独加入，后续与 `b397c58ba` 的注册状态字段一起统一评估。 |
+| `b302be30` | 2026-05-25 | 部分合入 | 2026-05-25 02:42:22 +0800 | 🛠️ fix: v1 interface feedback regressions | 只移植适配本地的后端小修：复制渠道改用 `clone.Insert()`，确保克隆后能力与新 ID 绑定；用户搜索接口新增 `role/status` 服务端过滤。default 前端缓存、表格、认证、Playground、依赖等改动忽略；`password_login_enabled` 别名仍不单独加入，因为 classic 现有调用只使用 `password_login`，`password_register_enabled` 已随 `b397c58ba` 注册状态字段补齐。 |
 | `583da452` | 2026-05-25 | 忽略 | 2026-05-25 05:35:44 +0800 | ✨ refactor(ui): Improve usage log filter responsiveness and mobile UX | default-only 使用日志筛选与移动端 UI 优化，本地 classic 使用日志为独立实现，不移植。 |
 | `2a528d46` | 2026-05-29 | 合入 | 2026-05-25 22:57:02 +0800 | fix(relay): correct image quality parameter handling (#5103) | 手工移植后端图片 relay 修复。`relay/image_handler.go` 的消费日志/计费上下文现在保留客户端传入的 `quality`，只在空值时默认 `standard`，避免 `gpt-image-1` 的 `low`、`medium`、`high`、`auto` 等质量被误记为 `standard`。 |
 | `51ca897c` | 2026-05-29 | 忽略 | 2026-05-25 23:10:10 +0800 | ✨ refactor(home): redesign hero section to dual-column layout with compliant copywriting | default-only 首页 hero 与 default i18n 文案重构。本地已删除 `web/default` 并保留 classic-only 产品线，不合入。 |
@@ -171,4 +171,5 @@
 - 审查范围：核对本轮上游同步、classic Rsbuild 迁移、站点元信息注入和支付通道相关覆盖层。重点检查是否存在已在同步台账中判定“不合入”的支付路径仍被运行时暴露，以及维护文档中未替换的覆盖层占位。
 - Waffo Pancake：此前台账已明确上游 Waffo Pancake 支付提交不适配本地支付策略。审查发现 `/api/user/topup/info`、classic 支付设置和充值页仍存在可见或半可见分支；本轮移除 classic Waffo Pancake 设置组件、充值页创建/询价分支和 stale 注释路由，并让后端充值信息过滤历史 `PayMethods` 中的 `waffo_pancake`。保留底层历史支付方式识别，避免旧账单展示丢失，但不再提供新订单入口。
 - 站点元信息：复查 `/favicon.ico` 动态处理后，将默认 favicon 选择集中到单一 helper，避免服务端 meta 注入和 favicon handler 出现重复兜底。
-- 维护文档：清理 `docs/local-overlays.md` 中前序提交留下的 `uncommitted` / `本次兼容` / `本次排序修复` 占位，并记录 Waffo Pancake 不暴露为本地在线支付通道的同步保留点。
+- 注册入口状态：复查 `b397c58ba` 的待决策项后补齐本地语义。`/api/status` 暴露全局注册开关和密码注册别名，classic 登录页与顶栏注册按钮不再只看自用模式，避免后台关闭新用户注册后仍展示注册入口。
+- 维护文档：清理 `docs/local-overlays.md` 中前序提交留下的 `uncommitted` / `本次兼容` / `本次排序修复` 占位，并记录 Waffo Pancake 不暴露为本地在线支付通道、注册入口状态字段的同步保留点。

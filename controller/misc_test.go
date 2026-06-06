@@ -15,12 +15,15 @@ func TestGetStatusIncludesPasswordAuthSwitches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	originalLoginEnabled := common.PasswordLoginEnabled
-	originalRegisterEnabled := common.PasswordRegisterEnabled
+	originalPasswordRegisterEnabled := common.PasswordRegisterEnabled
+	originalRegisterEnabled := common.RegisterEnabled
 	common.PasswordLoginEnabled = false
 	common.PasswordRegisterEnabled = false
+	common.RegisterEnabled = false
 	t.Cleanup(func() {
 		common.PasswordLoginEnabled = originalLoginEnabled
-		common.PasswordRegisterEnabled = originalRegisterEnabled
+		common.PasswordRegisterEnabled = originalPasswordRegisterEnabled
+		common.RegisterEnabled = originalRegisterEnabled
 	})
 
 	recorder := httptest.NewRecorder()
@@ -39,6 +42,8 @@ func TestGetStatusIncludesPasswordAuthSwitches(t *testing.T) {
 	require.True(t, response.Success)
 	require.Equal(t, false, response.Data["password_login"])
 	require.Equal(t, false, response.Data["password_register"])
+	require.Equal(t, false, response.Data["password_register_enabled"])
+	require.Equal(t, false, response.Data["register_enabled"])
 }
 
 func TestGetStatusIncludesFooterTemplateSettings(t *testing.T) {

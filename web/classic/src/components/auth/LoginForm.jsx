@@ -134,6 +134,8 @@ const LoginForm = () => {
   const hasCustomOAuthProviders =
     (status.custom_oauth_providers || []).length > 0;
   const passwordLoginEnabled = status.password_login !== false;
+  const registrationEnabled = status.register_enabled !== false;
+  const showRegisterLink = registrationEnabled && !status.self_use_mode_enabled;
   const hasOAuthLoginOptions = Boolean(
     status.github_oauth ||
       status.discord_oauth ||
@@ -713,7 +715,7 @@ const LoginForm = () => {
                 </div>
               )}
 
-              {!status.self_use_mode_enabled && (
+              {showRegisterLink && (
                 <div className='mt-6 text-center text-sm'>
                   <Text>
                     {t('没有账户？')}{' '}
@@ -866,7 +868,7 @@ const LoginForm = () => {
                 </>
               )}
 
-              {!status.self_use_mode_enabled && (
+              {showRegisterLink && (
                 <div className='mt-6 text-center text-sm'>
                   <Text>
                     {t('没有账户？')}{' '}
