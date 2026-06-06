@@ -125,6 +125,7 @@ go test ./middleware -count=1
 Set-Location web
 bun install --frozen-lockfile
 Set-Location classic
+bun run lint
 bun run build
 bun run i18n:status
 ```

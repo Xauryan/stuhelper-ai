@@ -743,10 +743,7 @@ export const useLogsData = () => {
           value: localCountMode,
         });
       }
-      if (
-        canReadAllLogs &&
-        (logs[i].type === 3 || quotaOperationType !== '')
-      ) {
+      if (canReadAllLogs && (logs[i].type === 3 || quotaOperationType !== '')) {
         const adminInfo = other?.admin_info;
         const hasUsername =
           adminInfo?.admin_username !== undefined &&

@@ -6,7 +6,10 @@ import {
 
 assert.equal(calculateSubscriptionPayAmount(50, 1.006), 50.3);
 assert.equal(calculateSubscriptionPayAmount(50, 1.001), 50.05);
-assert.equal(calculateSubscriptionPayAmount(50, 1, 0.6, 'alipay_official'), 50.3);
+assert.equal(
+  calculateSubscriptionPayAmount(50, 1, 0.6, 'alipay_official'),
+  50.3,
+);
 assert.equal(calculateSubscriptionPayAmount(50, 1, 0.6, 'stripe'), 50);
 assert.equal(calculateSubscriptionPayAmount(50, 'bad'), null);
 assert.equal(

@@ -152,3 +152,9 @@
 | `32805849` | 2026-06-05 | 合入 | 2026-06-05 12:18:57 +0800 | fix: reuse stream scanner buffer in channel handlers (#5225) | 合入 stream scanner buffer 复用。新增 `helper.NewStreamScanner` 并切换 Cloudflare、Cohere、Coze、Ollama、Tencent、Zhipu 等流式适配器，统一使用可配置的大行缓冲，补充大行 scanner 测试。 |
 | `b5331936` | 2026-06-06 | 忽略 | 2026-06-05 06:34:22 +0800 | feat(web): show user id on profile page | default-only profile header 展示用户 ID。本地已删除 `web/default`，classic 用户资料页不复用该组件，不移植。 |
 | `adc390c5` | 2026-06-06 | merge-only | 2026-06-06 00:45:13 +0800 | feat(web): show user id on profile page (#5317) | 上游 PR merge commit，实际内容由 `b5331936` 处理；default-only，不单独移植。 |
+
+## 2026-06-06 Rsbuild 迁移后核对
+
+- 上游状态：执行 `git fetch upstream main --no-tags --prune` 后，`upstream/main` 仍为 `adc390c5`，没有比上表已记录的 `b5331936` / `adc390c5` 更新的提交。
+- 本地修复：迁移到 Rsbuild / React 19 / Semi adapter 后，补齐 classic 前端 lint 闭环。`web/classic/.prettierignore` 排除 `node_modules`、`dist`、`build`、`coverage`，避免 Prettier 扫描 Rsbuild 构建产物；同时格式化 `web/classic/src/components/topup/subscriptionPaymentDisplay.test.mjs` 和 `web/classic/src/hooks/usage-logs/useUsageLogsData.jsx`。
+- 验证结果：`cd web && bun run --cwd classic lint`、`cd web && bun run build`、`cd web && bun run --cwd classic i18n:status`、`git diff --check` 均通过。
