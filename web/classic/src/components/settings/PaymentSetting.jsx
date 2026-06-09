@@ -25,6 +25,7 @@ import SettingsPaymentGatewayStripe from '../../pages/Setting/Payment/SettingsPa
 import SettingsPaymentGatewayCreem from '../../pages/Setting/Payment/SettingsPaymentGatewayCreem';
 import SettingsPaymentGatewayWaffo from '../../pages/Setting/Payment/SettingsPaymentGatewayWaffo';
 import SettingsPaymentGatewayOfficialChina from '../../pages/Setting/Payment/SettingsPaymentGatewayOfficialChina';
+import SettingsPaymentGatewaySelfServe from '../../pages/Setting/Payment/SettingsPaymentGatewaySelfServe';
 import { API, showError, toBoolean } from '../../helpers';
 import { useTranslation } from 'react-i18next';
 
@@ -78,6 +79,15 @@ const PaymentSetting = () => {
     WechatPayOfficialServiceFeePercent: 0,
     WechatPayOfficialMinTopUp: 1,
     WechatPayOfficialOrderTimeoutSec: 600,
+
+    SelfServeTopUpEnabled: false,
+    SelfServeAlipayEnabled: false,
+    SelfServeWechatPayEnabled: false,
+    SelfServeAlipayQRCode: '',
+    SelfServeWechatPayQRCode: '',
+    SelfServeTopUpSingleMaxAmount: '',
+    SelfServeTopUpDailyMaxAmount: '',
+    SelfServeRejectAutoBan: true,
   });
 
   let [loading, setLoading] = useState(false);
@@ -134,7 +144,13 @@ const PaymentSetting = () => {
           case 'WechatPayOfficialServiceFeePercent':
           case 'WechatPayOfficialMinTopUp':
           case 'WechatPayOfficialOrderTimeoutSec':
-            newInputs[item.key] = parseFloat(item.value);
+          case 'SelfServeTopUpSingleMaxAmount':
+          case 'SelfServeTopUpDailyMaxAmount':
+            newInputs[item.key] =
+              item.value === '' ? '' : parseFloat(item.value);
+            break;
+          case 'SelfServeRejectAutoBan':
+            newInputs[item.key] = toBoolean(item.value);
             break;
           default:
             if (item.key.endsWith('Enabled')) {
@@ -206,6 +222,13 @@ const PaymentSetting = () => {
             </Tabs.TabPane>
             <Tabs.TabPane tab={t('官方支付设置')} itemKey='official-cn'>
               <SettingsPaymentGatewayOfficialChina
+                options={inputs}
+                refresh={onRefresh}
+                hideSectionTitle
+              />
+            </Tabs.TabPane>
+            <Tabs.TabPane tab={t('自助充值')} itemKey='self-serve'>
+              <SettingsPaymentGatewaySelfServe
                 options={inputs}
                 refresh={onRefresh}
                 hideSectionTitle

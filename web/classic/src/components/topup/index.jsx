@@ -40,12 +40,44 @@ import TransferModal from './modals/TransferModal';
 import PaymentConfirmModal from './modals/PaymentConfirmModal';
 import TopupHistoryModal from './modals/TopupHistoryModal';
 import WechatOfficialQrPaymentModal from './modals/WechatOfficialQrPaymentModal';
+import SelfServeTopUpModal from './modals/SelfServeTopUpModal';
 import {
   getOfficialWechatStatus,
   getTopupStatusFromPage,
   normalizeOfficialPaymentOrderTimeoutSeconds,
   shouldBlockOfficialWechatMobilePayment,
 } from './wechatOfficialPaymentStatus.mjs';
+
+const EMPTY_SELF_SERVE_LIMITS = {
+  single_max_money: 0,
+  daily_max_money: 0,
+  daily_used_money: 0,
+  daily_remain_money: 0,
+};
+
+const positiveMoney = (value) => {
+  const money = Number(value);
+  return Number.isFinite(money) && money > 0 ? money : 0;
+};
+
+const nonNegativeMoney = (value) => {
+  const money = Number(value);
+  return Number.isFinite(money) && money >= 0 ? money : 0;
+};
+
+const normalizeSelfServeLimits = (limits) => {
+  const dailyMax = positiveMoney(limits?.daily_max_money);
+  return {
+    single_max_money: positiveMoney(limits?.single_max_money),
+    daily_max_money: dailyMax,
+    daily_used_money: nonNegativeMoney(limits?.daily_used_money),
+    daily_remain_money:
+      limits?.daily_remain_money === undefined ||
+      limits?.daily_remain_money === null
+        ? dailyMax
+        : nonNegativeMoney(limits?.daily_remain_money),
+  };
+};
 
 const TopUp = () => {
   const { t } = useTranslation();
@@ -84,6 +116,19 @@ const TopUp = () => {
     useState(false);
   const [enableWechatPayOfficialTopUp, setEnableWechatPayOfficialTopUp] =
     useState(false);
+  const [enableSelfServeTopUp, setEnableSelfServeTopUp] = useState(false);
+  const [selfServeQrCodes, setSelfServeQrCodes] = useState({});
+  const [selfServeLimits, setSelfServeLimits] = useState(
+    EMPTY_SELF_SERVE_LIMITS,
+  );
+  const [selfServeOpen, setSelfServeOpen] = useState(false);
+  const [selfServePaymentMethod, setSelfServePaymentMethod] = useState('');
+  const [selfServeDeclaredMoney, setSelfServeDeclaredMoney] = useState(1);
+  const [selfServeTransactionNo, setSelfServeTransactionNo] = useState('');
+  const [selfServeConfirmed, setSelfServeConfirmed] = useState(false);
+  const [selfServePreview, setSelfServePreview] = useState(null);
+  const [selfServePreviewLoading, setSelfServePreviewLoading] = useState(false);
+  const [selfServeSubmitLoading, setSelfServeSubmitLoading] = useState(false);
   const [wechatQrOpen, setWechatQrOpen] = useState(false);
   const [wechatQrCodeUrl, setWechatQrCodeUrl] = useState('');
   const [wechatQrOrderId, setWechatQrOrderId] = useState('');
@@ -176,7 +221,14 @@ const TopUp = () => {
       : minTopUp;
   };
 
+  const isSelfServePayment = (payment) =>
+    payment === 'alipay_self_serve' || payment === 'wxpay_self_serve';
+
   const requestAmountByPayment = async (payment, value) => {
+    if (isSelfServePayment(payment)) {
+      setAmount(Number(value || 1));
+      return;
+    }
     if (payment === 'stripe') {
       return getStripeAmount(value);
     }
@@ -259,6 +311,50 @@ const TopUp = () => {
   };
 
   const preTopUp = async (payment) => {
+    if (isSelfServePayment(payment)) {
+      if (!enableSelfServeTopUp) {
+        showError(t('管理员未开启自助充值！'));
+        return;
+      }
+      const qrCode = selfServeQrCodes?.[payment];
+      if (!qrCode) {
+        showError(t('管理员未配置收款码'));
+        return;
+      }
+      const singleMax = positiveMoney(selfServeLimits.single_max_money);
+      const dailyMax = positiveMoney(selfServeLimits.daily_max_money);
+      const dailyRemain = nonNegativeMoney(
+        selfServeLimits.daily_remain_money ?? dailyMax,
+      );
+      if (!singleMax || !dailyMax) {
+        showError(t('请先配置自助充值限额'));
+        return;
+      }
+      if (dailyMax < singleMax) {
+        showError(t('自助充值每日限额不能小于单笔限额'));
+        return;
+      }
+      if (dailyRemain <= 0) {
+        showError(t('今日自助充值额度已达上限'));
+        return;
+      }
+      const initialMoney = Math.min(
+        singleMax,
+        dailyRemain,
+        Number(amount || topUpCount || 1),
+      );
+      setPayWay(payment);
+      setSelfServePaymentMethod(payment);
+      setSelfServeDeclaredMoney(
+        Math.max(0.01, Math.round(initialMoney * 100) / 100),
+      );
+      setSelfServeTransactionNo('');
+      setSelfServeConfirmed(false);
+      setSelfServePreview(null);
+      setSelfServeOpen(true);
+      return;
+    }
+
     if (payment === 'stripe') {
       if (!enableStripeTopUp) {
         showError(t('管理员未开启Stripe充值！'));
@@ -619,6 +715,110 @@ const TopUp = () => {
     setWechatQrCreatedAt(0);
   };
 
+  const closeSelfServeModal = () => {
+    setSelfServeOpen(false);
+    setSelfServePaymentMethod('');
+    setSelfServeTransactionNo('');
+    setSelfServeConfirmed(false);
+    setSelfServePreview(null);
+  };
+
+  const requestSelfServePreview = async (money) => {
+    const normalizedMoney = Math.round(Number(money || 0) * 100) / 100;
+    if (!normalizedMoney || normalizedMoney <= 0) {
+      setSelfServePreview(null);
+      return;
+    }
+    setSelfServePreviewLoading(true);
+    try {
+      const res = await API.post('/api/user/self-serve/preview', {
+        declared_money: normalizedMoney,
+      });
+      const { message, data } = res.data;
+      if (message === 'success') {
+        setSelfServePreview(data);
+      } else {
+        setSelfServePreview(null);
+      }
+    } catch (e) {
+      setSelfServePreview(null);
+    } finally {
+      setSelfServePreviewLoading(false);
+    }
+  };
+
+  const submitSelfServeTopUp = async () => {
+    const normalizedMoney =
+      Math.round(Number(selfServeDeclaredMoney || 0) * 100) / 100;
+    const singleMax = positiveMoney(selfServeLimits.single_max_money);
+    const dailyMax = positiveMoney(selfServeLimits.daily_max_money);
+    const dailyRemain = nonNegativeMoney(
+      selfServeLimits.daily_remain_money ?? dailyMax,
+    );
+    if (!singleMax || !dailyMax) {
+      showError(t('请先配置自助充值限额'));
+      return;
+    }
+    if (dailyMax < singleMax) {
+      showError(t('自助充值每日限额不能小于单笔限额'));
+      return;
+    }
+    if (!normalizedMoney || normalizedMoney <= 0) {
+      showError(t('请输入充值金额'));
+      return;
+    }
+    if (normalizedMoney > singleMax) {
+      showError(
+        t('单笔自助充值金额不能超过 {{amount}} 元', {
+          amount: singleMax.toFixed(2),
+        }),
+      );
+      return;
+    }
+    if (normalizedMoney > dailyRemain) {
+      showError(
+        t('今日剩余自助充值金额不足，剩余 {{amount}} 元', {
+          amount: Math.max(0, dailyRemain).toFixed(2),
+        }),
+      );
+      return;
+    }
+    if (!selfServeTransactionNo.trim()) {
+      showError(t('请输入交易订单号'));
+      return;
+    }
+    if (!selfServeConfirmed) {
+      showError(t('请确认已完成付款并承诺信息真实'));
+      return;
+    }
+    setSelfServeSubmitLoading(true);
+    try {
+      const res = await API.post('/api/user/self-serve/pay', {
+        payment_method: selfServePaymentMethod,
+        declared_money: normalizedMoney,
+        transaction_no: selfServeTransactionNo.trim(),
+      });
+      const { success, message, data } = res.data;
+      if (success) {
+        showSuccess(t('自助充值已提交，余额已实时到账'));
+        Modal.success({
+          title: t('提交成功'),
+          content: t('余额已实时到账，请等待管理员审核。'),
+          centered: true,
+        });
+        closeSelfServeModal();
+        getUserQuota();
+        getTopupInfo();
+      } else {
+        showError(data || message || t('提交失败'));
+      }
+    } catch (e) {
+      showError(t('提交失败'));
+    } finally {
+      setSelfServeSubmitLoading(false);
+    }
+  };
+
   const checkWechatQrOrderStatus = async (orderId) => {
     if (!orderId) {
       return false;
@@ -841,6 +1041,10 @@ const TopUp = () => {
                   method.color = 'rgba(var(--semi-blue-5), 1)';
                 } else if (method.type === 'wxpay_official') {
                   method.color = 'rgba(var(--semi-green-5), 1)';
+                } else if (method.type === 'alipay_self_serve') {
+                  method.color = 'rgba(var(--semi-blue-5), 1)';
+                } else if (method.type === 'wxpay_self_serve') {
+                  method.color = 'rgba(var(--semi-green-5), 1)';
                 } else if (method.type === 'stripe') {
                   method.color = 'rgba(var(--semi-purple-5), 1)';
                 } else {
@@ -852,6 +1056,12 @@ const TopUp = () => {
               }
               if (method.type === 'wxpay_official') {
                 method.name = t('微信');
+              }
+              if (method.type === 'alipay_self_serve') {
+                method.name = t('支付宝自助');
+              }
+              if (method.type === 'wxpay_self_serve') {
+                method.name = t('微信自助');
               }
               return method;
             });
@@ -871,6 +1081,7 @@ const TopUp = () => {
             data.enable_alipay_official_topup || false;
           const enableWechatPayOfficialTopUp =
             data.enable_wechat_pay_official_topup || false;
+          const enableSelfServeTopUp = data.enable_self_serve_topup || false;
           const minTopUpValue = enableOnlineTopUp
             ? data.min_topup
             : enableStripeTopUp
@@ -903,6 +1114,9 @@ const TopUp = () => {
           setWaffoMinTopUp(data.waffo_min_topup || 1);
           setEnableAlipayOfficialTopUp(enableAlipayOfficialTopUp);
           setEnableWechatPayOfficialTopUp(enableWechatPayOfficialTopUp);
+          setEnableSelfServeTopUp(enableSelfServeTopUp);
+          setSelfServeQrCodes(data.self_serve_qrcodes || {});
+          setSelfServeLimits(normalizeSelfServeLimits(data.self_serve_limits));
           setMinTopUp(minTopUpValue);
           setTopUpCount(minTopUpValue);
           setTopUpLink(data.topup_link || '');
@@ -1065,6 +1279,14 @@ const TopUp = () => {
     }
   }, [statusState?.status]);
 
+  useEffect(() => {
+    if (!selfServeOpen) return undefined;
+    const timer = setTimeout(() => {
+      requestSelfServePreview(selfServeDeclaredMoney);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [selfServeOpen, selfServeDeclaredMoney]);
+
   const renderAmount = () => {
     return amount + ' ' + t('元');
   };
@@ -1214,6 +1436,26 @@ const TopUp = () => {
         onCancel={closeWechatQrModal}
       />
 
+      <SelfServeTopUpModal
+        t={t}
+        visible={selfServeOpen}
+        paymentMethod={selfServePaymentMethod}
+        qrCode={selfServeQrCodes?.[selfServePaymentMethod]}
+        declaredMoney={selfServeDeclaredMoney}
+        setDeclaredMoney={setSelfServeDeclaredMoney}
+        transactionNo={selfServeTransactionNo}
+        setTransactionNo={setSelfServeTransactionNo}
+        confirmed={selfServeConfirmed}
+        setConfirmed={setSelfServeConfirmed}
+        preview={selfServePreview}
+        previewLoading={selfServePreviewLoading}
+        submitLoading={selfServeSubmitLoading}
+        limits={selfServeLimits}
+        renderQuota={renderQuota}
+        onSubmit={submitSelfServeTopUp}
+        onCancel={closeSelfServeModal}
+      />
+
       {/* Creem 充值确认模态框 */}
       <Modal
         title={t('确定要充值 $')}
@@ -1254,6 +1496,7 @@ const TopUp = () => {
           enableWaffoTopUp={enableWaffoTopUp}
           enableAlipayOfficialTopUp={enableAlipayOfficialTopUp}
           enableWechatPayOfficialTopUp={enableWechatPayOfficialTopUp}
+          enableSelfServeTopUp={enableSelfServeTopUp}
           presetAmounts={presetAmounts}
           selectedPreset={selectedPreset}
           selectPresetAmount={selectPresetAmount}

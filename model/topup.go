@@ -13,6 +13,7 @@ import (
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/logger"
 	"github.com/Xauryan/stuhelper-ai/setting"
+	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -37,6 +38,13 @@ type TopUp struct {
 	CreateTime          int64   `json:"create_time" gorm:"index:idx_topup_user_create,priority:2"`
 	CompleteTime        int64   `json:"complete_time"`
 	Status              string  `json:"status"`
+	AuditStatus         string  `json:"audit_status,omitempty" gorm:"-"`
+	TransactionNo       string  `json:"transaction_no,omitempty" gorm:"-"`
+	DeclaredMoney       float64 `json:"declared_money,omitempty" gorm:"-"`
+	CreditedQuota       int64   `json:"credited_quota,omitempty" gorm:"-"`
+	AuditAdminReason    string  `json:"audit_admin_reason,omitempty" gorm:"-"`
+	AuditorId           int     `json:"auditor_id,omitempty" gorm:"-"`
+	ReviewedTime        int64   `json:"reviewed_time,omitempty" gorm:"-"`
 }
 
 func (topUp TopUp) PaidMoney() float64 {
@@ -55,6 +63,8 @@ const (
 	PaymentMethodWaffoPancake      = "waffo_pancake"
 	PaymentMethodAlipayOfficial    = "alipay_official"
 	PaymentMethodWechatPayOfficial = "wxpay_official"
+	PaymentMethodAlipaySelfServe   = "alipay_self_serve"
+	PaymentMethodWechatSelfServe   = "wxpay_self_serve"
 	PaymentMethodBalance           = "balance"
 	PaymentMethodAdminAdd          = "admin_add"
 	PaymentMethodAdminAddLegacy    = "管理员增加"
@@ -69,6 +79,7 @@ const (
 	PaymentProviderWaffoPancake      = "waffo_pancake"
 	PaymentProviderAlipayOfficial    = "alipay_official"
 	PaymentProviderWechatPayOfficial = "wxpay_official"
+	PaymentProviderSelfServe         = "self_serve"
 	PaymentProviderBalance           = "balance"
 	PaymentProviderAdmin             = "admin"
 )
@@ -82,6 +93,13 @@ func IsAdminTopUpRecord(topUp *TopUp) bool {
 	return topUp != nil &&
 		(topUp.PaymentProvider == PaymentProviderAdmin ||
 			IsAdminTopUpPaymentMethod(topUp.PaymentMethod))
+}
+
+func IsSelfServeTopUpRecord(topUp *TopUp) bool {
+	return topUp != nil &&
+		(topUp.PaymentProvider == PaymentProviderSelfServe ||
+			topUp.PaymentMethod == PaymentMethodAlipaySelfServe ||
+			topUp.PaymentMethod == PaymentMethodWechatSelfServe)
 }
 
 func adminTopUpPaymentMethods() []string {
@@ -202,6 +220,29 @@ type TopUpRefundRequest struct {
 	SubscriptionUsedRatio float64 `json:"subscription_used_ratio" gorm:"default:0"`
 	CreateTime            int64   `json:"create_time"`
 	UpdateTime            int64   `json:"update_time"`
+}
+
+const (
+	SelfServeTopUpAuditStatusPending  = "pending"
+	SelfServeTopUpAuditStatusApproved = "approved"
+	SelfServeTopUpAuditStatusRejected = "rejected"
+)
+
+type SelfServeTopUpAudit struct {
+	Id            int     `json:"id"`
+	TopUpId       int     `json:"topup_id" gorm:"uniqueIndex"`
+	UserId        int     `json:"user_id" gorm:"index"`
+	TradeNo       string  `json:"trade_no" gorm:"type:varchar(255);index"`
+	TransactionNo string  `json:"transaction_no" gorm:"type:varchar(255);uniqueIndex"`
+	PaymentMethod string  `json:"payment_method" gorm:"type:varchar(50);index"`
+	DeclaredMoney float64 `json:"declared_money"`
+	CreditedQuota int64   `json:"credited_quota"`
+	Status        string  `json:"status" gorm:"type:varchar(32);index"`
+	AdminReason   string  `json:"admin_reason" gorm:"type:varchar(255);default:''"`
+	AuditorId     int     `json:"auditor_id" gorm:"index;default:0"`
+	CreateTime    int64   `json:"create_time"`
+	UpdateTime    int64   `json:"update_time"`
+	ReviewedTime  int64   `json:"reviewed_time"`
 }
 
 type OfficialPaymentRefundPreview struct {
@@ -1486,6 +1527,46 @@ func fillTopUpPendingRefundRequests(topUps []*TopUp) {
 	}
 }
 
+func fillSelfServeTopUpAudits(topUps []*TopUp) {
+	if len(topUps) == 0 {
+		return
+	}
+	topUpIds := make([]int, 0, len(topUps))
+	for _, topUp := range topUps {
+		if topUp != nil && IsSelfServeTopUpRecord(topUp) && topUp.Id > 0 {
+			topUpIds = append(topUpIds, topUp.Id)
+		}
+	}
+	topUpIds = uniqueIntSlice(topUpIds)
+	if len(topUpIds) == 0 {
+		return
+	}
+	var audits []SelfServeTopUpAudit
+	if err := DB.Where("top_up_id IN ?", topUpIds).Find(&audits).Error; err != nil {
+		return
+	}
+	auditByTopUpId := make(map[int]SelfServeTopUpAudit, len(audits))
+	for _, audit := range audits {
+		auditByTopUpId[audit.TopUpId] = audit
+	}
+	for _, topUp := range topUps {
+		if topUp == nil {
+			continue
+		}
+		audit, ok := auditByTopUpId[topUp.Id]
+		if !ok {
+			continue
+		}
+		topUp.AuditStatus = audit.Status
+		topUp.TransactionNo = audit.TransactionNo
+		topUp.DeclaredMoney = audit.DeclaredMoney
+		topUp.CreditedQuota = audit.CreditedQuota
+		topUp.AuditAdminReason = audit.AdminReason
+		topUp.AuditorId = audit.AuditorId
+		topUp.ReviewedTime = audit.ReviewedTime
+	}
+}
+
 func parseTopUpUserIDKeyword(keyword string) (int, bool) {
 	value, err := strconv.Atoi(strings.TrimSpace(keyword))
 	if err != nil || value <= 0 {
@@ -1545,6 +1626,7 @@ type TopUpQueryOptions struct {
 	Username      string
 	PaymentMethod string
 	TradeNo       string
+	AuditStatus   string
 	StartTime     int64
 	EndTime       int64
 	PendingRefund bool
@@ -1575,9 +1657,18 @@ func applyTopUpExactFilters(query *gorm.DB, options TopUpQueryOptions) (*gorm.DB
 		paymentMethod := strings.TrimSpace(options.PaymentMethod)
 		if paymentMethod == PaymentProviderAdmin || IsAdminTopUpPaymentMethod(paymentMethod) {
 			query = query.Where("(payment_method IN ? OR payment_provider = ?)", adminTopUpPaymentMethods(), PaymentProviderAdmin)
+		} else if paymentMethod == PaymentProviderSelfServe {
+			query = query.Where("payment_provider = ?", PaymentProviderSelfServe)
 		} else {
 			query = query.Where("(payment_method = ? OR payment_provider = ?)", paymentMethod, paymentMethod)
 		}
+	}
+	if options.AuditStatus != "" {
+		auditStatus := strings.TrimSpace(options.AuditStatus)
+		selfServeTopUpIds := DB.Model(&SelfServeTopUpAudit{}).
+			Select("top_up_id").
+			Where("status = ?", auditStatus)
+		query = query.Where("id IN (?)", selfServeTopUpIds)
 	}
 	if options.StartTime > 0 {
 		query = query.Where("create_time >= ?", options.StartTime)
@@ -1714,6 +1805,7 @@ func GetUserTopUpsResultWithOptions(userId int, options TopUpQueryOptions, pageI
 
 	// /topup/self 视图不展示用户名列，无需回填，省一次额外查询
 	fillTopUpPendingRefundRequests(result.Items)
+	fillSelfServeTopUpAudits(result.Items)
 
 	return result, nil
 }
@@ -1765,6 +1857,7 @@ func GetAllTopUpsResultWithOptions(options TopUpQueryOptions, pageInfo *common.P
 
 	fillTopUpUsernames(result.Items)
 	fillTopUpPendingRefundRequests(result.Items)
+	fillSelfServeTopUpAudits(result.Items)
 
 	return result, nil
 }
@@ -1822,6 +1915,495 @@ func roundMoneyToCents(money float64) float64 {
 		return 0
 	}
 	return value.InexactFloat64()
+}
+
+type SelfServeTopUpPreview struct {
+	DeclaredMoney    float64 `json:"declared_money"`
+	CreditedQuota    int64   `json:"credited_quota"`
+	DailyUsedMoney   float64 `json:"daily_used_money"`
+	DailyRemainMoney float64 `json:"daily_remain_money"`
+	SingleMaxMoney   float64 `json:"single_max_money"`
+	DailyMaxMoney    float64 `json:"daily_max_money"`
+}
+
+type SelfServeTopUpCreateParams struct {
+	UserId        int
+	PaymentMethod string
+	DeclaredMoney float64
+	TransactionNo string
+}
+
+type SelfServeTopUpEditParams struct {
+	TradeNo       string
+	DeclaredMoney float64
+	TransactionNo string
+	AdminReason   string
+	AuditorId     int
+}
+
+type SelfServeTopUpReviewResult struct {
+	TopUp          *TopUp
+	Audit          *SelfServeTopUpAudit
+	QuotaDelta     int64
+	Banned         bool
+	ReferralResult *ReferralCommissionCreditResult
+}
+
+func NormalizeSelfServePaymentMethod(paymentMethod string) string {
+	switch strings.TrimSpace(paymentMethod) {
+	case PaymentMethodAlipaySelfServe:
+		return PaymentMethodAlipaySelfServe
+	case PaymentMethodWechatSelfServe:
+		return PaymentMethodWechatSelfServe
+	default:
+		return ""
+	}
+}
+
+func SelfServeTopUpPaymentMethodName(paymentMethod string) string {
+	switch NormalizeSelfServePaymentMethod(paymentMethod) {
+	case PaymentMethodAlipaySelfServe:
+		return "支付宝自助"
+	case PaymentMethodWechatSelfServe:
+		return "微信自助"
+	default:
+		return "自助充值"
+	}
+}
+
+func selfServeTopUpTradeNo(userId int) string {
+	return fmt.Sprintf("SSU%dNO%d%s", userId, common.GetTimestamp(), strings.ToUpper(common.GetUUID()[:8]))
+}
+
+func selfServeTopUpRejectNo() string {
+	return fmt.Sprintf("SSU_RF_%d_%s", common.GetTimestamp(), strings.ToUpper(common.GetUUID()[:8]))
+}
+
+func normalizeSelfServeMoney(money float64) decimal.Decimal {
+	return decimal.NewFromFloat(money).Round(2)
+}
+
+func selfServeTodayStart() int64 {
+	now := time.Now()
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	return start.Unix()
+}
+
+func selfServeDailyUsedMoneyTx(tx *gorm.DB, userId int, excludeAuditId int) (decimal.Decimal, error) {
+	query := tx.Model(&SelfServeTopUpAudit{}).
+		Where("user_id = ? AND create_time >= ? AND status <> ?", userId, selfServeTodayStart(), SelfServeTopUpAuditStatusRejected)
+	if excludeAuditId > 0 {
+		query = query.Where("id <> ?", excludeAuditId)
+	}
+	var total sql.NullFloat64
+	if err := query.Select("COALESCE(SUM(declared_money), 0)").Scan(&total).Error; err != nil {
+		return decimal.Zero, err
+	}
+	if total.Valid {
+		return decimal.NewFromFloat(total.Float64).Round(2), nil
+	}
+	return decimal.Zero, nil
+}
+
+func GetSelfServeDailyUsedMoney(userId int) (float64, error) {
+	used, err := selfServeDailyUsedMoneyTx(DB, userId, 0)
+	if err != nil {
+		return 0, err
+	}
+	return used.InexactFloat64(), nil
+}
+
+func validateSelfServeTopUpMoneyTx(tx *gorm.DB, userId int, declaredMoney decimal.Decimal, excludeAuditId int) (decimal.Decimal, error) {
+	if userId <= 0 {
+		return decimal.Zero, errors.New("无效用户")
+	}
+	if !declaredMoney.IsPositive() {
+		return decimal.Zero, errors.New("充值金额必须大于 0")
+	}
+	if setting.SelfServeTopUpSingleMaxAmount <= 0 || setting.SelfServeTopUpDailyMaxAmount <= 0 {
+		return decimal.Zero, errors.New("请先配置自助充值限额")
+	}
+	if setting.SelfServeTopUpDailyMaxAmount < setting.SelfServeTopUpSingleMaxAmount {
+		return decimal.Zero, errors.New("每日自助充值限额不能小于单笔限额")
+	}
+	singleMax := decimal.NewFromFloat(setting.SelfServeTopUpSingleMaxAmount)
+	if declaredMoney.GreaterThan(singleMax) {
+		return decimal.Zero, fmt.Errorf("单笔自助充值金额不能超过 %.2f 元", setting.SelfServeTopUpSingleMaxAmount)
+	}
+	dailyUsed, err := selfServeDailyUsedMoneyTx(tx, userId, excludeAuditId)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	dailyMax := decimal.NewFromFloat(setting.SelfServeTopUpDailyMaxAmount)
+	if dailyUsed.Add(declaredMoney).GreaterThan(dailyMax) {
+		return decimal.Zero, fmt.Errorf("每日自助充值金额不能超过 %.2f 元", setting.SelfServeTopUpDailyMaxAmount)
+	}
+	return dailyUsed, nil
+}
+
+func calculateSelfServeTopUpQuota(userId int, declaredMoney decimal.Decimal) (int64, error) {
+	return calculateSelfServeTopUpQuotaTx(DB, userId, declaredMoney)
+}
+
+func calculateSelfServeTopUpQuotaTx(tx *gorm.DB, userId int, declaredMoney decimal.Decimal) (int64, error) {
+	if tx == nil {
+		tx = DB
+	}
+	if !declaredMoney.IsPositive() {
+		return 0, errors.New("充值金额必须大于 0")
+	}
+	if operation_setting.Price <= 0 {
+		return 0, errors.New("充值价格配置错误")
+	}
+	var group string
+	if err := tx.Model(&User{}).Where("id = ?", userId).Select(commonGroupCol).Find(&group).Error; err != nil {
+		return 0, err
+	}
+	topupGroupRatio := common.GetTopupGroupRatio(group)
+	if topupGroupRatio <= 0 {
+		topupGroupRatio = 1
+	}
+	quotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+	if !quotaPerUnit.IsPositive() {
+		return 0, errors.New("额度倍率配置错误")
+	}
+	denominator := decimal.NewFromFloat(operation_setting.Price).Mul(decimal.NewFromFloat(topupGroupRatio))
+	if !denominator.IsPositive() {
+		return 0, errors.New("充值倍率配置错误")
+	}
+	quota := declaredMoney.Div(denominator).Mul(quotaPerUnit).IntPart()
+	if quota <= 0 {
+		return 0, errors.New("充值金额过低")
+	}
+	return quota, nil
+}
+
+func PreviewSelfServeTopUp(userId int, declaredMoney float64) (*SelfServeTopUpPreview, error) {
+	money := normalizeSelfServeMoney(declaredMoney)
+	dailyUsed, err := validateSelfServeTopUpMoneyTx(DB, userId, money, 0)
+	if err != nil {
+		return nil, err
+	}
+	quota, err := calculateSelfServeTopUpQuota(userId, money)
+	if err != nil {
+		return nil, err
+	}
+	dailyMax := decimal.NewFromFloat(setting.SelfServeTopUpDailyMaxAmount)
+	remain := dailyMax.Sub(dailyUsed).Sub(money).Round(2)
+	if remain.IsNegative() {
+		remain = decimal.Zero
+	}
+	return &SelfServeTopUpPreview{
+		DeclaredMoney:    money.InexactFloat64(),
+		CreditedQuota:    quota,
+		DailyUsedMoney:   dailyUsed.InexactFloat64(),
+		DailyRemainMoney: remain.InexactFloat64(),
+		SingleMaxMoney:   setting.SelfServeTopUpSingleMaxAmount,
+		DailyMaxMoney:    setting.SelfServeTopUpDailyMaxAmount,
+	}, nil
+}
+
+func CreateSelfServeTopUp(params SelfServeTopUpCreateParams) (*SelfServeTopUpReviewResult, error) {
+	paymentMethod := NormalizeSelfServePaymentMethod(params.PaymentMethod)
+	if paymentMethod == "" {
+		return nil, ErrPaymentMethodMismatch
+	}
+	transactionNo := strings.TrimSpace(params.TransactionNo)
+	if len(transactionNo) < 6 || len(transactionNo) > 128 {
+		return nil, errors.New("交易订单号长度必须为 6 到 128 个字符")
+	}
+	money := normalizeSelfServeMoney(params.DeclaredMoney)
+	if _, err := validateSelfServeTopUpMoneyTx(DB, params.UserId, money, 0); err != nil {
+		return nil, err
+	}
+	quotaToAdd, err := calculateSelfServeTopUpQuota(params.UserId, money)
+	if err != nil {
+		return nil, err
+	}
+
+	now := common.GetTimestamp()
+	var result SelfServeTopUpReviewResult
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		if _, err := validateSelfServeTopUpMoneyTx(tx, params.UserId, money, 0); err != nil {
+			return err
+		}
+		var existingAudit SelfServeTopUpAudit
+		if err := tx.Where("transaction_no = ?", transactionNo).First(&existingAudit).Error; err == nil {
+			return errors.New("该交易订单号已提交")
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		topUp := &TopUp{
+			UserId:          params.UserId,
+			Amount:          quotaToAdd,
+			Money:           money.InexactFloat64(),
+			Fee:             0,
+			TradeNo:         selfServeTopUpTradeNo(params.UserId),
+			PaymentMethod:   paymentMethod,
+			PaymentProvider: PaymentProviderSelfServe,
+			CreateTime:      now,
+			CompleteTime:    now,
+			Status:          common.TopUpStatusSuccess,
+		}
+		if err := tx.Create(topUp).Error; err != nil {
+			return err
+		}
+		audit := &SelfServeTopUpAudit{
+			TopUpId:       topUp.Id,
+			UserId:        params.UserId,
+			TradeNo:       topUp.TradeNo,
+			TransactionNo: transactionNo,
+			PaymentMethod: paymentMethod,
+			DeclaredMoney: money.InexactFloat64(),
+			CreditedQuota: quotaToAdd,
+			Status:        SelfServeTopUpAuditStatusPending,
+			CreateTime:    now,
+			UpdateTime:    now,
+		}
+		if err := tx.Create(audit).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&User{}).Where("id = ?", params.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+			return err
+		}
+		result.TopUp = topUp
+		result.Audit = audit
+		result.QuotaDelta = quotaToAdd
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	_ = InvalidateUserCache(params.UserId)
+	return &result, nil
+}
+
+func ApproveSelfServeTopUp(tradeNo string, auditorId int, adminReason string) (*SelfServeTopUpReviewResult, error) {
+	tradeNo = strings.TrimSpace(tradeNo)
+	if tradeNo == "" {
+		return nil, errors.New("未提供订单号")
+	}
+	now := common.GetTimestamp()
+	var result SelfServeTopUpReviewResult
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		topUp := &TopUp{}
+		if err := withRowLock(tx).Where("trade_no = ?", tradeNo).First(topUp).Error; err != nil {
+			return ErrTopUpNotFound
+		}
+		if !IsSelfServeTopUpRecord(topUp) {
+			return ErrPaymentMethodMismatch
+		}
+		audit := &SelfServeTopUpAudit{}
+		if err := withRowLock(tx).Where("top_up_id = ?", topUp.Id).First(audit).Error; err != nil {
+			return err
+		}
+		if audit.Status == SelfServeTopUpAuditStatusApproved {
+			result.TopUp = topUp
+			result.Audit = audit
+			return nil
+		}
+		if audit.Status != SelfServeTopUpAuditStatusPending {
+			return ErrTopUpStatusInvalid
+		}
+		audit.Status = SelfServeTopUpAuditStatusApproved
+		audit.AdminReason = strings.TrimSpace(adminReason)
+		audit.AuditorId = auditorId
+		audit.UpdateTime = now
+		audit.ReviewedTime = now
+		if err := tx.Save(audit).Error; err != nil {
+			return err
+		}
+		referralResult, err := CreditInviteRewardsAfterPaymentTx(tx, topUp.UserId, topUp.Money, topUp.PaymentMethod, ReferralCommissionSourceTopUp, topUp.Id)
+		if err != nil {
+			return err
+		}
+		result.TopUp = topUp
+		result.Audit = audit
+		result.ReferralResult = referralResult
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func UpdateSelfServeTopUp(params SelfServeTopUpEditParams) (*SelfServeTopUpReviewResult, error) {
+	tradeNo := strings.TrimSpace(params.TradeNo)
+	if tradeNo == "" {
+		return nil, errors.New("未提供订单号")
+	}
+	transactionNo := strings.TrimSpace(params.TransactionNo)
+	if len(transactionNo) < 6 || len(transactionNo) > 128 {
+		return nil, errors.New("交易订单号长度必须为 6 到 128 个字符")
+	}
+	money := normalizeSelfServeMoney(params.DeclaredMoney)
+	now := common.GetTimestamp()
+	var result SelfServeTopUpReviewResult
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		topUp := &TopUp{}
+		if err := withRowLock(tx).Where("trade_no = ?", tradeNo).First(topUp).Error; err != nil {
+			return ErrTopUpNotFound
+		}
+		if !IsSelfServeTopUpRecord(topUp) {
+			return ErrPaymentMethodMismatch
+		}
+		audit := &SelfServeTopUpAudit{}
+		if err := withRowLock(tx).Where("top_up_id = ?", topUp.Id).First(audit).Error; err != nil {
+			return err
+		}
+		if audit.Status != SelfServeTopUpAuditStatusPending {
+			return ErrTopUpStatusInvalid
+		}
+		if _, err := validateSelfServeTopUpMoneyTx(tx, topUp.UserId, money, audit.Id); err != nil {
+			return err
+		}
+		if transactionNo != audit.TransactionNo {
+			var duplicate SelfServeTopUpAudit
+			if err := tx.Where("transaction_no = ? AND id <> ?", transactionNo, audit.Id).First(&duplicate).Error; err == nil {
+				return errors.New("该交易订单号已提交")
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		}
+		newQuota, err := calculateSelfServeTopUpQuotaTx(tx, topUp.UserId, money)
+		if err != nil {
+			return err
+		}
+		oldQuota := audit.CreditedQuota
+		delta := newQuota - oldQuota
+		if delta != 0 {
+			if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", delta)).Error; err != nil {
+				return err
+			}
+		}
+		topUp.Amount = newQuota
+		topUp.Money = money.InexactFloat64()
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+		audit.TransactionNo = transactionNo
+		audit.DeclaredMoney = money.InexactFloat64()
+		audit.CreditedQuota = newQuota
+		audit.AdminReason = strings.TrimSpace(params.AdminReason)
+		audit.AuditorId = params.AuditorId
+		audit.UpdateTime = now
+		if err := tx.Save(audit).Error; err != nil {
+			return err
+		}
+		result.TopUp = topUp
+		result.Audit = audit
+		result.QuotaDelta = delta
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result.TopUp != nil {
+		_ = InvalidateUserCache(result.TopUp.UserId)
+	}
+	return &result, nil
+}
+
+func RejectSelfServeTopUp(tradeNo string, auditorId int, adminReason string, banUser bool) (*SelfServeTopUpReviewResult, error) {
+	tradeNo = strings.TrimSpace(tradeNo)
+	if tradeNo == "" {
+		return nil, errors.New("未提供订单号")
+	}
+	now := common.GetTimestamp()
+	var result SelfServeTopUpReviewResult
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		topUp := &TopUp{}
+		if err := withRowLock(tx).Where("trade_no = ?", tradeNo).First(topUp).Error; err != nil {
+			return ErrTopUpNotFound
+		}
+		if !IsSelfServeTopUpRecord(topUp) {
+			return ErrPaymentMethodMismatch
+		}
+		audit := &SelfServeTopUpAudit{}
+		if err := withRowLock(tx).Where("top_up_id = ?", topUp.Id).First(audit).Error; err != nil {
+			return err
+		}
+		if audit.Status == SelfServeTopUpAuditStatusRejected {
+			if banUser {
+				if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("status", common.UserStatusDisabled).Error; err != nil {
+					return err
+				}
+				result.Banned = true
+			}
+			result.TopUp = topUp
+			result.Audit = audit
+			return nil
+		}
+		if audit.Status != SelfServeTopUpAuditStatusPending {
+			return ErrTopUpStatusInvalid
+		}
+		refundQuota := audit.CreditedQuota - topUp.RefundedQuota
+		if refundQuota < 0 {
+			refundQuota = 0
+		}
+		if refundQuota > 0 {
+			if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota - ?", refundQuota)).Error; err != nil {
+				return err
+			}
+		}
+		refundAmount := decimal.NewFromFloat(topUp.Money).Sub(decimal.NewFromFloat(topUp.RefundedMoney)).Round(2)
+		if refundAmount.IsNegative() {
+			refundAmount = decimal.Zero
+		}
+		refund := &TopUpRefund{
+			TopUpId:         topUp.Id,
+			UserId:          topUp.UserId,
+			TradeNo:         topUp.TradeNo,
+			OutRequestNo:    selfServeTopUpRejectNo(),
+			PaymentMethod:   topUp.PaymentMethod,
+			PaymentProvider: topUp.PaymentProvider,
+			RefundAmount:    refundAmount.InexactFloat64(),
+			RefundQuota:     refundQuota,
+			Reason:          normalizeRefundRequestReason(adminReason),
+			Status:          TopUpRefundStatusSuccess,
+			CreateTime:      now,
+			CompleteTime:    now,
+		}
+		if err := tx.Create(refund).Error; err != nil {
+			return err
+		}
+		topUp.RefundedQuota += refundQuota
+		topUp.RefundedMoney = decimal.NewFromFloat(topUp.RefundedMoney).Add(refundAmount).Round(2).InexactFloat64()
+		topUp.Status = common.TopUpStatusRefunded
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+		audit.Status = SelfServeTopUpAuditStatusRejected
+		audit.AdminReason = strings.TrimSpace(adminReason)
+		audit.AuditorId = auditorId
+		audit.UpdateTime = now
+		audit.ReviewedTime = now
+		if err := tx.Save(audit).Error; err != nil {
+			return err
+		}
+		if banUser {
+			if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("status", common.UserStatusDisabled).Error; err != nil {
+				return err
+			}
+		}
+		result.TopUp = topUp
+		result.Audit = audit
+		result.QuotaDelta = -refundQuota
+		result.Banned = banUser
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result.TopUp != nil {
+		_ = InvalidateUserCache(result.TopUp.UserId)
+		if result.Banned {
+			_ = InvalidateUserTokensCache(result.TopUp.UserId)
+		}
+	}
+	return &result, nil
 }
 
 func buildAdminTopUpPayMoneyBreakdown(effectiveMoney decimal.Decimal, serviceFeePercent float64) AdminTopUpPayMoneyBreakdown {

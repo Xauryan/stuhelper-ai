@@ -137,6 +137,9 @@ const BillingFilters = ({
             >
               <Radio value='all'>{t('全部账单')}</Radio>
               <Radio value='pending_refund'>{t('待处理退款')}</Radio>
+              {isAdminUser && (
+                <Radio value='pending_self_serve'>{t('待审核自助充值')}</Radio>
+              )}
             </Form.RadioGroup>
           </div>
 

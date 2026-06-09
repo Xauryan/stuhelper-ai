@@ -1509,8 +1509,12 @@ html.dark .sbg-variant-green {
 }
 
 /* ==================== ScrollList 定制样式 ==================== */
-.semi-scrolllist,
-.semi-scrolllist * {
+.semi-datepicker .semi-scrolllist,
+.semi-datepicker .semi-scrolllist *,
+.semi-timepicker-panel .semi-scrolllist,
+.semi-timepicker-panel .semi-scrolllist *,
+.semi-timepicker-range-panel .semi-scrolllist,
+.semi-timepicker-range-panel .semi-scrolllist * {
   -ms-overflow-style: none;
   /* IE, Edge */
   scrollbar-width: none;
@@ -1518,18 +1522,26 @@ html.dark .sbg-variant-green {
   background: transparent !important;
 }
 
-.semi-scrolllist::-webkit-scrollbar,
-.semi-scrolllist *::-webkit-scrollbar {
+.semi-datepicker .semi-scrolllist::-webkit-scrollbar,
+.semi-datepicker .semi-scrolllist *::-webkit-scrollbar,
+.semi-timepicker-panel .semi-scrolllist::-webkit-scrollbar,
+.semi-timepicker-panel .semi-scrolllist *::-webkit-scrollbar,
+.semi-timepicker-range-panel .semi-scrolllist::-webkit-scrollbar,
+.semi-timepicker-range-panel .semi-scrolllist *::-webkit-scrollbar {
   width: 0 !important;
   height: 0 !important;
   display: none !important;
 }
 
-.semi-scrolllist-body {
+.semi-datepicker .semi-scrolllist-body,
+.semi-timepicker-panel .semi-scrolllist-body,
+.semi-timepicker-range-panel .semi-scrolllist-body {
   padding: 1px !important;
 }
 
-.semi-scrolllist-list-outer {
+.semi-datepicker .semi-scrolllist-list-outer,
+.semi-timepicker-panel .semi-scrolllist-list-outer,
+.semi-timepicker-range-panel .semi-scrolllist-list-outer {
   padding-right: 0 !important;
 }
 
@@ -1637,7 +1649,14 @@ html.dark .with-pastel-balls::before {
 
 .table-scroll-card .semi-card-body {
   flex: 1 1 auto;
-  overflow-y: auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.table-scroll-card .semi-table-body {
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 /* Ensure tables fill the card body width even when column content is narrow.

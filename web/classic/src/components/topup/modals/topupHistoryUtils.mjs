@@ -25,6 +25,11 @@ export const isOfficialPaymentTopup = (record) =>
   record?.payment_provider === 'wxpay_official' ||
   record?.payment_method === 'wxpay_official';
 
+export const isSelfServeTopup = (record) =>
+  record?.payment_provider === 'self_serve' ||
+  record?.payment_method === 'alipay_self_serve' ||
+  record?.payment_method === 'wxpay_self_serve';
+
 export const ADMIN_TOPUP_PAYMENT_METHODS = [
   'admin_add',
   '管理员增加',
@@ -107,6 +112,8 @@ export const TOPUP_PAYMENT_METHOD_LABELS = {
   wxpay: '微信',
   alipay_official: '支付宝',
   wxpay_official: '微信',
+  alipay_self_serve: '支付宝自助',
+  wxpay_self_serve: '微信自助',
   admin_add: '管理员充值',
   管理员增加: '管理员充值',
   管理员充值: '管理员充值',
@@ -119,5 +126,6 @@ export const BILLING_PAYMENT_METHOD_FILTERS = [
   { value: '', key: '全部' },
   { value: 'alipay_official', key: '支付宝' },
   { value: 'wxpay_official', key: '微信' },
+  { value: 'self_serve', key: '自助充值' },
   { value: 'admin_add', key: '管理员充值' },
 ];

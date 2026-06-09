@@ -46,7 +46,9 @@ const BillingActions = ({
         <Tag color='pink' style={tagBaseStyle} className='!rounded-lg'>
           {activeTab === 'pending_refund'
             ? t('待处理退款')
-            : `${t('账单')}: ${total}`}
+            : activeTab === 'pending_self_serve'
+              ? t('待审核自助充值')
+              : `${t('账单')}: ${total}`}
         </Tag>
       </Space>
 

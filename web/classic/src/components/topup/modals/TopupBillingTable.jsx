@@ -51,6 +51,7 @@ import {
   isAdminManagedTopup,
   isAdminManagedTopupRefundable,
   isOfficialRefundable,
+  isSelfServeTopup,
   isSubscriptionTopup,
 } from './topupHistoryUtils.mjs';
 const { Text } = Typography;
@@ -63,6 +64,12 @@ const STATUS_CONFIG = {
   expired: { type: 'danger', key: '已超时' },
   partial_refunded: { type: 'warning', key: '部分退款' },
   refunded: { type: 'secondary', key: '已退款' },
+};
+
+const SELF_SERVE_AUDIT_STATUS_CONFIG = {
+  pending: { color: 'orange', key: '待审核' },
+  approved: { color: 'green', key: '审核通过' },
+  rejected: { color: 'red', key: '已拒绝' },
 };
 
 const isOfficialTopupRefundable = (record) =>
@@ -92,6 +99,21 @@ const formatPercent = (value) => {
   return percent.toFixed(3).replace(/\.?0+$/, '');
 };
 
+const EMPTY_SELF_SERVE_LIMITS = {
+  single_max_money: 0,
+  daily_max_money: 0,
+};
+
+const positiveMoney = (value) => {
+  const money = Number(value);
+  return Number.isFinite(money) && money > 0 ? money : 0;
+};
+
+const normalizeSelfServeLimits = (limits) => ({
+  single_max_money: positiveMoney(limits?.single_max_money),
+  daily_max_money: positiveMoney(limits?.daily_max_money),
+});
+
 const TopupBillingTable = ({
   active = true,
   compactMode = false,
@@ -102,6 +124,7 @@ const TopupBillingTable = ({
   onPaginationChange,
   onReady,
   pendingRefundOnly = false,
+  pendingSelfServeAuditOnly = false,
   t,
   variant = 'embedded',
 }) => {
@@ -134,6 +157,19 @@ const TopupBillingTable = ({
     serviceFeePercent: 0,
     useDefaultMoney: true,
   });
+  const [selfServeEditVisible, setSelfServeEditVisible] = useState(false);
+  const [selfServeEditRecord, setSelfServeEditRecord] = useState(null);
+  const [selfServeEditLoading, setSelfServeEditLoading] = useState(false);
+  const [selfServeEditForm, setSelfServeEditForm] = useState({
+    declaredMoney: 0,
+    transactionNo: '',
+    reason: '',
+  });
+  const [selfServeRejectAutoBan, setSelfServeRejectAutoBan] = useState(false);
+  const [selfServeLimits, setSelfServeLimits] = useState(
+    EMPTY_SELF_SERVE_LIMITS,
+  );
+  const selfServeSingleMax = positiveMoney(selfServeLimits.single_max_money);
   const isPageVariant = variant === 'page';
   // hideFilters 模式（独立账单页）下，关键词由父组件 submit 后传入，不需要再做内部 debounce；
   // 否则在弹窗内是逐字输入，加 300ms debounce 避免每按一个字符就打一次 API。
@@ -182,6 +218,9 @@ const TopupBillingTable = ({
         if (effectiveFilters?.payment_method) {
           params.set('payment_method', effectiveFilters.payment_method);
         }
+        if (effectiveFilters?.audit_status) {
+          params.set('audit_status', effectiveFilters.audit_status);
+        }
         if (
           Array.isArray(effectiveFilters?.dateRange) &&
           effectiveFilters.dateRange.length === 2
@@ -197,6 +236,10 @@ const TopupBillingTable = ({
         }
         if (pendingRefundOnly) {
           params.set('pending_refund', 'true');
+        }
+        if (pendingSelfServeAuditOnly) {
+          params.set('payment_method', 'self_serve');
+          params.set('audit_status', 'pending');
         }
         const endpoint = `${base}?${params.toString()}`;
         const res = await API.get(endpoint);
@@ -225,6 +268,7 @@ const TopupBillingTable = ({
       effectiveKeyword,
       onPaginationChange,
       pendingRefundOnly,
+      pendingSelfServeAuditOnly,
       t,
     ],
   );
@@ -244,6 +288,29 @@ const TopupBillingTable = ({
       onPaginationChange({ page, pageSize, total, totalMoney });
     }
   }, [onPaginationChange, page, pageSize, total, totalMoney]);
+
+  useEffect(() => {
+    if (!userIsAdmin) {
+      return;
+    }
+    let cancelled = false;
+    const loadSelfServePolicy = async () => {
+      try {
+        const res = await API.get('/api/user/topup/info');
+        const { success, data } = res.data;
+        if (!cancelled && success) {
+          setSelfServeRejectAutoBan(Boolean(data?.self_serve_reject_auto_ban));
+          setSelfServeLimits(normalizeSelfServeLimits(data?.self_serve_limits));
+        }
+      } catch (e) {
+        // Keep the local default when the policy cannot be loaded.
+      }
+    };
+    loadSelfServePolicy();
+    return () => {
+      cancelled = true;
+    };
+  }, [userIsAdmin]);
 
   const handlePageChange = (currentPage) => {
     setPage(currentPage);
@@ -555,6 +622,177 @@ const TopupBillingTable = ({
     [loadTopups, page, pageSize, t],
   );
 
+  const openSelfServeEditModal = useCallback((record) => {
+    if (!record) {
+      return;
+    }
+    setSelfServeEditRecord(record);
+    setSelfServeEditForm({
+      declaredMoney: Number(record.declared_money || record.money || 0),
+      transactionNo: record.transaction_no || '',
+      reason: record.audit_admin_reason || '',
+    });
+    setSelfServeEditVisible(true);
+  }, []);
+
+  const setSelfServeEditField = useCallback((field, value) => {
+    setSelfServeEditForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }, []);
+
+  const handleSelfServeApprove = useCallback(
+    (record) => {
+      let auditReason = '';
+      Modal.confirm({
+        title: t('通过自助充值审核'),
+        content: (
+          <div className='space-y-3'>
+            <div>
+              <Text type='secondary'>
+                {t('确认该交易订单号已真实到账后再通过审核。')}
+              </Text>
+            </div>
+            <Input
+              placeholder={t('审核备注，可留空')}
+              onChange={(value) => {
+                auditReason = value;
+              }}
+              showClear
+            />
+          </div>
+        ),
+        okText: t('通过'),
+        cancelText: t('取消'),
+        onOk: async () => {
+          try {
+            const res = await API.post('/api/user/topup/self-serve/approve', {
+              trade_no: record.trade_no,
+              reason: auditReason,
+            });
+            const { success, message } = res.data;
+            if (success) {
+              Toast.success({ content: t('审核已通过') });
+              await loadTopups(page, pageSize);
+            } else {
+              Toast.error({ content: message || t('操作失败') });
+            }
+          } catch (e) {
+            Toast.error({ content: t('操作失败') });
+          }
+        },
+      });
+    },
+    [loadTopups, page, pageSize, t],
+  );
+
+  const handleSelfServeReject = useCallback(
+    (record, defaultBanUser = false) => {
+      let rejectReason = '';
+      let banUser = defaultBanUser;
+      Modal.confirm({
+        title: defaultBanUser ? t('拒绝并封禁用户') : t('拒绝自助充值审核'),
+        content: (
+          <div className='space-y-3'>
+            <Text type='warning'>
+              {t('拒绝后会立即扣回该订单已到账余额，且不会退款。')}
+            </Text>
+            <Input
+              placeholder={t('拒绝原因，可留空')}
+              onChange={(value) => {
+                rejectReason = value;
+              }}
+              showClear
+            />
+            <Checkbox
+              defaultChecked={defaultBanUser}
+              onChange={(event) => {
+                banUser = event.target.checked;
+              }}
+            >
+              {t('同时封禁该用户')}
+            </Checkbox>
+          </div>
+        ),
+        okText: t('确认拒绝'),
+        cancelText: t('取消'),
+        okButtonProps: { type: 'danger' },
+        onOk: async () => {
+          try {
+            const res = await API.post('/api/user/topup/self-serve/reject', {
+              trade_no: record.trade_no,
+              reason: rejectReason,
+              ban_user: banUser,
+            });
+            const { success, message } = res.data;
+            if (success) {
+              Toast.success({
+                content: banUser ? t('已拒绝并封禁用户') : t('已拒绝审核'),
+              });
+              await loadTopups(page, pageSize);
+            } else {
+              Toast.error({ content: message || t('操作失败') });
+            }
+          } catch (e) {
+            Toast.error({ content: t('操作失败') });
+          }
+        },
+      });
+    },
+    [loadTopups, page, pageSize, t],
+  );
+
+  const handleSelfServeUpdate = async () => {
+    if (!selfServeEditRecord) {
+      return;
+    }
+    const declaredMoney =
+      Math.round(Number(selfServeEditForm.declaredMoney || 0) * 100) / 100;
+    const transactionNo = selfServeEditForm.transactionNo.trim();
+    if (!declaredMoney || declaredMoney <= 0) {
+      Toast.error({ content: t('请输入充值金额') });
+      return;
+    }
+    if (!selfServeSingleMax) {
+      Toast.error({ content: t('请先配置自助充值限额') });
+      return;
+    }
+    if (declaredMoney > selfServeSingleMax) {
+      Toast.error({
+        content: t('单笔自助充值金额不能超过 {{amount}} 元', {
+          amount: selfServeSingleMax.toFixed(2),
+        }),
+      });
+      return;
+    }
+    if (!transactionNo) {
+      Toast.error({ content: t('请输入交易订单号') });
+      return;
+    }
+    setSelfServeEditLoading(true);
+    try {
+      const res = await API.post('/api/user/topup/self-serve/update', {
+        trade_no: selfServeEditRecord.trade_no,
+        declared_money: declaredMoney,
+        transaction_no: transactionNo,
+        reason: selfServeEditForm.reason,
+      });
+      const { success, message } = res.data;
+      if (success) {
+        Toast.success({ content: t('自助充值订单已更新') });
+        setSelfServeEditVisible(false);
+        await loadTopups(page, pageSize);
+      } else {
+        Toast.error({ content: message || t('操作失败') });
+      }
+    } catch (e) {
+      Toast.error({ content: t('操作失败') });
+    } finally {
+      setSelfServeEditLoading(false);
+    }
+  };
+
   const handleQueryAlipayOfficial = useCallback(
     async (tradeNo) => {
       try {
@@ -681,6 +919,21 @@ const TopupBillingTable = ({
     return <Text>{displayName === '-' ? displayName : t(displayName)}</Text>;
   };
 
+  const renderSelfServeAuditStatus = (record) => {
+    if (!isSelfServeTopup(record)) {
+      return <Text type='tertiary'>-</Text>;
+    }
+    const config = SELF_SERVE_AUDIT_STATUS_CONFIG[record.audit_status] || {
+      color: 'grey',
+      key: record.audit_status || '待审核',
+    };
+    return (
+      <Tag color={config.color} shape='circle' size='small'>
+        {t(config.key)}
+      </Tag>
+    );
+  };
+
   const columns = useMemo(() => {
     const baseColumns = [
       ...(userIsAdmin
@@ -710,6 +963,28 @@ const TopupBillingTable = ({
         dataIndex: 'payment_method',
         key: 'payment_method',
         render: renderPaymentMethod,
+      },
+      {
+        title: t('交易订单号'),
+        dataIndex: 'transaction_no',
+        key: 'transaction_no',
+        render: (transactionNo, record) =>
+          isSelfServeTopup(record) && transactionNo ? (
+            <Text copyable>{transactionNo}</Text>
+          ) : (
+            <Text type='tertiary'>-</Text>
+          ),
+      },
+      {
+        title: t('申报金额'),
+        dataIndex: 'declared_money',
+        key: 'declared_money',
+        render: (declaredMoney, record) =>
+          isSelfServeTopup(record) ? (
+            <Text type='danger'>¥{formatCurrency(declaredMoney)}</Text>
+          ) : (
+            <Text type='tertiary'>-</Text>
+          ),
       },
       {
         title: t('充值额度'),
@@ -775,6 +1050,12 @@ const TopupBillingTable = ({
         dataIndex: 'status',
         key: 'status',
         render: renderStatusBadge,
+      },
+      {
+        title: t('审核状态'),
+        dataIndex: 'audit_status',
+        key: 'audit_status',
+        render: (_, record) => renderSelfServeAuditStatus(record),
       },
     ];
 
@@ -898,6 +1179,58 @@ const TopupBillingTable = ({
             </Button>,
           );
         }
+        if (
+          userIsAdmin &&
+          isSelfServeTopup(record) &&
+          record.audit_status === 'pending'
+        ) {
+          actions.push(
+            <Button
+              key='self-serve-approve'
+              size='small'
+              type='primary'
+              theme='outline'
+              onClick={() => handleSelfServeApprove(record)}
+            >
+              {t('通过')}
+            </Button>,
+            <Button
+              key='self-serve-edit'
+              size='small'
+              theme='outline'
+              icon={<IconEdit />}
+              onClick={() => openSelfServeEditModal(record)}
+            >
+              {t('编辑')}
+            </Button>,
+            <Button
+              key='self-serve-reject'
+              size='small'
+              type='danger'
+              theme='outline'
+              onClick={() =>
+                handleSelfServeReject(record, selfServeRejectAutoBan)
+              }
+            >
+              {t('拒绝')}
+            </Button>,
+            <Button
+              key='self-serve-reject-ban'
+              size='small'
+              type='danger'
+              theme='solid'
+              onClick={() => handleSelfServeReject(record, true)}
+            >
+              {t('拒绝并封禁')}
+            </Button>,
+          );
+        } else if (!userIsAdmin && record.audit_status === 'pending') {
+          actions.push(
+            <Tag key='self-serve-pending' color='orange' shape='circle'>
+              {t('待审核')}
+            </Tag>,
+          );
+        }
         if (record.refund_request_status === 'pending') {
           if (userIsAdmin) {
             actions.push(
@@ -955,6 +1288,10 @@ const TopupBillingTable = ({
     openEditModal,
     openRefundModal,
     handleRejectRefundRequest,
+    handleSelfServeApprove,
+    handleSelfServeReject,
+    openSelfServeEditModal,
+    selfServeRejectAutoBan,
   ]);
 
   const tableProps = {
@@ -1140,6 +1477,76 @@ const TopupBillingTable = ({
               </Text>
             </div>
           )}
+        </div>
+      </Modal>
+      <Modal
+        title={t('编辑自助充值订单')}
+        visible={selfServeEditVisible}
+        onCancel={() => setSelfServeEditVisible(false)}
+        onOk={handleSelfServeUpdate}
+        confirmLoading={selfServeEditLoading}
+        okText={t('保存')}
+        cancelText={t('取消')}
+      >
+        <div className='space-y-4'>
+          <div>
+            <Text type='tertiary'>{t('订单号')}</Text>
+            <div>
+              <Text copyable>{selfServeEditRecord?.trade_no || '-'}</Text>
+            </div>
+          </div>
+          <div>
+            <Text type='tertiary'>{t('用户ID')}</Text>
+            <div>
+              <Text>{selfServeEditRecord?.user_id || '-'}</Text>
+            </div>
+          </div>
+          <div>
+            <Text type='tertiary'>{t('申报金额')}</Text>
+            <InputNumber
+              prefix='¥'
+              min={0.01}
+              max={selfServeSingleMax || undefined}
+              precision={2}
+              step={0.01}
+              value={selfServeEditForm.declaredMoney}
+              onChange={(value) =>
+                setSelfServeEditField('declaredMoney', value)
+              }
+              placeholder={t('请输入充值金额')}
+              style={{ width: '100%', marginTop: 6 }}
+            />
+            <Text type='secondary' size='small'>
+              {selfServeSingleMax
+                ? t(
+                    '单笔自助充值金额上限为 {{amount}} 元。保存后会按新金额调整用户余额。',
+                    { amount: selfServeSingleMax.toFixed(2) },
+                  )
+                : t('请先配置自助充值限额')}
+            </Text>
+          </div>
+          <div>
+            <Text type='tertiary'>{t('交易订单号')}</Text>
+            <Input
+              value={selfServeEditForm.transactionNo}
+              onChange={(value) =>
+                setSelfServeEditField('transactionNo', value)
+              }
+              placeholder={t('请输入交易订单号')}
+              showClear
+              style={{ marginTop: 6 }}
+            />
+          </div>
+          <div>
+            <Text type='tertiary'>{t('审核备注')}</Text>
+            <Input
+              value={selfServeEditForm.reason}
+              onChange={(value) => setSelfServeEditField('reason', value)}
+              placeholder={t('审核备注，可留空')}
+              showClear
+              style={{ marginTop: 6 }}
+            />
+          </div>
         </div>
       </Modal>
       <Modal

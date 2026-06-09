@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -161,6 +162,14 @@ func InitOptionMap() {
 	common.OptionMap["WechatPayOfficialServiceFeePercent"] = strconv.FormatFloat(setting.WechatPayOfficialServiceFeePercent, 'f', -1, 64)
 	common.OptionMap["WechatPayOfficialMinTopUp"] = strconv.Itoa(setting.WechatPayOfficialMinTopUp)
 	common.OptionMap["WechatPayOfficialOrderTimeoutSec"] = strconv.Itoa(setting.WechatPayOfficialOrderTimeoutSec)
+	common.OptionMap["SelfServeTopUpEnabled"] = strconv.FormatBool(setting.SelfServeTopUpEnabled)
+	common.OptionMap["SelfServeAlipayEnabled"] = strconv.FormatBool(setting.SelfServeAlipayEnabled)
+	common.OptionMap["SelfServeWechatPayEnabled"] = strconv.FormatBool(setting.SelfServeWechatPayEnabled)
+	common.OptionMap["SelfServeAlipayQRCode"] = setting.SelfServeAlipayQRCode
+	common.OptionMap["SelfServeWechatPayQRCode"] = setting.SelfServeWechatPayQRCode
+	common.OptionMap["SelfServeTopUpSingleMaxAmount"] = formatSelfServeTopUpLimitOption(setting.SelfServeTopUpSingleMaxAmount)
+	common.OptionMap["SelfServeTopUpDailyMaxAmount"] = formatSelfServeTopUpLimitOption(setting.SelfServeTopUpDailyMaxAmount)
+	common.OptionMap["SelfServeRejectAutoBan"] = strconv.FormatBool(setting.SelfServeRejectAutoBan)
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
 	common.OptionMap["AutoGroups"] = setting.AutoGroups2JsonString()
@@ -328,7 +337,7 @@ func updateOptionMap(key string, value string) (err error) {
 			common.ImageDownloadPermission = intValue
 		}
 	}
-	if strings.HasSuffix(key, "Enabled") || key == "DefaultCollapseSidebar" || key == "DefaultUseAutoGroup" || key == "SMTPForceAuthLogin" {
+	if strings.HasSuffix(key, "Enabled") || key == "DefaultCollapseSidebar" || key == "DefaultUseAutoGroup" || key == "SMTPForceAuthLogin" || key == "SelfServeRejectAutoBan" {
 		boolValue := value == "true"
 		switch key {
 		case "PasswordRegisterEnabled":
@@ -415,6 +424,14 @@ func updateOptionMap(key string, value string) (err error) {
 			common.ReferralCommissionEnabled = boolValue
 		case "InviterRewardAfterPaymentEnabled":
 			common.InviterRewardAfterPaymentEnabled = boolValue
+		case "SelfServeTopUpEnabled":
+			setting.SelfServeTopUpEnabled = boolValue
+		case "SelfServeAlipayEnabled":
+			setting.SelfServeAlipayEnabled = boolValue
+		case "SelfServeWechatPayEnabled":
+			setting.SelfServeWechatPayEnabled = boolValue
+		case "SelfServeRejectAutoBan":
+			setting.SelfServeRejectAutoBan = boolValue
 		}
 	}
 	switch key {
@@ -593,6 +610,14 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WechatPayOfficialMinTopUp, _ = strconv.Atoi(value)
 	case "WechatPayOfficialOrderTimeoutSec":
 		setting.WechatPayOfficialOrderTimeoutSec, _ = strconv.Atoi(value)
+	case "SelfServeAlipayQRCode":
+		setting.SelfServeAlipayQRCode = strings.TrimSpace(value)
+	case "SelfServeWechatPayQRCode":
+		setting.SelfServeWechatPayQRCode = strings.TrimSpace(value)
+	case "SelfServeTopUpSingleMaxAmount":
+		setting.SelfServeTopUpSingleMaxAmount = parseSelfServeTopUpLimitOption(value)
+	case "SelfServeTopUpDailyMaxAmount":
+		setting.SelfServeTopUpDailyMaxAmount = parseSelfServeTopUpLimitOption(value)
 	case "TopupGroupRatio":
 		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":
@@ -749,8 +774,65 @@ func validateOptionValue(key string, value string) error {
 		if err != nil || maxRecharges < 0 {
 			return fmt.Errorf("invalid ReferralCommissionMaxRecharges: %s", value)
 		}
+	case "SelfServeAlipayQRCode", "SelfServeWechatPayQRCode":
+		if err := validateSelfServeQRCodeValue(key, value); err != nil {
+			return err
+		}
+	case "SelfServeTopUpSingleMaxAmount", "SelfServeTopUpDailyMaxAmount":
+		if err := validateSelfServeTopUpLimitOption(key, value); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func formatSelfServeTopUpLimitOption(value float64) string {
+	if value <= 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+		return ""
+	}
+	return strconv.FormatFloat(value, 'f', -1, 64)
+}
+
+func parseSelfServeTopUpLimitOption(value string) float64 {
+	amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil || amount <= 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return 0
+	}
+	return math.Round(amount*100) / 100
+}
+
+func validateSelfServeTopUpLimitOption(key string, value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	amount, err := strconv.ParseFloat(trimmed, 64)
+	if err != nil || amount <= 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return fmt.Errorf("invalid %s: %s", key, value)
+	}
+	if !regexp.MustCompile(`^\d+(\.\d{1,2})?$`).MatchString(trimmed) {
+		return fmt.Errorf("%s must have at most two decimal places", key)
+	}
+	return nil
+}
+
+func validateSelfServeQRCodeValue(key string, value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	if len(trimmed) > 512*1024 {
+		return fmt.Errorf("%s is too large", key)
+	}
+	if strings.HasPrefix(trimmed, "http://") ||
+		strings.HasPrefix(trimmed, "https://") ||
+		strings.HasPrefix(trimmed, "data:image/png;base64,") ||
+		strings.HasPrefix(trimmed, "data:image/jpeg;base64,") ||
+		strings.HasPrefix(trimmed, "data:image/jpg;base64,") ||
+		strings.HasPrefix(trimmed, "data:image/webp;base64,") {
+		return nil
+	}
+	return fmt.Errorf("invalid %s", key)
 }
 
 func validateServiceFeePercentValue(key string, value string, allowEmpty bool) error {

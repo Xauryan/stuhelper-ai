@@ -392,6 +392,8 @@ func topUpCreditedQuota(topUp TopUp) int64 {
 	switch topUp.PaymentProvider {
 	case PaymentProviderCreem:
 		return topUp.Amount
+	case PaymentProviderSelfServe:
+		return topUp.Amount
 	case PaymentProviderStripe:
 		return decimal.NewFromFloat(topUp.Money).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).IntPart()
 	default:

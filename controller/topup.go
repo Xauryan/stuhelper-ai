@@ -123,6 +123,41 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	enableSelfServeAlipay := isSelfServeAlipayTopUpEnabled()
+	if enableSelfServeAlipay {
+		payMethods = append(payMethods, map[string]string{
+			"name":             "支付宝自助",
+			"type":             model.PaymentMethodAlipaySelfServe,
+			"color":            "rgba(var(--semi-blue-5), 1)",
+			"self_serve":       "true",
+			"single_max_money": strconv.FormatFloat(setting.SelfServeTopUpSingleMaxAmount, 'f', 2, 64),
+			"daily_max_money":  strconv.FormatFloat(setting.SelfServeTopUpDailyMaxAmount, 'f', 2, 64),
+		})
+	}
+
+	enableSelfServeWechatPay := isSelfServeWechatPayTopUpEnabled()
+	if enableSelfServeWechatPay {
+		payMethods = append(payMethods, map[string]string{
+			"name":             "微信自助",
+			"type":             model.PaymentMethodWechatSelfServe,
+			"color":            "rgba(var(--semi-green-5), 1)",
+			"self_serve":       "true",
+			"single_max_money": strconv.FormatFloat(setting.SelfServeTopUpSingleMaxAmount, 'f', 2, 64),
+			"daily_max_money":  strconv.FormatFloat(setting.SelfServeTopUpDailyMaxAmount, 'f', 2, 64),
+		})
+	}
+
+	selfServeDailyUsed := 0.0
+	if isSelfServeTopUpEnabled() {
+		if used, err := model.GetSelfServeDailyUsedMoney(c.GetInt("id")); err == nil {
+			selfServeDailyUsed = used
+		}
+	}
+	selfServeDailyRemain := setting.SelfServeTopUpDailyMaxAmount - selfServeDailyUsed
+	if selfServeDailyRemain < 0 {
+		selfServeDailyRemain = 0
+	}
+
 	data := gin.H{
 		"enable_online_topup":              isEpayTopUpEnabled(),
 		"enable_stripe_topup":              isStripeTopUpEnabled(),
@@ -130,6 +165,22 @@ func GetTopUpInfo(c *gin.Context) {
 		"enable_waffo_topup":               enableWaffo,
 		"enable_alipay_official_topup":     enableAlipayOfficial,
 		"enable_wechat_pay_official_topup": enableWechatPayOfficial,
+		"enable_self_serve_topup":          isSelfServeTopUpEnabled(),
+		"enable_self_serve_alipay_topup":   enableSelfServeAlipay,
+		"enable_self_serve_wechat_topup":   enableSelfServeWechatPay,
+		"self_serve_qrcodes": gin.H{
+			model.PaymentMethodAlipaySelfServe: setting.SelfServeAlipayQRCode,
+			model.PaymentMethodWechatSelfServe: setting.SelfServeWechatPayQRCode,
+		},
+		"self_serve_limits": gin.H{
+			"single_max_money": setting.SelfServeTopUpSingleMaxAmount,
+			"daily_max_money":  setting.SelfServeTopUpDailyMaxAmount,
+			"daily_used_money": selfServeDailyUsed,
+			"daily_remain_money": func() float64 {
+				return decimal.NewFromFloat(selfServeDailyRemain).Round(2).InexactFloat64()
+			}(),
+		},
+		"self_serve_reject_auto_ban": setting.SelfServeRejectAutoBan,
 		"waffo_pay_methods": func() interface{} {
 			if enableWaffo {
 				return setting.GetWaffoPayMethods()
@@ -516,6 +567,7 @@ func getTopUpQueryOptions(c *gin.Context) model.TopUpQueryOptions {
 		Username:      c.Query("username"),
 		PaymentMethod: c.Query("payment_method"),
 		TradeNo:       c.Query("trade_no"),
+		AuditStatus:   c.Query("audit_status"),
 		StartTime:     startTime,
 		EndTime:       endTime,
 		PendingRefund: c.Query("pending_refund") == "true",

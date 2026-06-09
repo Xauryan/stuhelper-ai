@@ -129,6 +129,7 @@ const BillingTable = () => {
         onPaginationChange={handlePaginationChange}
         onReady={setTableApi}
         pendingRefundOnly={activeTab === 'pending_refund'}
+        pendingSelfServeAuditOnly={activeTab === 'pending_self_serve'}
         t={t}
         variant='page'
       />

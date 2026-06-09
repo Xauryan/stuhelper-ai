@@ -111,6 +111,7 @@ const RechargeCard = ({
   enableWaffoTopUp,
   enableAlipayOfficialTopUp,
   enableWechatPayOfficialTopUp,
+  enableSelfServeTopUp,
   subscriptionLoading = false,
   subscriptionPlans = [],
   billingPreference,
@@ -134,6 +135,7 @@ const RechargeCard = ({
     enableWaffoTopUp ||
     enableAlipayOfficialTopUp ||
     enableWechatPayOfficialTopUp ||
+    enableSelfServeTopUp ||
     regularPayMethods.length > 0;
 
   useEffect(() => {
@@ -267,7 +269,8 @@ const RechargeCard = ({
                         !enableStripeTopUp &&
                         !enableWaffoTopUp &&
                         !enableAlipayOfficialTopUp &&
-                        !enableWechatPayOfficialTopUp
+                        !enableWechatPayOfficialTopUp &&
+                        !enableSelfServeTopUp
                       }
                       placeholder={
                         t('充值数量，最低 ') + renderQuotaWithAmount(minTopUp)
@@ -336,18 +339,23 @@ const RechargeCard = ({
                               payMethod.type === 'alipay_official';
                             const isWechatPayOfficial =
                               payMethod.type === 'wxpay_official';
+                            const isSelfServe =
+                              payMethod.type === 'alipay_self_serve' ||
+                              payMethod.type === 'wxpay_self_serve';
                             const disabled =
                               (!enableOnlineTopUp &&
                                 !isStripe &&
                                 !isWaffo &&
                                 !isAlipayOfficial &&
-                                !isWechatPayOfficial) ||
+                                !isWechatPayOfficial &&
+                                !isSelfServe) ||
                               (!enableStripeTopUp && isStripe) ||
                               (!enableWaffoTopUp && isWaffo) ||
                               (!enableAlipayOfficialTopUp &&
                                 isAlipayOfficial) ||
                               (!enableWechatPayOfficialTopUp &&
                                 isWechatPayOfficial) ||
+                              (!enableSelfServeTopUp && isSelfServe) ||
                               minTopupVal > Number(topUpCount || 0);
 
                             const buttonEl = (
@@ -362,10 +370,12 @@ const RechargeCard = ({
                                 }
                                 icon={
                                   payMethod.type === 'alipay' ||
-                                  payMethod.type === 'alipay_official' ? (
+                                  payMethod.type === 'alipay_official' ||
+                                  payMethod.type === 'alipay_self_serve' ? (
                                     <SiAlipay size={18} color='#1677FF' />
                                   ) : payMethod.type === 'wxpay' ||
-                                    payMethod.type === 'wxpay_official' ? (
+                                    payMethod.type === 'wxpay_official' ||
+                                    payMethod.type === 'wxpay_self_serve' ? (
                                     <SiWechat size={18} color='#07C160' />
                                   ) : payMethod.type === 'stripe' ? (
                                     <SiStripe size={18} color='#635BFF' />

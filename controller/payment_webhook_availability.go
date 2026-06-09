@@ -110,6 +110,25 @@ func isWechatPayOfficialWebhookEnabled() bool {
 	return isWechatPayOfficialTopUpEnabled()
 }
 
+func isSelfServeTopUpEnabled() bool {
+	return setting.SelfServeTopUpLimitsConfigured() &&
+		(isSelfServeAlipayTopUpEnabled() || isSelfServeWechatPayTopUpEnabled())
+}
+
+func isSelfServeAlipayTopUpEnabled() bool {
+	return setting.SelfServeTopUpEnabled &&
+		setting.SelfServeTopUpLimitsConfigured() &&
+		setting.SelfServeAlipayEnabled &&
+		strings.TrimSpace(setting.SelfServeAlipayQRCode) != ""
+}
+
+func isSelfServeWechatPayTopUpEnabled() bool {
+	return setting.SelfServeTopUpEnabled &&
+		setting.SelfServeTopUpLimitsConfigured() &&
+		setting.SelfServeWechatPayEnabled &&
+		strings.TrimSpace(setting.SelfServeWechatPayQRCode) != ""
+}
+
 func isEpayTopUpEnabled() bool {
 	return isEpayWebhookConfigured() && len(operation_setting.PayMethods) > 0
 }

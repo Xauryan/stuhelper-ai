@@ -10,6 +10,7 @@ import {
   isAdminManagedTopupRefundable,
   isOfficialPaymentTopup,
   isOfficialRefundable,
+  isSelfServeTopup,
   isSubscriptionTopup,
 } from './topupHistoryUtils.mjs';
 
@@ -17,6 +18,7 @@ assert.deepEqual(BILLING_PAYMENT_METHOD_FILTERS, [
   { value: '', key: '全部' },
   { value: 'alipay_official', key: '支付宝' },
   { value: 'wxpay_official', key: '微信' },
+  { value: 'self_serve', key: '自助充值' },
   { value: 'admin_add', key: '管理员充值' },
 ]);
 assert.equal(
@@ -227,6 +229,22 @@ assert.equal(
   true,
 );
 assert.equal(getTopupPaymentMethodLabel('管理员增加'), '管理员充值');
+assert.equal(getTopupPaymentMethodLabel('alipay_self_serve'), '支付宝自助');
+assert.equal(getTopupPaymentMethodLabel('wxpay_self_serve'), '微信自助');
+assert.equal(
+  isSelfServeTopup({
+    payment_provider: 'self_serve',
+    payment_method: 'alipay_self_serve',
+  }),
+  true,
+);
+assert.equal(
+  isSelfServeTopup({
+    payment_provider: 'alipay_official',
+    payment_method: 'alipay_official',
+  }),
+  false,
+);
 assert.equal(
   getRemainingAdminRefundQuota({
     amount: 1000,
