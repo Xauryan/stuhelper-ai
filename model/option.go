@@ -167,6 +167,7 @@ func InitOptionMap() {
 	common.OptionMap["SelfServeWechatPayEnabled"] = strconv.FormatBool(setting.SelfServeWechatPayEnabled)
 	common.OptionMap["SelfServeAlipayQRCode"] = setting.SelfServeAlipayQRCode
 	common.OptionMap["SelfServeWechatPayQRCode"] = setting.SelfServeWechatPayQRCode
+	common.OptionMap["SelfServeTopUpUnitPrice"] = strconv.FormatFloat(setting.SelfServeTopUpUnitPrice, 'f', -1, 64)
 	common.OptionMap["SelfServeTopUpSingleMaxAmount"] = formatSelfServeTopUpLimitOption(setting.SelfServeTopUpSingleMaxAmount)
 	common.OptionMap["SelfServeTopUpDailyMaxAmount"] = formatSelfServeTopUpLimitOption(setting.SelfServeTopUpDailyMaxAmount)
 	common.OptionMap["SelfServeRejectAutoBan"] = strconv.FormatBool(setting.SelfServeRejectAutoBan)
@@ -614,6 +615,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.SelfServeAlipayQRCode = strings.TrimSpace(value)
 	case "SelfServeWechatPayQRCode":
 		setting.SelfServeWechatPayQRCode = strings.TrimSpace(value)
+	case "SelfServeTopUpUnitPrice":
+		setting.SelfServeTopUpUnitPrice, _ = strconv.ParseFloat(strings.TrimSpace(value), 64)
 	case "SelfServeTopUpSingleMaxAmount":
 		setting.SelfServeTopUpSingleMaxAmount = parseSelfServeTopUpLimitOption(value)
 	case "SelfServeTopUpDailyMaxAmount":
@@ -778,10 +781,22 @@ func validateOptionValue(key string, value string) error {
 		if err := validateSelfServeQRCodeValue(key, value); err != nil {
 			return err
 		}
+	case "SelfServeTopUpUnitPrice":
+		if err := validatePositiveFloatOption(key, value); err != nil {
+			return err
+		}
 	case "SelfServeTopUpSingleMaxAmount", "SelfServeTopUpDailyMaxAmount":
 		if err := validateSelfServeTopUpLimitOption(key, value); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validatePositiveFloatOption(key string, value string) error {
+	amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil || amount <= 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return fmt.Errorf("invalid %s: %s", key, value)
 	}
 	return nil
 }

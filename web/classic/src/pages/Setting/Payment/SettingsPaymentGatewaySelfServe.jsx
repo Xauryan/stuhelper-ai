@@ -57,6 +57,7 @@ export default function SettingsPaymentGatewaySelfServe(props) {
     SelfServeWechatPayEnabled: false,
     SelfServeAlipayQRCode: '',
     SelfServeWechatPayQRCode: '',
+    SelfServeTopUpUnitPrice: 1.0,
     SelfServeTopUpSingleMaxAmount: '',
     SelfServeTopUpDailyMaxAmount: '',
     SelfServeRejectAutoBan: true,
@@ -76,6 +77,10 @@ export default function SettingsPaymentGatewaySelfServe(props) {
         ),
         SelfServeAlipayQRCode: props.options.SelfServeAlipayQRCode || '',
         SelfServeWechatPayQRCode: props.options.SelfServeWechatPayQRCode || '',
+        SelfServeTopUpUnitPrice:
+          props.options.SelfServeTopUpUnitPrice !== undefined
+            ? parseFloat(props.options.SelfServeTopUpUnitPrice)
+            : 1.0,
         SelfServeTopUpSingleMaxAmount: normalizeLimitInput(
           props.options.SelfServeTopUpSingleMaxAmount,
         ),
@@ -124,8 +129,13 @@ export default function SettingsPaymentGatewaySelfServe(props) {
 
   const validateInputs = () => {
     if (inputs.SelfServeTopUpEnabled) {
+      const unitPrice = getPositiveLimit(inputs.SelfServeTopUpUnitPrice);
       const singleMax = getPositiveLimit(inputs.SelfServeTopUpSingleMaxAmount);
       const dailyMax = getPositiveLimit(inputs.SelfServeTopUpDailyMaxAmount);
+      if (!unitPrice) {
+        showError(t('请填写自助充值价格'));
+        return false;
+      }
       if (!singleMax) {
         showError(t('请填写自助充值单笔限额'));
         return false;
@@ -168,6 +178,7 @@ export default function SettingsPaymentGatewaySelfServe(props) {
         'SelfServeWechatPayEnabled',
         'SelfServeAlipayQRCode',
         'SelfServeWechatPayQRCode',
+        'SelfServeTopUpUnitPrice',
         'SelfServeTopUpSingleMaxAmount',
         'SelfServeTopUpDailyMaxAmount',
         'SelfServeRejectAutoBan',
@@ -181,7 +192,7 @@ export default function SettingsPaymentGatewaySelfServe(props) {
               ? inputs[key]
                 ? 'true'
                 : 'false'
-              : normalizeLimitInput(inputs[key]).toString(),
+              : String(normalizeLimitInput(inputs[key])),
         }));
       if (options.length === 0) {
         showSuccess(t('没有需要更新的设置'));
@@ -315,7 +326,19 @@ export default function SettingsPaymentGatewaySelfServe(props) {
             gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
             style={{ marginTop: 8 }}
           >
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+              <Form.InputNumber
+                field='SelfServeTopUpUnitPrice'
+                label={t('自助充值价格（x元/美金）')}
+                min={0.01}
+                step={0.01}
+                precision={4}
+                placeholder={t('例如：1，就是1元/美金')}
+                extraText={t('自助充值独立价格，不使用易支付充值价格')}
+                style={{ width: '100%' }}
+              />
+            </Col>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.InputNumber
                 field='SelfServeTopUpSingleMaxAmount'
                 label={t('单笔限额（元）')}
@@ -327,7 +350,7 @@ export default function SettingsPaymentGatewaySelfServe(props) {
                 style={{ width: '100%' }}
               />
             </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.InputNumber
                 field='SelfServeTopUpDailyMaxAmount'
                 label={t('每日限额（元）')}

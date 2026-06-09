@@ -14,16 +14,19 @@ func setSelfServeTopUpPricingForTest(t *testing.T) {
 	t.Helper()
 	originalQuotaPerUnit := common.QuotaPerUnit
 	originalPrice := operation_setting.Price
+	originalSelfServeUnitPrice := setting.SelfServeTopUpUnitPrice
 	originalSingleMaxAmount := setting.SelfServeTopUpSingleMaxAmount
 	originalDailyMaxAmount := setting.SelfServeTopUpDailyMaxAmount
 	t.Cleanup(func() {
 		common.QuotaPerUnit = originalQuotaPerUnit
 		operation_setting.Price = originalPrice
+		setting.SelfServeTopUpUnitPrice = originalSelfServeUnitPrice
 		setting.SelfServeTopUpSingleMaxAmount = originalSingleMaxAmount
 		setting.SelfServeTopUpDailyMaxAmount = originalDailyMaxAmount
 	})
 	common.QuotaPerUnit = 1000
-	operation_setting.Price = 1
+	operation_setting.Price = 9.99
+	setting.SelfServeTopUpUnitPrice = 1
 	setting.SelfServeTopUpSingleMaxAmount = 199.99
 	setting.SelfServeTopUpDailyMaxAmount = 499.99
 }
@@ -100,6 +103,53 @@ func TestCreateSelfServeTopUpRejectsUnconfiguredLimits(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "请先配置自助充值限额")
+}
+
+func TestCreateSelfServeTopUpUsesIndependentSelfServeUnitPrice(t *testing.T) {
+	truncateTables(t)
+	setSelfServeTopUpPricingForTest(t)
+
+	insertRankingUser(t, 5109, "self-serve-independent-price-user")
+
+	result, err := CreateSelfServeTopUp(SelfServeTopUpCreateParams{
+		UserId:        5109,
+		PaymentMethod: PaymentMethodAlipaySelfServe,
+		DeclaredMoney: 10,
+		TransactionNo: "SELF_SERVE_INDEPENDENT_PRICE",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, int64(10000), result.QuotaDelta)
+	assert.Equal(t, int64(10000), result.Audit.CreditedQuota)
+
+	setting.SelfServeTopUpUnitPrice = 2
+	result, err = CreateSelfServeTopUp(SelfServeTopUpCreateParams{
+		UserId:        5109,
+		PaymentMethod: PaymentMethodWechatSelfServe,
+		DeclaredMoney: 10,
+		TransactionNo: "SELF_SERVE_UNIT_PRICE_TWO",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, int64(5000), result.QuotaDelta)
+	assert.Equal(t, int64(5000), result.Audit.CreditedQuota)
+}
+
+func TestCreateSelfServeTopUpRejectsInvalidUnitPrice(t *testing.T) {
+	truncateTables(t)
+	setSelfServeTopUpPricingForTest(t)
+	setting.SelfServeTopUpUnitPrice = 0
+
+	insertRankingUser(t, 5110, "self-serve-invalid-price-user")
+
+	_, err := CreateSelfServeTopUp(SelfServeTopUpCreateParams{
+		UserId:        5110,
+		PaymentMethod: PaymentMethodAlipaySelfServe,
+		DeclaredMoney: 10,
+		TransactionNo: "SELF_SERVE_INVALID_PRICE",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "自助充值价格配置错误")
 }
 
 func TestCreateSelfServeTopUpEnforcesSingleAndDailyMoneyLimits(t *testing.T) {

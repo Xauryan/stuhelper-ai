@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -130,6 +131,7 @@ func GetTopUpInfo(c *gin.Context) {
 			"type":             model.PaymentMethodAlipaySelfServe,
 			"color":            "rgba(var(--semi-blue-5), 1)",
 			"self_serve":       "true",
+			"unit_price":       strconv.FormatFloat(setting.SelfServeTopUpUnitPrice, 'f', -1, 64),
 			"single_max_money": strconv.FormatFloat(setting.SelfServeTopUpSingleMaxAmount, 'f', 2, 64),
 			"daily_max_money":  strconv.FormatFloat(setting.SelfServeTopUpDailyMaxAmount, 'f', 2, 64),
 		})
@@ -142,14 +144,16 @@ func GetTopUpInfo(c *gin.Context) {
 			"type":             model.PaymentMethodWechatSelfServe,
 			"color":            "rgba(var(--semi-green-5), 1)",
 			"self_serve":       "true",
+			"unit_price":       strconv.FormatFloat(setting.SelfServeTopUpUnitPrice, 'f', -1, 64),
 			"single_max_money": strconv.FormatFloat(setting.SelfServeTopUpSingleMaxAmount, 'f', 2, 64),
 			"daily_max_money":  strconv.FormatFloat(setting.SelfServeTopUpDailyMaxAmount, 'f', 2, 64),
 		})
 	}
 
 	selfServeDailyUsed := 0.0
-	if isSelfServeTopUpEnabled() {
-		if used, err := model.GetSelfServeDailyUsedMoney(c.GetInt("id")); err == nil {
+	userId := c.GetInt("id")
+	if isSelfServeTopUpEnabled() && userId > 0 && model.DB != nil {
+		if used, err := model.GetSelfServeDailyUsedMoney(userId); err == nil {
 			selfServeDailyUsed = used
 		}
 	}
@@ -157,6 +161,7 @@ func GetTopUpInfo(c *gin.Context) {
 	if selfServeDailyRemain < 0 {
 		selfServeDailyRemain = 0
 	}
+	selfServeTopupGroupRatio := getSelfServeTopUpGroupRatio(c)
 
 	data := gin.H{
 		"enable_online_topup":              isEpayTopUpEnabled(),
@@ -173,14 +178,17 @@ func GetTopUpInfo(c *gin.Context) {
 			model.PaymentMethodWechatSelfServe: setting.SelfServeWechatPayQRCode,
 		},
 		"self_serve_limits": gin.H{
-			"single_max_money": setting.SelfServeTopUpSingleMaxAmount,
-			"daily_max_money":  setting.SelfServeTopUpDailyMaxAmount,
-			"daily_used_money": selfServeDailyUsed,
+			"single_max_money":  setting.SelfServeTopUpSingleMaxAmount,
+			"daily_max_money":   setting.SelfServeTopUpDailyMaxAmount,
+			"unit_price":        setting.SelfServeTopUpUnitPrice,
+			"topup_group_ratio": selfServeTopupGroupRatio,
+			"daily_used_money":  selfServeDailyUsed,
 			"daily_remain_money": func() float64 {
 				return decimal.NewFromFloat(selfServeDailyRemain).Round(2).InexactFloat64()
 			}(),
 		},
-		"self_serve_reject_auto_ban": setting.SelfServeRejectAutoBan,
+		"self_serve_topup_group_ratio": selfServeTopupGroupRatio,
+		"self_serve_reject_auto_ban":   setting.SelfServeRejectAutoBan,
 		"waffo_pay_methods": func() interface{} {
 			if enableWaffo {
 				return setting.GetWaffoPayMethods()
@@ -201,6 +209,29 @@ func GetTopUpInfo(c *gin.Context) {
 		"topup_link":                        common.TopUpLink,
 	}
 	common.ApiSuccess(c, data)
+}
+
+func getSelfServeTopUpGroupRatio(c *gin.Context) float64 {
+	group := strings.TrimSpace(c.GetString("group"))
+	if group == "" {
+		group = strings.TrimSpace(c.GetString("user_group"))
+	}
+	if group == "" {
+		userId := c.GetInt("id")
+		if userId > 0 && model.DB != nil {
+			if userGroup, err := model.GetUserGroup(userId, true); err == nil {
+				group = strings.TrimSpace(userGroup)
+			}
+		}
+	}
+	if group == "" {
+		group = "default"
+	}
+	topupGroupRatio := common.GetTopupGroupRatio(group)
+	if topupGroupRatio <= 0 {
+		return 1
+	}
+	return topupGroupRatio
 }
 
 type EpayRequest struct {

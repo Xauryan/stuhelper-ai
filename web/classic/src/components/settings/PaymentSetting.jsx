@@ -85,6 +85,7 @@ const PaymentSetting = () => {
     SelfServeWechatPayEnabled: false,
     SelfServeAlipayQRCode: '',
     SelfServeWechatPayQRCode: '',
+    SelfServeTopUpUnitPrice: 1.0,
     SelfServeTopUpSingleMaxAmount: '',
     SelfServeTopUpDailyMaxAmount: '',
     SelfServeRejectAutoBan: true,
@@ -144,6 +145,7 @@ const PaymentSetting = () => {
           case 'WechatPayOfficialServiceFeePercent':
           case 'WechatPayOfficialMinTopUp':
           case 'WechatPayOfficialOrderTimeoutSec':
+          case 'SelfServeTopUpUnitPrice':
           case 'SelfServeTopUpSingleMaxAmount':
           case 'SelfServeTopUpDailyMaxAmount':
             newInputs[item.key] =

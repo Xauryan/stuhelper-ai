@@ -22,6 +22,13 @@ const CNY_PAYMENT_METHODS = new Set([
   'wxpay',
   'alipay_official',
   'wxpay_official',
+  'alipay_self_serve',
+  'wxpay_self_serve',
+]);
+
+const SELF_SERVE_PAYMENT_METHODS = new Set([
+  'alipay_self_serve',
+  'wxpay_self_serve',
 ]);
 
 function ceilToCents(amount) {
@@ -37,7 +44,11 @@ function applyServiceFee(amount, serviceFeePercent) {
 }
 
 function shouldApplyServiceFee(paymentMethod) {
-  return paymentMethod !== 'stripe' && paymentMethod !== 'creem';
+  return (
+    paymentMethod !== 'stripe' &&
+    paymentMethod !== 'creem' &&
+    !SELF_SERVE_PAYMENT_METHODS.has(paymentMethod)
+  );
 }
 
 function getConfiguredDiscount(preset, discountConfig) {
@@ -65,6 +76,7 @@ function getConfiguredDiscount(preset, discountConfig) {
 
 export function buildRechargeAmountDisplay({
   preset,
+  paymentAmountBase,
   priceRatio,
   discountConfig,
   currencyConfig,
@@ -73,12 +85,19 @@ export function buildRechargeAmountDisplay({
   serviceFeePercent,
 }) {
   const amount = Number(preset?.value) || 0;
+  const normalizedPaymentAmount = Number(paymentAmountBase);
+  const amountForPayment =
+    Number.isFinite(normalizedPaymentAmount) && normalizedPaymentAmount > 0
+      ? normalizedPaymentAmount
+      : amount;
   const unitPrice = Number(priceRatio) || 0;
-  const originalPrice = amount * unitPrice;
-  const configuredDiscount = getConfiguredDiscount(preset, discountConfig);
+  const originalPrice = amountForPayment * unitPrice;
+  const paymentMethod = selectedPaymentMethod || '';
+  const configuredDiscount = SELF_SERVE_PAYMENT_METHODS.has(paymentMethod)
+    ? null
+    : getConfiguredDiscount(preset, discountConfig);
   const discount = configuredDiscount ?? 1;
   const hasDiscount = configuredDiscount !== null && discount < 1;
-  const paymentMethod = selectedPaymentMethod || '';
   const activeServiceFeePercent = shouldApplyServiceFee(paymentMethod)
     ? serviceFeePercent
     : 0;

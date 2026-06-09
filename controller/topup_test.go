@@ -184,6 +184,111 @@ func TestGetTopUpInfoIncludesOfficialUnitPrice(t *testing.T) {
 	require.Equal(t, "0.6", payload.Data.PayMethods[0]["service_fee_percent"])
 }
 
+func TestGetTopUpInfoIncludesSelfServeUnitPriceAndTopupGroupRatio(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalPayAddress := operation_setting.PayAddress
+	originalEpayID := operation_setting.EpayId
+	originalEpayKey := operation_setting.EpayKey
+	originalPayMethods := operation_setting.PayMethods
+	originalStripeAPISecret := setting.StripeApiSecret
+	originalStripeWebhookSecret := setting.StripeWebhookSecret
+	originalStripePriceID := setting.StripePriceId
+	originalCreemAPIKey := setting.CreemApiKey
+	originalCreemProducts := setting.CreemProducts
+	originalWaffoEnabled := setting.WaffoEnabled
+	originalAlipayOfficialEnabled := setting.AlipayOfficialEnabled
+	originalWechatPayOfficialEnabled := setting.WechatPayOfficialEnabled
+	originalSelfServeTopUpEnabled := setting.SelfServeTopUpEnabled
+	originalSelfServeAlipayEnabled := setting.SelfServeAlipayEnabled
+	originalSelfServeWechatPayEnabled := setting.SelfServeWechatPayEnabled
+	originalSelfServeAlipayQRCode := setting.SelfServeAlipayQRCode
+	originalSelfServeWechatPayQRCode := setting.SelfServeWechatPayQRCode
+	originalSelfServeTopUpUnitPrice := setting.SelfServeTopUpUnitPrice
+	originalSelfServeSingleMax := setting.SelfServeTopUpSingleMaxAmount
+	originalSelfServeDailyMax := setting.SelfServeTopUpDailyMaxAmount
+	originalTopupGroupRatio := common.TopupGroupRatio2JSONString()
+	t.Cleanup(func() {
+		operation_setting.PayAddress = originalPayAddress
+		operation_setting.EpayId = originalEpayID
+		operation_setting.EpayKey = originalEpayKey
+		operation_setting.PayMethods = originalPayMethods
+		setting.StripeApiSecret = originalStripeAPISecret
+		setting.StripeWebhookSecret = originalStripeWebhookSecret
+		setting.StripePriceId = originalStripePriceID
+		setting.CreemApiKey = originalCreemAPIKey
+		setting.CreemProducts = originalCreemProducts
+		setting.WaffoEnabled = originalWaffoEnabled
+		setting.AlipayOfficialEnabled = originalAlipayOfficialEnabled
+		setting.WechatPayOfficialEnabled = originalWechatPayOfficialEnabled
+		setting.SelfServeTopUpEnabled = originalSelfServeTopUpEnabled
+		setting.SelfServeAlipayEnabled = originalSelfServeAlipayEnabled
+		setting.SelfServeWechatPayEnabled = originalSelfServeWechatPayEnabled
+		setting.SelfServeAlipayQRCode = originalSelfServeAlipayQRCode
+		setting.SelfServeWechatPayQRCode = originalSelfServeWechatPayQRCode
+		setting.SelfServeTopUpUnitPrice = originalSelfServeTopUpUnitPrice
+		setting.SelfServeTopUpSingleMaxAmount = originalSelfServeSingleMax
+		setting.SelfServeTopUpDailyMaxAmount = originalSelfServeDailyMax
+		require.NoError(t, common.UpdateTopupGroupRatioByJSONString(originalTopupGroupRatio))
+	})
+
+	operation_setting.PayAddress = ""
+	operation_setting.EpayId = ""
+	operation_setting.EpayKey = ""
+	operation_setting.PayMethods = []map[string]string{}
+	setting.StripeApiSecret = ""
+	setting.StripeWebhookSecret = ""
+	setting.StripePriceId = ""
+	setting.CreemApiKey = ""
+	setting.CreemProducts = "[]"
+	setting.WaffoEnabled = false
+	setting.AlipayOfficialEnabled = false
+	setting.WechatPayOfficialEnabled = false
+	setting.SelfServeTopUpEnabled = true
+	setting.SelfServeAlipayEnabled = true
+	setting.SelfServeWechatPayEnabled = false
+	setting.SelfServeAlipayQRCode = "data:image/png;base64,Zm9v"
+	setting.SelfServeWechatPayQRCode = ""
+	setting.SelfServeTopUpUnitPrice = 1.23
+	setting.SelfServeTopUpSingleMaxAmount = 199.99
+	setting.SelfServeTopUpDailyMaxAmount = 499.99
+	require.NoError(t, common.UpdateTopupGroupRatioByJSONString(`{"default":1,"vip":1.2}`))
+
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/user/topup/info", nil)
+	ctx.Set("group", "vip")
+
+	GetTopUpInfo(ctx)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var payload struct {
+		Success bool `json:"success"`
+		Data    struct {
+			EnableSelfServeTopUp     bool                `json:"enable_self_serve_topup"`
+			SelfServeTopupGroupRatio float64             `json:"self_serve_topup_group_ratio"`
+			PayMethods               []map[string]string `json:"pay_methods"`
+			SelfServeLimits          struct {
+				SingleMaxMoney  float64 `json:"single_max_money"`
+				DailyMaxMoney   float64 `json:"daily_max_money"`
+				UnitPrice       float64 `json:"unit_price"`
+				TopupGroupRatio float64 `json:"topup_group_ratio"`
+			} `json:"self_serve_limits"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	require.True(t, payload.Data.EnableSelfServeTopUp)
+	require.InDelta(t, 1.2, payload.Data.SelfServeTopupGroupRatio, 0.000001)
+	require.InDelta(t, 1.23, payload.Data.SelfServeLimits.UnitPrice, 0.000001)
+	require.InDelta(t, 1.2, payload.Data.SelfServeLimits.TopupGroupRatio, 0.000001)
+	require.InDelta(t, 199.99, payload.Data.SelfServeLimits.SingleMaxMoney, 0.000001)
+	require.InDelta(t, 499.99, payload.Data.SelfServeLimits.DailyMaxMoney, 0.000001)
+	require.Len(t, payload.Data.PayMethods, 1)
+	require.Equal(t, model.PaymentMethodAlipaySelfServe, payload.Data.PayMethods[0]["type"])
+	require.Equal(t, "1.23", payload.Data.PayMethods[0]["unit_price"])
+}
+
 func TestBuildOfficialTradeNoUsesAlipaySafeCharacters(t *testing.T) {
 	tradeNo := buildOfficialTradeNo("ALIPAY", 42)
 

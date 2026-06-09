@@ -28,6 +28,7 @@ import {
   renderQuotaWithAmount,
   copy,
   getQuotaPerUnit,
+  getCurrencyConfig,
 } from '../../helpers';
 import { Modal, Toast } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
@@ -51,6 +52,8 @@ import {
 const EMPTY_SELF_SERVE_LIMITS = {
   single_max_money: 0,
   daily_max_money: 0,
+  unit_price: 0,
+  topup_group_ratio: 1,
   daily_used_money: 0,
   daily_remain_money: 0,
 };
@@ -65,11 +68,18 @@ const nonNegativeMoney = (value) => {
   return Number.isFinite(money) && money >= 0 ? money : 0;
 };
 
+const positiveRatio = (value) => {
+  const ratio = Number(value);
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+};
+
 const normalizeSelfServeLimits = (limits) => {
   const dailyMax = positiveMoney(limits?.daily_max_money);
   return {
     single_max_money: positiveMoney(limits?.single_max_money),
     daily_max_money: dailyMax,
+    unit_price: positiveMoney(limits?.unit_price),
+    topup_group_ratio: positiveRatio(limits?.topup_group_ratio),
     daily_used_money: nonNegativeMoney(limits?.daily_used_money),
     daily_remain_money:
       limits?.daily_remain_money === undefined ||
@@ -172,6 +182,7 @@ const TopUp = () => {
   const [topupInfo, setTopupInfo] = useState({
     amount_options: [],
     discount: {},
+    self_serve_topup_group_ratio: 1,
     payment_timeouts: {},
   });
 
@@ -197,11 +208,24 @@ const TopUp = () => {
   const getPayMethodConfig = (payment) =>
     confirmPayMethods.find((method) => method.type === payment);
 
+  const isSelfServePayment = (payment) =>
+    payment === 'alipay_self_serve' || payment === 'wxpay_self_serve';
+
+  const getSelfServeTopupGroupRatio = () =>
+    positiveRatio(
+      selfServeLimits.topup_group_ratio ??
+        topupInfo?.self_serve_topup_group_ratio,
+    );
+
   const getPaymentUnitPrice = (payment) => {
     const configuredUnitPrice = Number(getPayMethodConfig(payment)?.unit_price);
-    return Number.isFinite(configuredUnitPrice) && configuredUnitPrice > 0
-      ? configuredUnitPrice
-      : priceRatio;
+    const unitPrice =
+      Number.isFinite(configuredUnitPrice) && configuredUnitPrice > 0
+        ? configuredUnitPrice
+        : priceRatio;
+    return isSelfServePayment(payment)
+      ? unitPrice * getSelfServeTopupGroupRatio()
+      : unitPrice;
   };
 
   const getPaymentServiceFeePercent = (payment) => {
@@ -221,12 +245,54 @@ const TopUp = () => {
       : minTopUp;
   };
 
-  const isSelfServePayment = (payment) =>
-    payment === 'alipay_self_serve' || payment === 'wxpay_self_serve';
+  const ceilMoneyToCents = (value) => {
+    const money = Number(value);
+    if (!Number.isFinite(money) || money <= 0) {
+      return 0;
+    }
+    return Math.ceil(money * 100 - 1e-9) / 100;
+  };
+
+  const getSelfServeUnitPrice = (payment) => {
+    const configuredUnitPrice = Number(getPayMethodConfig(payment)?.unit_price);
+    if (Number.isFinite(configuredUnitPrice) && configuredUnitPrice > 0) {
+      return configuredUnitPrice;
+    }
+    return positiveMoney(selfServeLimits.unit_price);
+  };
+
+  const getSelfServeUsdAmount = (value) => {
+    const rechargeAmount = Number(value ?? topUpCount ?? 1);
+    if (!Number.isFinite(rechargeAmount) || rechargeAmount <= 0) {
+      return 0;
+    }
+    if (getCurrencyConfig().type !== 'TOKENS') {
+      return rechargeAmount;
+    }
+    const quotaPerUnit = Number(getQuotaPerUnit());
+    if (!Number.isFinite(quotaPerUnit) || quotaPerUnit <= 0) {
+      return 0;
+    }
+    return rechargeAmount / quotaPerUnit;
+  };
+
+  const calculateSelfServeDeclaredMoney = (payment, value) => {
+    const usdAmount = getSelfServeUsdAmount(value);
+    const unitPrice = getSelfServeUnitPrice(payment);
+    if (!usdAmount || !unitPrice) {
+      return 0;
+    }
+    return ceilMoneyToCents(
+      usdAmount * unitPrice * getSelfServeTopupGroupRatio(),
+    );
+  };
+
+  const getPaymentAmountBase = (payment, value) =>
+    isSelfServePayment(payment) ? getSelfServeUsdAmount(value) : value;
 
   const requestAmountByPayment = async (payment, value) => {
     if (isSelfServePayment(payment)) {
-      setAmount(Number(value || 1));
+      setAmount(calculateSelfServeDeclaredMoney(payment, value));
       return;
     }
     if (payment === 'stripe') {
@@ -338,12 +404,21 @@ const TopUp = () => {
         showError(t('今日自助充值额度已达上限'));
         return;
       }
+      const calculatedMoney = calculateSelfServeDeclaredMoney(
+        payment,
+        topUpCount,
+      );
+      if (!calculatedMoney) {
+        showError(t('请先配置自助充值价格'));
+        return;
+      }
       const initialMoney = Math.min(
         singleMax,
         dailyRemain,
-        Number(amount || topUpCount || 1),
+        calculatedMoney,
       );
       setPayWay(payment);
+      setAmount(initialMoney);
       setSelfServePaymentMethod(payment);
       setSelfServeDeclaredMoney(
         Math.max(0.01, Math.round(initialMoney * 100) / 100),
@@ -976,6 +1051,9 @@ const TopUp = () => {
         setTopupInfo({
           amount_options: data.amount_options || [],
           discount: data.discount || {},
+          self_serve_topup_group_ratio: positiveRatio(
+            data.self_serve_topup_group_ratio,
+          ),
           payment_timeouts: {
             alipay_official:
               data.alipay_official_order_timeout ||
@@ -1523,6 +1601,7 @@ const TopUp = () => {
           userState={userState}
           renderQuota={renderQuota}
           getPaymentUnitPrice={getPaymentUnitPrice}
+          getPaymentAmountBase={getPaymentAmountBase}
           statusLoading={statusLoading}
           topupInfo={topupInfo}
           getPaymentServiceFeePercent={getPaymentServiceFeePercent}

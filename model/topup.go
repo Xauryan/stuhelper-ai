@@ -13,7 +13,6 @@ import (
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/logger"
 	"github.com/Xauryan/stuhelper-ai/setting"
-	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -2052,8 +2051,8 @@ func calculateSelfServeTopUpQuotaTx(tx *gorm.DB, userId int, declaredMoney decim
 	if !declaredMoney.IsPositive() {
 		return 0, errors.New("充值金额必须大于 0")
 	}
-	if operation_setting.Price <= 0 {
-		return 0, errors.New("充值价格配置错误")
+	if setting.SelfServeTopUpUnitPrice <= 0 {
+		return 0, errors.New("自助充值价格配置错误")
 	}
 	var group string
 	if err := tx.Model(&User{}).Where("id = ?", userId).Select(commonGroupCol).Find(&group).Error; err != nil {
@@ -2067,7 +2066,7 @@ func calculateSelfServeTopUpQuotaTx(tx *gorm.DB, userId int, declaredMoney decim
 	if !quotaPerUnit.IsPositive() {
 		return 0, errors.New("额度倍率配置错误")
 	}
-	denominator := decimal.NewFromFloat(operation_setting.Price).Mul(decimal.NewFromFloat(topupGroupRatio))
+	denominator := decimal.NewFromFloat(setting.SelfServeTopUpUnitPrice).Mul(decimal.NewFromFloat(topupGroupRatio))
 	if !denominator.IsPositive() {
 		return 0, errors.New("充值倍率配置错误")
 	}

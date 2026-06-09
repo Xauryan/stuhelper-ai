@@ -13,6 +13,7 @@
 - `SelfServeWechatPayEnabled`：是否启用微信自助充值。
 - `SelfServeAlipayQRCode`：支付宝收款码，支持 `http/https` 图片地址或 `data:image/...;base64,...`。
 - `SelfServeWechatPayQRCode`：微信收款码，支持 `http/https` 图片地址或 `data:image/...;base64,...`。
+- `SelfServeTopUpUnitPrice`：自助充值独立价格，表示 `1` 美金额度对应多少人民币元。该配置只用于自助充值，不使用易支付的 `Price`。
 - `SelfServeTopUpSingleMaxAmount`：每人单笔自助充值金额上限，单位为人民币元。
 - `SelfServeTopUpDailyMaxAmount`：每人每日自助充值累计金额上限，单位为人民币元。
 - `SelfServeRejectAutoBan`：拒绝审核时的封禁策略开关，前端提供“拒绝并封禁”操作，后端审核接口也支持 `ban_user` 参数。
@@ -24,12 +25,12 @@
 
 ## 风控限额
 
-自助充值限额是配置项，没有内置默认值。管理员必须手动配置 `SelfServeTopUpSingleMaxAmount` 和 `SelfServeTopUpDailyMaxAmount` 后，用户才可以使用自助充值；每日限额必须大于或等于单笔限额。为了按当前运营要求限制用户充值，建议配置为：
+自助充值价格和限额都是独立配置项。管理员必须手动确认 `SelfServeTopUpUnitPrice`，并配置 `SelfServeTopUpSingleMaxAmount` 和 `SelfServeTopUpDailyMaxAmount` 后，用户才可以使用自助充值；每日限额必须大于或等于单笔限额。为了按当前运营要求限制用户充值，建议配置为：
 
 - 每人单笔最高 `199.99` 元。
 - 每人每日最高 `499.99` 元。
 
-用户充值弹窗、管理员编辑弹窗和后端校验都会使用当前配置值展示和限制金额。未完整配置限额时，即使总开关和收款码已配置，前端也不会展示自助充值入口，后端也会拒绝预览、提交和编辑请求。
+用户充值弹窗、管理员编辑弹窗和后端校验都会使用当前配置值展示和限制金额。未完整配置自助价格或限额时，即使总开关和收款码已配置，前端也不会展示自助充值入口，后端也会拒绝预览、提交和编辑请求。
 
 每日限额按用户、自然日、本地服务端时区统计，包含待审核和已通过的自助充值记录，已拒绝记录不计入每日已用额度。后端会在预览、提交和管理员编辑时强制校验，前端限制仅作为交互提示。
 
@@ -51,13 +52,15 @@
 
 ## 到账额度计算
 
-用户填写的是人民币充值金额。系统按当前充值价格和用户充值分组倍率换算到账额度：
+用户填写的是人民币充值金额。系统按自助充值独立价格和用户充值分组倍率换算到账额度：
 
 ```text
-到账额度 = 充值金额 / Price / TopupGroupRatio(user.group) * QuotaPerUnit
+到账额度 = 充值金额 / SelfServeTopUpUnitPrice / TopupGroupRatio(user.group) * QuotaPerUnit
 ```
 
 结果向下取整。若系统价格、额度倍率或充值分组倍率配置错误，后端会拒绝提交。
+
+充值页选择“支付宝自助”或“微信自助”时，自动填写的扫码付款金额也按 `SelfServeTopUpUnitPrice` 和当前用户的 `TopupGroupRatio(user.group)` 反推，不复用易支付 `Price`、易支付手续费或其他支付方式遗留的实付金额状态。
 
 ## 管理员审核
 

@@ -56,3 +56,19 @@ const ceilDisplay = buildRechargeAmountDisplay({
 });
 
 assert.equal(ceilDisplay.displayActualPay.toFixed(2), '7.24');
+
+const selfServeDisplay = buildRechargeAmountDisplay({
+  preset: { value: 1000 },
+  paymentAmountBase: 1,
+  priceRatio: 1.2,
+  discountConfig: { 1000: 0.5 },
+  currencyConfig: { symbol: '', rate: 1, type: 'TOKENS' },
+  usdExchangeRate: 7,
+  selectedPaymentMethod: 'alipay_self_serve',
+  serviceFeePercent: 0.6,
+});
+
+assert.equal(selfServeDisplay.paymentSymbol, '¥');
+assert.equal(selfServeDisplay.displayActualPay.toFixed(2), '1.20');
+assert.equal(selfServeDisplay.fee.toFixed(2), '0.00');
+assert.equal(selfServeDisplay.showSavings, false);

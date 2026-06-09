@@ -112,12 +112,14 @@ func isWechatPayOfficialWebhookEnabled() bool {
 
 func isSelfServeTopUpEnabled() bool {
 	return setting.SelfServeTopUpLimitsConfigured() &&
+		setting.SelfServeTopUpPricingConfigured() &&
 		(isSelfServeAlipayTopUpEnabled() || isSelfServeWechatPayTopUpEnabled())
 }
 
 func isSelfServeAlipayTopUpEnabled() bool {
 	return setting.SelfServeTopUpEnabled &&
 		setting.SelfServeTopUpLimitsConfigured() &&
+		setting.SelfServeTopUpPricingConfigured() &&
 		setting.SelfServeAlipayEnabled &&
 		strings.TrimSpace(setting.SelfServeAlipayQRCode) != ""
 }
@@ -125,6 +127,7 @@ func isSelfServeAlipayTopUpEnabled() bool {
 func isSelfServeWechatPayTopUpEnabled() bool {
 	return setting.SelfServeTopUpEnabled &&
 		setting.SelfServeTopUpLimitsConfigured() &&
+		setting.SelfServeTopUpPricingConfigured() &&
 		setting.SelfServeWechatPayEnabled &&
 		strings.TrimSpace(setting.SelfServeWechatPayQRCode) != ""
 }

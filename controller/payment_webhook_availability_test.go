@@ -226,3 +226,49 @@ func TestWechatPayOfficialWebhookEnabledRequiresTopUpAndWebhookConfig(t *testing
 	setting.WechatPayOfficialEnabled = false
 	require.False(t, isWechatPayOfficialWebhookEnabled())
 }
+
+func TestSelfServeTopUpEnabledRequiresPricingLimitsAndQRCode(t *testing.T) {
+	originalEnabled := setting.SelfServeTopUpEnabled
+	originalAlipayEnabled := setting.SelfServeAlipayEnabled
+	originalWechatPayEnabled := setting.SelfServeWechatPayEnabled
+	originalAlipayQRCode := setting.SelfServeAlipayQRCode
+	originalWechatPayQRCode := setting.SelfServeWechatPayQRCode
+	originalUnitPrice := setting.SelfServeTopUpUnitPrice
+	originalSingleMax := setting.SelfServeTopUpSingleMaxAmount
+	originalDailyMax := setting.SelfServeTopUpDailyMaxAmount
+	t.Cleanup(func() {
+		setting.SelfServeTopUpEnabled = originalEnabled
+		setting.SelfServeAlipayEnabled = originalAlipayEnabled
+		setting.SelfServeWechatPayEnabled = originalWechatPayEnabled
+		setting.SelfServeAlipayQRCode = originalAlipayQRCode
+		setting.SelfServeWechatPayQRCode = originalWechatPayQRCode
+		setting.SelfServeTopUpUnitPrice = originalUnitPrice
+		setting.SelfServeTopUpSingleMaxAmount = originalSingleMax
+		setting.SelfServeTopUpDailyMaxAmount = originalDailyMax
+	})
+
+	setting.SelfServeTopUpEnabled = true
+	setting.SelfServeAlipayEnabled = true
+	setting.SelfServeWechatPayEnabled = false
+	setting.SelfServeAlipayQRCode = "data:image/png;base64,Zm9v"
+	setting.SelfServeWechatPayQRCode = ""
+	setting.SelfServeTopUpUnitPrice = 1.23
+	setting.SelfServeTopUpSingleMaxAmount = 199.99
+	setting.SelfServeTopUpDailyMaxAmount = 499.99
+	require.True(t, isSelfServeTopUpEnabled())
+	require.True(t, isSelfServeAlipayTopUpEnabled())
+
+	setting.SelfServeTopUpUnitPrice = 0
+	require.False(t, isSelfServeTopUpEnabled())
+	require.False(t, isSelfServeAlipayTopUpEnabled())
+
+	setting.SelfServeTopUpUnitPrice = 1.23
+	setting.SelfServeTopUpSingleMaxAmount = 0
+	require.False(t, isSelfServeTopUpEnabled())
+	require.False(t, isSelfServeAlipayTopUpEnabled())
+
+	setting.SelfServeTopUpSingleMaxAmount = 199.99
+	setting.SelfServeAlipayQRCode = ""
+	require.False(t, isSelfServeTopUpEnabled())
+	require.False(t, isSelfServeAlipayTopUpEnabled())
+}

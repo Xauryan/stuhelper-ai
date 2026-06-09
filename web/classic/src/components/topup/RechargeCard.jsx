@@ -103,6 +103,7 @@ const RechargeCard = ({
   userState,
   renderQuota,
   getPaymentUnitPrice,
+  getPaymentAmountBase,
   statusLoading,
   topupInfo,
   getPaymentServiceFeePercent,
@@ -472,6 +473,11 @@ const RechargeCard = ({
                         priceRatio:
                           getPaymentUnitPrice?.(selectedPaymentMethod) ??
                           priceRatio,
+                        paymentAmountBase:
+                          getPaymentAmountBase?.(
+                            selectedPaymentMethod,
+                            preset.value,
+                          ) ?? preset.value,
                         discountConfig: topupInfo?.discount,
                         currencyConfig,
                         usdExchangeRate: getUsdExchangeRate(),
