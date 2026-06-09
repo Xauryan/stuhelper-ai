@@ -50,6 +50,7 @@ import {
   showError,
   showSuccess,
   showWarning,
+  parseHttpStatusCodeRules,
   toBoolean,
   verifyJSON,
 } from '../../../helpers';
@@ -59,11 +60,16 @@ import {
   cloneChannelAffinityTemplate,
 } from '../../../constants/channel-affinity-template.constants';
 import ParamOverrideEditorModal from '../../../components/table/channels/modals/ParamOverrideEditorModal';
+import HttpStatusCodeRulesInput from '../../../components/settings/HttpStatusCodeRulesInput';
 
 const KEY_ENABLED = 'channel_affinity_setting.enabled';
 const KEY_SWITCH_ON_SUCCESS = 'channel_affinity_setting.switch_on_success';
 const KEY_KEEP_ON_CHANNEL_DISABLED =
   'channel_affinity_setting.keep_on_channel_disabled';
+const KEY_FALLBACK_ON_TEMPORARY_ERROR =
+  'channel_affinity_setting.fallback_on_temporary_error';
+const KEY_TEMPORARY_ERROR_STATUS_CODES =
+  'channel_affinity_setting.temporary_error_status_codes';
 const KEY_MAX_ENTRIES = 'channel_affinity_setting.max_entries';
 const KEY_DEFAULT_TTL = 'channel_affinity_setting.default_ttl_seconds';
 const KEY_RULES = 'channel_affinity_setting.rules';
@@ -244,6 +250,8 @@ export default function SettingsChannelAffinity(props) {
     [KEY_ENABLED]: false,
     [KEY_SWITCH_ON_SUCCESS]: true,
     [KEY_KEEP_ON_CHANNEL_DISABLED]: false,
+    [KEY_FALLBACK_ON_TEMPORARY_ERROR]: true,
+    [KEY_TEMPORARY_ERROR_STATUS_CODES]: '429,500,502-503',
     [KEY_MAX_ENTRIES]: 100000,
     [KEY_DEFAULT_TTL]: 3600,
     [KEY_RULES]: '[]',
@@ -269,6 +277,9 @@ export default function SettingsChannelAffinity(props) {
     Number(inputs?.[KEY_DEFAULT_TTL] || 0) > 0
       ? Number(inputs?.[KEY_DEFAULT_TTL] || 0)
       : 3600;
+  const parsedTemporaryErrorStatusCodes = parseHttpStatusCodeRules(
+    inputs[KEY_TEMPORARY_ERROR_STATUS_CODES] || '',
+  );
 
   const buildModalFormValues = (rule) => {
     const r = rule || {};
@@ -817,6 +828,15 @@ export default function SettingsChannelAffinity(props) {
     const updateArray = compareObjects(inputs, inputsRow);
     if (!updateArray.length) return showWarning(t('你似乎并没有修改什么'));
 
+    if (!parsedTemporaryErrorStatusCodes.ok) {
+      const details =
+        parsedTemporaryErrorStatusCodes.invalidTokens &&
+        parsedTemporaryErrorStatusCodes.invalidTokens.length > 0
+          ? `: ${parsedTemporaryErrorStatusCodes.invalidTokens.join(', ')}`
+          : '';
+      return showError(`${t('临时错误状态码格式不正确')}${details}`);
+    }
+
     if (!verifyJSON(inputs[KEY_RULES] || '[]'))
       return showError(t('规则 JSON 格式不正确'));
     let compactRules;
@@ -830,6 +850,8 @@ export default function SettingsChannelAffinity(props) {
       let value = '';
       if (item.key === KEY_RULES) {
         value = compactRules;
+      } else if (item.key === KEY_TEMPORARY_ERROR_STATUS_CODES) {
+        value = parsedTemporaryErrorStatusCodes.normalized || '';
       } else if (typeof inputs[item.key] === 'boolean') {
         value = String(inputs[item.key]);
       } else {
@@ -862,6 +884,8 @@ export default function SettingsChannelAffinity(props) {
           KEY_ENABLED,
           KEY_SWITCH_ON_SUCCESS,
           KEY_KEEP_ON_CHANNEL_DISABLED,
+          KEY_FALLBACK_ON_TEMPORARY_ERROR,
+          KEY_TEMPORARY_ERROR_STATUS_CODES,
           KEY_MAX_ENTRIES,
           KEY_DEFAULT_TTL,
           KEY_RULES,
@@ -874,6 +898,10 @@ export default function SettingsChannelAffinity(props) {
         currentInputs[key] = toBoolean(props.options[key]);
       else if (key === KEY_KEEP_ON_CHANNEL_DISABLED)
         currentInputs[key] = toBoolean(props.options[key]);
+      else if (key === KEY_FALLBACK_ON_TEMPORARY_ERROR)
+        currentInputs[key] = toBoolean(props.options[key]);
+      else if (key === KEY_TEMPORARY_ERROR_STATUS_CODES)
+        currentInputs[key] = props.options[key] || '429,500,502-503';
       else if (key === KEY_MAX_ENTRIES)
         currentInputs[key] = Number(props.options[key] || 0) || 0;
       else if (key === KEY_DEFAULT_TTL)
@@ -1027,6 +1055,50 @@ export default function SettingsChannelAffinity(props) {
                     '开启后，亲和到的渠道被禁用，或不再适用于当前分组/模型时，仍保留这条亲和；关闭时会删除并重新选择渠道。',
                   )}
                 </Text>
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={KEY_FALLBACK_ON_TEMPORARY_ERROR}
+                  label={t('临时错误突破亲和')}
+                  checkedText='|'
+                  uncheckedText='O'
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      [KEY_FALLBACK_ON_TEMPORARY_ERROR]: value,
+                    })
+                  }
+                />
+                <Text type='tertiary' size='small'>
+                  {t(
+                    '开启后，亲和渠道返回临时错误时会删除当前亲和缓存，并允许切换渠道重试。',
+                  )}
+                </Text>
+              </Col>
+            </Row>
+
+            <Row gutter={16} style={{ marginTop: 12 }}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <HttpStatusCodeRulesInput
+                  field={KEY_TEMPORARY_ERROR_STATUS_CODES}
+                  label={t('临时错误状态码')}
+                  placeholder='429,500,502-503'
+                  extraText={
+                    <Text type='tertiary' size='small'>
+                      {t(
+                        '仅在“临时错误突破亲和”开启时生效，支持逗号分隔和范围；504/524 仍按全局规则不重试。',
+                      )}
+                    </Text>
+                  }
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      [KEY_TEMPORARY_ERROR_STATUS_CODES]: value,
+                    })
+                  }
+                  parsed={parsedTemporaryErrorStatusCodes}
+                  invalidText={t('临时错误状态码格式不正确')}
+                />
               </Col>
             </Row>
 

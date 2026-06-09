@@ -4447,6 +4447,11 @@
     "订阅购买成功": "Đã mua gói đăng ký thành công",
     "渠道禁用后保留亲和": "Giữ affinity khi kênh bị tắt",
     "开启后，亲和到的渠道被禁用，或不再适用于当前分组/模型时，仍保留这条亲和；关闭时会删除并重新选择渠道。": "Khi bật, mục affinity vẫn được giữ ngay cả khi kênh được affinity bị tắt hoặc không còn dùng được cho nhóm/mô hình hiện tại. Khi tắt, mục này sẽ bị xóa và hệ thống chọn kênh khác.",
+    "临时错误突破亲和": "Bỏ affinity khi gặp lỗi tạm thời",
+    "开启后，亲和渠道返回临时错误时会删除当前亲和缓存，并允许切换渠道重试。": "Khi bật, lỗi tạm thời từ kênh affinity sẽ xóa mục cache affinity hiện tại và cho phép thử lại bằng kênh khác.",
+    "临时错误状态码": "Mã trạng thái lỗi tạm thời",
+    "临时错误状态码格式不正确": "Định dạng mã trạng thái lỗi tạm thời không hợp lệ",
+    "仅在“临时错误突破亲和”开启时生效，支持逗号分隔和范围；504/524 仍按全局规则不重试。": "Chỉ có hiệu lực khi bật bỏ affinity khi gặp lỗi tạm thời. Hỗ trợ mã phân tách bằng dấu phẩy và khoảng; 504/524 vẫn theo quy tắc toàn cục không thử lại.",
     "允许余额支付": "Cho phép thanh toán bằng số dư",
     "不自动处理思考后缀的模型列表": "Danh sách mô hình không tự xử lý hậu tố suy luận"
   }

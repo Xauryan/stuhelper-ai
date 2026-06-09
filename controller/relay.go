@@ -334,7 +334,9 @@ func shouldRetry(c *gin.Context, openaiErr *types.StuHelperAIError, retryTimes i
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
-		return false
+		if !shouldFallbackChannelAffinityForError(c, openaiErr, retryTimes) {
+			return false
+		}
 	}
 	if types.IsChannelError(openaiErr) {
 		return true
@@ -359,6 +361,36 @@ func shouldRetry(c *gin.Context, openaiErr *types.StuHelperAIError, retryTimes i
 		return false
 	}
 	return operation_setting.ShouldRetryByStatusCode(code)
+}
+
+func shouldFallbackChannelAffinityForError(c *gin.Context, openaiErr *types.StuHelperAIError, retryTimes int) bool {
+	if openaiErr == nil {
+		return false
+	}
+	if types.IsSkipRetryError(openaiErr) {
+		return false
+	}
+	if operation_setting.IsAlwaysSkipRetryCode(openaiErr.GetErrorCode()) {
+		return false
+	}
+	return shouldFallbackChannelAffinityForStatus(c, openaiErr.StatusCode, retryTimes)
+}
+
+func shouldFallbackChannelAffinityForStatus(c *gin.Context, statusCode int, retryTimes int) bool {
+	if retryTimes <= 0 {
+		return false
+	}
+	if _, ok := c.Get("specific_channel_id"); ok {
+		return false
+	}
+	if !service.ShouldFallbackChannelAffinityOnTemporaryError(statusCode) {
+		return false
+	}
+	if !operation_setting.ShouldRetryByStatusCode(statusCode) {
+		return false
+	}
+	service.ClearCurrentChannelAffinityCache(c)
+	return true
 }
 
 func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.StuHelperAIError) {
@@ -628,7 +660,9 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
-		return false
+		if !shouldFallbackChannelAffinityForStatus(c, taskErr.StatusCode, retryTimes) {
+			return false
+		}
 	}
 	if retryTimes <= 0 {
 		return false

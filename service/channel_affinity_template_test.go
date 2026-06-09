@@ -222,6 +222,42 @@ func TestShouldStopAfterChannelAffinityUnavailable(t *testing.T) {
 	}
 }
 
+func TestShouldFallbackChannelAffinityOnTemporaryError(t *testing.T) {
+	setting := operation_setting.GetChannelAffinitySetting()
+	originalEnabled := setting.FallbackOnTemporaryError
+	originalRanges := setting.TemporaryErrorStatusCodes
+	setting.FallbackOnTemporaryError = true
+	setting.TemporaryErrorStatusCodes = "429,500,502-503"
+	t.Cleanup(func() {
+		setting.FallbackOnTemporaryError = originalEnabled
+		setting.TemporaryErrorStatusCodes = originalRanges
+	})
+
+	require.True(t, ShouldFallbackChannelAffinityOnTemporaryError(http.StatusTooManyRequests))
+	require.True(t, ShouldFallbackChannelAffinityOnTemporaryError(http.StatusInternalServerError))
+	require.True(t, ShouldFallbackChannelAffinityOnTemporaryError(http.StatusBadGateway))
+	require.True(t, ShouldFallbackChannelAffinityOnTemporaryError(http.StatusServiceUnavailable))
+
+	require.False(t, ShouldFallbackChannelAffinityOnTemporaryError(http.StatusBadRequest))
+	require.False(t, ShouldFallbackChannelAffinityOnTemporaryError(http.StatusUnauthorized))
+	require.False(t, ShouldFallbackChannelAffinityOnTemporaryError(http.StatusNotFound))
+	require.False(t, ShouldFallbackChannelAffinityOnTemporaryError(http.StatusGatewayTimeout))
+}
+
+func TestShouldFallbackChannelAffinityOnTemporaryErrorDisabled(t *testing.T) {
+	setting := operation_setting.GetChannelAffinitySetting()
+	originalEnabled := setting.FallbackOnTemporaryError
+	originalRanges := setting.TemporaryErrorStatusCodes
+	setting.FallbackOnTemporaryError = false
+	setting.TemporaryErrorStatusCodes = "503"
+	t.Cleanup(func() {
+		setting.FallbackOnTemporaryError = originalEnabled
+		setting.TemporaryErrorStatusCodes = originalRanges
+	})
+
+	require.False(t, ShouldFallbackChannelAffinityOnTemporaryError(http.StatusServiceUnavailable))
+}
+
 func TestExtractChannelAffinityValue_RequestHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)

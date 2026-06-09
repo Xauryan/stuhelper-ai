@@ -3916,6 +3916,11 @@
     "订阅购买成功": "Abonnement acheté avec succès",
     "渠道禁用后保留亲和": "Conserver l'affinité après désactivation du canal",
     "开启后，亲和到的渠道被禁用，或不再适用于当前分组/模型时，仍保留这条亲和；关闭时会删除并重新选择渠道。": "Lorsque cette option est activée, l'entrée d'affinité est conservée même si le canal associé est désactivé ou n'est plus utilisable pour le groupe/modèle actuel. Lorsqu'elle est désactivée, l'entrée est supprimée et un autre canal est sélectionné.",
+    "临时错误突破亲和": "Contournement d'affinité sur erreurs temporaires",
+    "开启后，亲和渠道返回临时错误时会删除当前亲和缓存，并允许切换渠道重试。": "Lorsque cette option est activée, une erreur temporaire du canal d'affinité supprime l'entrée d'affinité actuelle et autorise une nouvelle tentative sur un autre canal.",
+    "临时错误状态码": "Codes d'état d'erreur temporaire",
+    "临时错误状态码格式不正确": "Format des codes d'état d'erreur temporaire invalide",
+    "仅在“临时错误突破亲和”开启时生效，支持逗号分隔和范围；504/524 仍按全局规则不重试。": "S'applique uniquement lorsque le contournement d'affinité sur erreurs temporaires est activé. Les codes séparés par des virgules et les plages sont pris en charge ; 504/524 suivent toujours la règle globale sans nouvelle tentative.",
     "允许余额支付": "Autoriser le paiement par solde",
     "不自动处理思考后缀的模型列表": "Modèles ignorant le traitement automatique du suffixe de réflexion"
   }

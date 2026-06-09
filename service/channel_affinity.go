@@ -637,6 +637,27 @@ func ShouldSkipRetryAfterChannelAffinityFailure(c *gin.Context) bool {
 	return false
 }
 
+func ShouldFallbackChannelAffinityOnTemporaryError(statusCode int) bool {
+	setting := operation_setting.GetChannelAffinitySetting()
+	if setting == nil || !setting.FallbackOnTemporaryError {
+		return false
+	}
+	if operation_setting.IsAlwaysSkipRetryStatusCode(statusCode) {
+		return false
+	}
+
+	rawRanges := strings.TrimSpace(setting.TemporaryErrorStatusCodes)
+	if rawRanges == "" {
+		rawRanges = "429,500,502-503"
+	}
+	ranges, err := operation_setting.ParseHTTPStatusCodeRanges(rawRanges)
+	if err != nil {
+		common.SysError(fmt.Sprintf("channel affinity temporary status code ranges invalid: %s", err.Error()))
+		return false
+	}
+	return operation_setting.MatchHTTPStatusCodeRanges(ranges, statusCode)
+}
+
 func ShouldStopAfterChannelAffinityUnavailable(c *gin.Context) bool {
 	if c == nil {
 		return false
