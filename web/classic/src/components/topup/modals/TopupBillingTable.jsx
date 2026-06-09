@@ -16,7 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@xauryan.com
 */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Modal,
   Table,
@@ -37,11 +43,13 @@ import {
   IllustrationNoResult,
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
-import { Coins } from 'lucide-react';
+import { Coins, ImageUp } from 'lucide-react';
 import { IconEdit, IconSearch } from '@douyinfe/semi-icons';
+import { QRCodeSVG } from 'qrcode.react';
 import { API, timestamp2string, renderQuota } from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
 import CardTable from '../../common/ui/CardTable';
+import { decodeQRCodeImage, isLegacyQRCodeImageValue } from '../qrCodeUtils';
 import {
   canAdminCompleteTopup,
   formatCurrency,
@@ -51,6 +59,7 @@ import {
   isAdminManagedTopup,
   isAdminManagedTopupRefundable,
   isOfficialRefundable,
+  isRefundRequestable,
   isSelfServeTopup,
   isSubscriptionTopup,
 } from './topupHistoryUtils.mjs';
@@ -67,15 +76,19 @@ const STATUS_CONFIG = {
 };
 
 const SELF_SERVE_AUDIT_STATUS_CONFIG = {
-  pending: { color: 'orange', key: '待审核' },
-  approved: { color: 'green', key: '审核通过' },
-  rejected: { color: 'red', key: '已拒绝' },
+  pending: { type: 'warning', key: '待审核' },
+  approved: { type: 'success', key: '审核通过' },
+  rejected: { type: 'danger', key: '已拒绝' },
 };
 
 const isOfficialTopupRefundable = (record) =>
   isOfficialRefundable(record) && !record.refund_request_id;
 
+const isUserRefundRequestable = (record) =>
+  isRefundRequestable(record) && !record.refund_request_id;
+
 const EMPTY_TOPUP_FILTERS = {};
+const QR_MAX_BYTES = 300 * 1024;
 
 const ACTIONABLE_PAYMENT_STATUSES = ['pending', 'expired'];
 
@@ -146,6 +159,8 @@ const TopupBillingTable = ({
   const [refundPreview, setRefundPreview] = useState(null);
   const [refundMode, setRefundMode] = useState('direct');
   const [refundFull, setRefundFull] = useState(false);
+  const [refundQRCode, setRefundQRCode] = useState('');
+  const refundQRCodeFileRef = useRef(null);
   const [editVisible, setEditVisible] = useState(false);
   const [editRecord, setEditRecord] = useState(null);
   const [editLoading, setEditLoading] = useState(false);
@@ -165,12 +180,16 @@ const TopupBillingTable = ({
     transactionNo: '',
     reason: '',
   });
-  const [selfServeRejectAutoBan, setSelfServeRejectAutoBan] = useState(false);
   const [selfServeLimits, setSelfServeLimits] = useState(
     EMPTY_SELF_SERVE_LIMITS,
   );
   const selfServeSingleMax = positiveMoney(selfServeLimits.single_max_money);
   const isPageVariant = variant === 'page';
+  const selfServeRefundRecord = isSelfServeTopup(refundRecord);
+  const userSelfServeRefundApply =
+    selfServeRefundRecord && !userIsAdmin && refundMode === 'direct';
+  const adminSelfServeRefundApprove =
+    selfServeRefundRecord && userIsAdmin && refundMode === 'approve';
   // hideFilters 模式（独立账单页）下，关键词由父组件 submit 后传入，不需要再做内部 debounce；
   // 否则在弹窗内是逐字输入，加 300ms debounce 避免每按一个字符就打一次 API。
   const effectiveKeyword = hideFilters
@@ -299,7 +318,6 @@ const TopupBillingTable = ({
         const res = await API.get('/api/user/topup/info');
         const { success, data } = res.data;
         if (!cancelled && success) {
-          setSelfServeRejectAutoBan(Boolean(data?.self_serve_reject_auto_ban));
           setSelfServeLimits(normalizeSelfServeLimits(data?.self_serve_limits));
         }
       } catch (e) {
@@ -450,6 +468,7 @@ const TopupBillingTable = ({
         setRefundAmount(0);
         setRefundQuota(getRemainingAdminRefundQuota(record));
         setRefundReason('');
+        setRefundQRCode('');
         setRefundMode('admin_quota');
         setRefundFull(false);
         setRefundVisible(true);
@@ -474,6 +493,7 @@ const TopupBillingTable = ({
       setRefundAmount(remaining);
       setRefundQuota(0);
       setRefundReason('');
+      setRefundQRCode(record?.refund_request_qrcode || '');
       setRefundMode(
         record.refund_request_id && userIsAdmin ? 'approve' : 'direct',
       );
@@ -534,6 +554,11 @@ const TopupBillingTable = ({
       Toast.error({ content: t('退款金额不能超过可退金额') });
       return;
     }
+    const normalizedRefundQRCode = refundQRCode.trim();
+    if (userSelfServeRefundApply && !normalizedRefundQRCode) {
+      Toast.error({ content: t('请上传或填写退款收款码') });
+      return;
+    }
     setRefundLoading(true);
     try {
       let res;
@@ -561,6 +586,9 @@ const TopupBillingTable = ({
           refund_amount: normalizedAmount,
           reason: refundReason,
           full_refund: refundFull,
+          refund_qrcode: userSelfServeRefundApply
+            ? normalizedRefundQRCode
+            : undefined,
         });
       }
       const { success, message } = res.data;
@@ -580,6 +608,23 @@ const TopupBillingTable = ({
       Toast.error({ content: t('退款失败') });
     } finally {
       setRefundLoading(false);
+    }
+  };
+
+  const handleRefundQRCodeFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.size > QR_MAX_BYTES) {
+      Toast.error({ content: t('二维码图片不能超过 300KB') });
+      return;
+    }
+    try {
+      const decoded = await decodeQRCodeImage(file);
+      setRefundQRCode(decoded);
+      Toast.success({ content: t('二维码已解码并填入') });
+    } catch (error) {
+      Toast.error({ content: t('未能识别二维码，请上传清晰的收款码图片') });
     }
   };
 
@@ -924,13 +969,34 @@ const TopupBillingTable = ({
       return <Text type='tertiary'>-</Text>;
     }
     const config = SELF_SERVE_AUDIT_STATUS_CONFIG[record.audit_status] || {
-      color: 'grey',
+      type: 'secondary',
       key: record.audit_status || '待审核',
     };
     return (
-      <Tag color={config.color} shape='circle' size='small'>
-        {t(config.key)}
-      </Tag>
+      <span className='flex items-center gap-2'>
+        <Badge dot type={config.type} />
+        <span>{t(config.key)}</span>
+      </span>
+    );
+  };
+
+  const renderQRCodePreview = (value, alt) => {
+    const text = String(value || '').trim();
+    if (!text) {
+      return null;
+    }
+    return (
+      <div className='inline-flex rounded-lg border border-[var(--semi-color-border)] bg-white p-2'>
+        {isLegacyQRCodeImageValue(text) ? (
+          <img
+            src={text}
+            alt={alt}
+            style={{ width: 128, height: 128, objectFit: 'contain' }}
+          />
+        ) : (
+          <QRCodeSVG value={text} size={128} level='M' />
+        )}
+      </div>
     );
   };
 
@@ -1060,7 +1126,7 @@ const TopupBillingTable = ({
     ];
 
     baseColumns.push({
-      title: t('操作'),
+      title: userIsAdmin ? t('操作') : t('退款'),
       key: 'action',
       render: (_, record) => {
         const actions = [];
@@ -1138,6 +1204,7 @@ const TopupBillingTable = ({
           }
         }
         if (
+          userIsAdmin &&
           isOfficialTopupRefundable(record) &&
           record.refund_request_status !== 'pending'
         ) {
@@ -1149,8 +1216,33 @@ const TopupBillingTable = ({
               theme='outline'
               onClick={() => openRefundModal(record)}
             >
-              {userIsAdmin ? t('退款') : t('申请退款')}
+              {t('退款')}
             </Button>,
+          );
+        }
+        if (
+          !userIsAdmin &&
+          isUserRefundRequestable(record) &&
+          record.refund_request_status !== 'pending'
+        ) {
+          actions.push(
+            <Button
+              key='refund-apply'
+              size='small'
+              type='warning'
+              theme='outline'
+              onClick={() => openRefundModal(record)}
+            >
+              {t('申请退款')}
+            </Button>,
+          );
+        }
+        if (!userIsAdmin && record.refund_request_status === 'pending') {
+          actions.push(
+            <span key='refund-pending' className='flex items-center gap-2'>
+              <Badge dot type='warning' />
+              <span>{t('退款审核中')}</span>
+            </span>,
           );
         }
         if (userIsAdmin && isAdminManagedTopup(record)) {
@@ -1208,58 +1300,42 @@ const TopupBillingTable = ({
               size='small'
               type='danger'
               theme='outline'
-              onClick={() =>
-                handleSelfServeReject(record, selfServeRejectAutoBan)
-              }
+              onClick={() => handleSelfServeReject(record, false)}
             >
               {t('拒绝')}
             </Button>,
             <Button
               key='self-serve-reject-ban'
               size='small'
-              type='danger'
-              theme='solid'
+              type='warning'
+              theme='outline'
               onClick={() => handleSelfServeReject(record, true)}
             >
               {t('拒绝并封禁')}
             </Button>,
           );
-        } else if (!userIsAdmin && record.audit_status === 'pending') {
-          actions.push(
-            <Tag key='self-serve-pending' color='orange' shape='circle'>
-              {t('待审核')}
-            </Tag>,
-          );
         }
-        if (record.refund_request_status === 'pending') {
-          if (userIsAdmin) {
-            actions.push(
-              <Button
-                key='refund-approve'
-                size='small'
-                type='warning'
-                theme='solid'
-                onClick={() => openRefundModal(record)}
-              >
-                {t('审批退款')}
-              </Button>,
-              <Button
-                key='refund-reject'
-                size='small'
-                type='danger'
-                theme='outline'
-                onClick={() => handleRejectRefundRequest(record)}
-              >
-                {t('拒绝')}
-              </Button>,
-            );
-          } else {
-            actions.push(
-              <Tag key='refund-pending' color='orange' shape='circle'>
-                {t('退款审核中')}
-              </Tag>,
-            );
-          }
+        if (userIsAdmin && record.refund_request_status === 'pending') {
+          actions.push(
+            <Button
+              key='refund-approve'
+              size='small'
+              type='warning'
+              theme='outline'
+              onClick={() => openRefundModal(record)}
+            >
+              {t('审批退款')}
+            </Button>,
+            <Button
+              key='refund-reject'
+              size='small'
+              type='danger'
+              theme='outline'
+              onClick={() => handleRejectRefundRequest(record)}
+            >
+              {t('拒绝')}
+            </Button>,
+          );
         }
         return actions.length > 0 ? (
           <Space spacing={6} wrap>
@@ -1291,7 +1367,6 @@ const TopupBillingTable = ({
     handleSelfServeApprove,
     handleSelfServeReject,
     openSelfServeEditModal,
-    selfServeRejectAutoBan,
   ]);
 
   const tableProps = {
@@ -1627,6 +1702,25 @@ const TopupBillingTable = ({
                   <Text>{refundRecord.refund_request_reason || '-'}</Text>
                 </div>
               </div>
+              {adminSelfServeRefundApprove ? (
+                <div>
+                  <Text type='tertiary'>{t('退款收款码')}</Text>
+                  <div className='mt-2'>
+                    {refundQRCode ? (
+                      <div className='space-y-2'>
+                        {renderQRCodePreview(refundQRCode, t('退款收款码'))}
+                        <div>
+                          <Text copyable type='secondary'>
+                            {refundQRCode}
+                          </Text>
+                        </div>
+                      </div>
+                    ) : (
+                      <Text type='warning'>{t('用户未提交退款收款码')}</Text>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </>
           ) : null}
           {refundMode === 'admin_quota' ? (
@@ -1692,6 +1786,41 @@ const TopupBillingTable = ({
             placeholder={userIsAdmin ? t('退款原因，可留空') : t('退款原因')}
             showClear
           />
+          {userSelfServeRefundApply ? (
+            <div className='space-y-2'>
+              <Text type='tertiary'>{t('退款收款码')}</Text>
+              <Input
+                value={refundQRCode}
+                onChange={setRefundQRCode}
+                placeholder={t(
+                  '可粘贴二维码内容或支付链接，上传图片会自动解码',
+                )}
+                showClear
+              />
+              <input
+                ref={refundQRCodeFileRef}
+                type='file'
+                accept='image/png,image/jpeg,image/webp'
+                className='hidden'
+                onChange={handleRefundQRCodeFile}
+              />
+              <Button
+                icon={<ImageUp size={16} />}
+                theme='outline'
+                onClick={() => refundQRCodeFileRef.current?.click()}
+              >
+                {t('上传退款收款码')}
+              </Button>
+              <div>
+                <Text type='secondary' size='small'>
+                  {t('系统只保存二维码内容；管理员手动退款后会审批录入系统。')}
+                </Text>
+              </div>
+              {refundQRCode
+                ? renderQRCodePreview(refundQRCode, t('退款收款码'))
+                : null}
+            </div>
+          ) : null}
         </div>
       </Modal>
     </>

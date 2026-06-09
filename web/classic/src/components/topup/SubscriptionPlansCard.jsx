@@ -45,6 +45,7 @@ import { CreditCard, RefreshCw, Sparkles } from 'lucide-react';
 import { SiAlipay, SiStripe, SiWechat } from 'react-icons/si';
 import SubscriptionPurchaseModal from './modals/SubscriptionPurchaseModal';
 import WechatOfficialQrPaymentModal from './modals/WechatOfficialQrPaymentModal';
+import SelfServeSubscriptionModal from './modals/SelfServeSubscriptionModal';
 import {
   formatSubscriptionDuration,
   formatSubscriptionResetPeriod,
@@ -56,7 +57,10 @@ import {
   getOfficialWechatPayMethod,
 } from './subscriptionPaymentMethods';
 import { shouldHighlightSubscriptionPlan } from './subscriptionPlanDisplay';
-import { formatSubscriptionPayAmount } from './subscriptionPaymentDisplay';
+import {
+  calculateSubscriptionPayAmount,
+  formatSubscriptionPayAmount,
+} from './subscriptionPaymentDisplay';
 import {
   getOfficialWechatStatus,
   getTopupStatusFromPage,
@@ -97,6 +101,9 @@ const SubscriptionPlansCard = ({
   enableCreemTopUp = false,
   enableAlipayOfficialTopUp = false,
   enableWechatPayOfficialTopUp = false,
+  enableSelfServeTopUp = false,
+  selfServeQrCodes = {},
+  selfServeLimits = {},
   priceRatio,
   getPaymentServiceFeePercent,
   billingPreference,
@@ -121,6 +128,10 @@ const SubscriptionPlansCard = ({
   const [wechatQrCreatedAt, setWechatQrCreatedAt] = useState(0);
   const [wechatQrOrderTimeoutSeconds, setWechatQrOrderTimeoutSeconds] =
     useState(600);
+  const [selfServeOpen, setSelfServeOpen] = useState(false);
+  const [selfServeTransactionNo, setSelfServeTransactionNo] = useState('');
+  const [selfServeConfirmed, setSelfServeConfirmed] = useState(false);
+  const [selfServeSubmitting, setSelfServeSubmitting] = useState(false);
   const wechatQrPollTimerRef = useRef(null);
 
   const epayMethods = useMemo(() => getEpayMethods(payMethods), [payMethods]);
@@ -151,6 +162,12 @@ const SubscriptionPlansCard = ({
     setWechatQrOrderId('');
     setWechatQrFallback('');
     setWechatQrCreatedAt(0);
+  };
+
+  const closeSelfServeModal = () => {
+    setSelfServeOpen(false);
+    setSelfServeTransactionNo('');
+    setSelfServeConfirmed(false);
   };
 
   const checkWechatQrOrderStatus = async (orderId) => {
@@ -217,8 +234,11 @@ const SubscriptionPlansCard = ({
         enableCreemTopUp,
         enableAlipayOfficialTopUp,
         enableWechatPayOfficialTopUp,
+        enableSelfServeTopUp,
         hasAlipayOfficial,
         hasWechatPayOfficial,
+        selfServeQrCodes,
+        selfServeUnitPrice: selfServeLimits?.unit_price,
       }),
     );
     return methods;
@@ -232,8 +252,11 @@ const SubscriptionPlansCard = ({
     enableCreemTopUp,
     enableAlipayOfficialTopUp,
     enableWechatPayOfficialTopUp,
+    enableSelfServeTopUp,
     hasAlipayOfficial,
     hasWechatPayOfficial,
+    selfServeQrCodes,
+    selfServeLimits?.unit_price,
     t,
   ]);
   const selectedPaymentMethod = useMemo(
@@ -289,16 +312,36 @@ const SubscriptionPlansCard = ({
       0,
     paymentMethod: selectedPaymentMethod?.type,
   });
+  const selectedSelfServeExpectedMoney =
+    selectedPaymentMethod?.provider === 'self_serve'
+      ? calculateSubscriptionPayAmount(
+          selectedPlan?.plan?.price_amount || 0,
+          selectedPaymentMethod?.unitPrice,
+          0,
+          selectedPaymentMethod?.type,
+        )
+      : null;
   const selectedPayAmountDisplay =
     selectedPaymentMethod?.provider === 'balance'
       ? renderQuota(balanceCost)
-      : selectedPayAmount;
+      : selectedPaymentMethod?.provider === 'self_serve' &&
+          selectedSelfServeExpectedMoney !== null
+        ? `¥${selectedSelfServeExpectedMoney.toFixed(2)}`
+        : selectedPayAmount;
 
   const renderPaymentIcon = (method) => {
-    if (method?.type === 'alipay' || method?.type === 'alipay_official') {
+    if (
+      method?.type === 'alipay' ||
+      method?.type === 'alipay_official' ||
+      method?.type === 'alipay_self_serve'
+    ) {
       return <SiAlipay size={18} color='#1677FF' />;
     }
-    if (method?.type === 'wxpay' || method?.type === 'wxpay_official') {
+    if (
+      method?.type === 'wxpay' ||
+      method?.type === 'wxpay_official' ||
+      method?.type === 'wxpay_self_serve'
+    ) {
       return <SiWechat size={18} color='#07C160' />;
     }
     if (method?.type === 'stripe') {
@@ -685,7 +728,64 @@ const SubscriptionPlansCard = ({
       );
       return;
     }
+    if (selectedPaymentMethod.provider === 'self_serve') {
+      if (!selectedPaymentMethod.qrCode) {
+        showError(t('管理员未配置收款码'));
+        return;
+      }
+      if (selectedSelfServeExpectedMoney === null) {
+        showError(t('请先配置自助充值价格'));
+        return;
+      }
+      setSelfServeTransactionNo('');
+      setSelfServeConfirmed(false);
+      setSelfServeOpen(true);
+      return;
+    }
     setOpen(true);
+  };
+
+  const submitSelfServeSubscription = async () => {
+    if (!selectedPlan?.plan?.id || !selectedPaymentMethod?.type) {
+      showError(t('请选择订阅套餐'));
+      return;
+    }
+    if (selectedSelfServeExpectedMoney === null) {
+      showError(t('请先配置自助充值价格'));
+      return;
+    }
+    if (!selfServeTransactionNo.trim()) {
+      showError(t('请输入交易订单号'));
+      return;
+    }
+    if (!selfServeConfirmed) {
+      showError(t('请确认已完成付款并承诺信息真实'));
+      return;
+    }
+    setSelfServeSubmitting(true);
+    try {
+      const res = await API.post('/api/subscription/self-serve/pay', {
+        plan_id: selectedPlan.plan.id,
+        payment_method: selectedPaymentMethod.type,
+        declared_money: selectedSelfServeExpectedMoney,
+        transaction_no: selfServeTransactionNo.trim(),
+      });
+      if (res.data?.success || res.data?.message === 'success') {
+        showSuccess(t('自助订阅已提交，订阅已立即开通'));
+        closeSelfServeModal();
+        await Promise.all([reloadSubscriptionSelf?.(), reloadUserQuota?.()]);
+      } else {
+        const errorMsg =
+          typeof res.data?.data === 'string'
+            ? res.data.data
+            : res.data?.message || t('提交失败');
+        showError(errorMsg);
+      }
+    } catch (e) {
+      showError(t('提交失败'));
+    } finally {
+      setSelfServeSubmitting(false);
+    }
   };
 
   const confirmSubscriptionPurchase = async () => {
@@ -715,6 +815,10 @@ const SubscriptionPlansCard = ({
     }
     if (selectedPaymentMethod.provider === 'epay') {
       await payEpay();
+      return;
+    }
+    if (selectedPaymentMethod.provider === 'self_serve') {
+      await submitSelfServeSubscription();
       return;
     }
     showError(t('支付方式不存在'));
@@ -1276,6 +1380,23 @@ const SubscriptionPlansCard = ({
         createdAt={wechatQrCreatedAt}
         orderTimeoutSeconds={wechatQrOrderTimeoutSeconds}
         onCancel={closeWechatQrModal}
+      />
+
+      <SelfServeSubscriptionModal
+        t={t}
+        visible={selfServeOpen}
+        selectedPlan={selectedPlan}
+        paymentMethod={selectedPaymentMethod?.type}
+        paymentName={selectedPaymentMethod?.name}
+        qrCode={selectedPaymentMethod?.qrCode}
+        expectedMoney={selectedSelfServeExpectedMoney || 0}
+        transactionNo={selfServeTransactionNo}
+        setTransactionNo={setSelfServeTransactionNo}
+        confirmed={selfServeConfirmed}
+        setConfirmed={setSelfServeConfirmed}
+        submitLoading={selfServeSubmitting}
+        onSubmit={submitSelfServeSubscription}
+        onCancel={closeSelfServeModal}
       />
     </>
   );

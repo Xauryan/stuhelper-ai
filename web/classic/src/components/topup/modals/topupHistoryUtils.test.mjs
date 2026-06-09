@@ -10,6 +10,7 @@ import {
   isAdminManagedTopupRefundable,
   isOfficialPaymentTopup,
   isOfficialRefundable,
+  isRefundRequestable,
   isSelfServeTopup,
   isSubscriptionTopup,
 } from './topupHistoryUtils.mjs';
@@ -203,6 +204,13 @@ assert.equal(
 );
 assert.equal(
   isSubscriptionTopup({
+    trade_no: 'SSSUB_1_ABCDEF1234567890',
+    amount: 0,
+  }),
+  true,
+);
+assert.equal(
+  isSubscriptionTopup({
     trade_no: 'ALIPAY_1_1778750000_ABCDEF',
     amount: 0,
   }),
@@ -235,6 +243,16 @@ assert.equal(
   isSelfServeTopup({
     payment_provider: 'self_serve',
     payment_method: 'alipay_self_serve',
+  }),
+  true,
+);
+assert.equal(
+  isRefundRequestable({
+    payment_provider: 'self_serve',
+    payment_method: 'alipay_self_serve',
+    status: 'success',
+    money: 29.99,
+    refunded_money: 0,
   }),
   true,
 );

@@ -17,7 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@xauryan.com
 */
 function shouldApplyServiceFee(paymentMethod) {
-  return paymentMethod !== 'stripe' && paymentMethod !== 'creem';
+  return (
+    paymentMethod !== 'stripe' &&
+    paymentMethod !== 'creem' &&
+    paymentMethod !== 'alipay_self_serve' &&
+    paymentMethod !== 'wxpay_self_serve'
+  );
 }
 
 export function calculateSubscriptionPayAmount(

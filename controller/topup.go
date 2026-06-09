@@ -188,7 +188,6 @@ func GetTopUpInfo(c *gin.Context) {
 			}(),
 		},
 		"self_serve_topup_group_ratio": selfServeTopupGroupRatio,
-		"self_serve_reject_auto_ban":   setting.SelfServeRejectAutoBan,
 		"waffo_pay_methods": func() interface{} {
 			if enableWaffo {
 				return setting.GetWaffoPayMethods()

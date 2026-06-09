@@ -4,6 +4,7 @@ import {
   getEpayMethods,
   getOfficialAlipayMethod,
   getOfficialWechatPayMethod,
+  getSelfServeMethods,
 } from './subscriptionPaymentMethods.js';
 
 const methods = [
@@ -12,6 +13,8 @@ const methods = [
   { name: 'Stripe', type: 'stripe' },
   { name: 'Alipay Official', type: 'alipay_official' },
   { name: 'WeChat Official', type: 'wxpay_official' },
+  { name: 'Alipay Self Serve', type: 'alipay_self_serve' },
+  { name: 'WeChat Self Serve', type: 'wxpay_self_serve' },
 ];
 
 assert.deepEqual(
@@ -32,6 +35,8 @@ const subscriptionMethods = buildSubscriptionPaymentMethods({
     { name: 'Stripe', type: 'stripe' },
     { name: '支付宝', type: 'alipay_official', unit_price: '1.006' },
     { name: '微信', type: 'wxpay_official', unit_price: '1.008' },
+    { name: '支付宝自助', type: 'alipay_self_serve' },
+    { name: '微信自助', type: 'wxpay_self_serve' },
   ],
   epayMethods: [
     { name: '易支付支付宝', type: 'alipay', unit_price: '1.2' },
@@ -42,9 +47,15 @@ const subscriptionMethods = buildSubscriptionPaymentMethods({
   enableCreemTopUp: true,
   enableAlipayOfficialTopUp: true,
   enableWechatPayOfficialTopUp: true,
+  enableSelfServeTopUp: true,
   hasAlipayOfficial: true,
   hasWechatPayOfficial: true,
   epayUnitPrice: 1.006,
+  selfServeQrCodes: {
+    alipay_self_serve: 'alipay-qr-content',
+    wxpay_self_serve: 'wxpay-qr-content',
+  },
+  selfServeUnitPrice: 1.15,
 });
 
 assert.deepEqual(
@@ -56,6 +67,8 @@ assert.deepEqual(
     'wxpay_official',
     'epay:alipay',
     'epay:wxpay',
+    'self_serve:alipay_self_serve',
+    'self_serve:wxpay_self_serve',
   ],
 );
 assert.equal(
@@ -75,6 +88,25 @@ assert.equal(
 assert.equal(
   subscriptionMethods.find((method) => method.key === 'epay:wxpay')?.unitPrice,
   1.006,
+);
+assert.equal(
+  subscriptionMethods.find(
+    (method) => method.key === 'self_serve:alipay_self_serve',
+  )?.unitPrice,
+  1.15,
+);
+assert.equal(
+  subscriptionMethods.find(
+    (method) => method.key === 'self_serve:wxpay_self_serve',
+  )?.qrCode,
+  'wxpay-qr-content',
+);
+assert.deepEqual(
+  getSelfServeMethods({
+    selfServeQrCodes: { alipay_self_serve: 'alipay-qr-content' },
+    selfServeUnitPrice: 1.2,
+  }).map((method) => method.key),
+  ['self_serve:alipay_self_serve'],
 );
 assert.equal(
   buildSubscriptionPaymentMethods({

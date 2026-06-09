@@ -10,6 +10,7 @@ import (
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/pkg/cachex"
+	"github.com/Xauryan/stuhelper-ai/setting"
 	"github.com/samber/hot"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -845,100 +846,14 @@ func SyncSubscriptionOrderRefundState(tradeNo string, expectedPaymentProvider st
 	if tradeNo == "" {
 		return errors.New("tradeNo is empty")
 	}
-	refCol := "`trade_no`"
-	if common.UsingPostgreSQL {
-		refCol = `"trade_no"`
-	}
 	now := common.GetTimestamp()
 	cacheGroup := ""
 	cacheUserId := 0
 	if err := DB.Transaction(func(tx *gorm.DB) error {
-		var order SubscriptionOrder
-		if err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(&order).Error; err != nil {
-			return ErrSubscriptionOrderNotFound
-		}
-		if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {
-			return ErrPaymentMethodMismatch
-		}
-		if order.Status != common.TopUpStatusSuccess &&
-			order.Status != common.TopUpStatusPartialRefunded &&
-			order.Status != common.TopUpStatusRefunded {
-			return ErrSubscriptionOrderStatusInvalid
-		}
-		orderMoney := decimal.NewFromFloat(order.Money).Round(2)
-		topUp := &TopUp{}
-		if err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
-			return err
-		}
-		refundedMoney := decimal.NewFromFloat(topUp.RefundedMoney).Round(2)
-		if refundedMoney.GreaterThan(orderMoney) {
-			return errors.New("退款金额超过可退金额")
-		}
-		nextStatus := common.TopUpStatusSuccess
-		if refundedMoney.IsPositive() {
-			nextStatus = common.TopUpStatusPartialRefunded
-		}
-		if refundedMoney.IsPositive() && (fullRefund || !refundedMoney.LessThan(orderMoney)) {
-			nextStatus = common.TopUpStatusRefunded
-		}
-		order.Status = nextStatus
-		if nextStatus != common.TopUpStatusSuccess {
-			order.CompleteTime = now
-		}
-		if err := tx.Save(&order).Error; err != nil {
-			return err
-		}
-		topUp.Status = nextStatus
-		topUp.RefundedMoney = refundedMoney.InexactFloat64()
-		topUp.RefundedQuota = 0
-		if err := tx.Save(topUp).Error; err != nil {
-			return err
-		}
-
-		if err := setReferralCommissionRefundTargetTx(tx, ReferralCommissionSourceSubscription, order.Id, refundedMoney, orderMoney); err != nil {
-			return err
-		}
-
-		sub, err := findRefundableUserSubscriptionForOrderTx(tx, order)
-		if err != nil {
-			return err
-		}
-		if sub != nil {
-			switch {
-			case nextStatus == common.TopUpStatusRefunded:
-				if err := tx.Model(&UserSubscription{}).
-					Where("id = ?", sub.Id).
-					Updates(map[string]interface{}{
-						"status":     "cancelled",
-						"updated_at": now,
-					}).Error; err != nil {
-					return err
-				}
-				target, err := downgradeUserGroupForSubscriptionTx(tx, sub, now)
-				if err != nil {
-					return err
-				}
-				cacheGroup = target
-				cacheUserId = sub.UserId
-			case nextStatus == common.TopUpStatusSuccess && sub.Status == "cancelled":
-				if err := tx.Model(&UserSubscription{}).
-					Where("id = ?", sub.Id).
-					Updates(map[string]interface{}{
-						"status":     "active",
-						"updated_at": now,
-					}).Error; err != nil {
-					return err
-				}
-				if strings.TrimSpace(sub.UpgradeGroup) != "" {
-					cacheGroup = strings.TrimSpace(sub.UpgradeGroup)
-					cacheUserId = sub.UserId
-				}
-			}
-		}
-		if nextStatus == common.TopUpStatusRefunded {
-			return reverseInviterRewardForFullRefundTx(tx, order.UserId)
-		}
-		return nil
+		userId, group, err := syncSubscriptionOrderRefundStateTx(tx, tradeNo, expectedPaymentProvider, fullRefund, now)
+		cacheUserId = userId
+		cacheGroup = group
+		return err
 	}); err != nil {
 		return err
 	}
@@ -946,6 +861,104 @@ func SyncSubscriptionOrderRefundState(tradeNo string, expectedPaymentProvider st
 		_ = UpdateUserGroupCache(cacheUserId, cacheGroup)
 	}
 	return nil
+}
+
+func syncSubscriptionOrderRefundStateTx(tx *gorm.DB, tradeNo string, expectedPaymentProvider string, fullRefund bool, now int64) (int, string, error) {
+	if tx == nil {
+		return 0, "", errors.New("tx is nil")
+	}
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+	var order SubscriptionOrder
+	if err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(&order).Error; err != nil {
+		return 0, "", ErrSubscriptionOrderNotFound
+	}
+	if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {
+		return 0, "", ErrPaymentMethodMismatch
+	}
+	if order.Status != common.TopUpStatusSuccess &&
+		order.Status != common.TopUpStatusPartialRefunded &&
+		order.Status != common.TopUpStatusRefunded {
+		return 0, "", ErrSubscriptionOrderStatusInvalid
+	}
+	orderMoney := decimal.NewFromFloat(order.Money).Round(2)
+	topUp := &TopUp{}
+	if err := withRowLock(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
+		return 0, "", err
+	}
+	refundedMoney := decimal.NewFromFloat(topUp.RefundedMoney).Round(2)
+	if refundedMoney.GreaterThan(orderMoney) {
+		return 0, "", errors.New("退款金额超过可退金额")
+	}
+	nextStatus := common.TopUpStatusSuccess
+	if refundedMoney.IsPositive() {
+		nextStatus = common.TopUpStatusPartialRefunded
+	}
+	if refundedMoney.IsPositive() && (fullRefund || !refundedMoney.LessThan(orderMoney)) {
+		nextStatus = common.TopUpStatusRefunded
+	}
+	order.Status = nextStatus
+	if nextStatus != common.TopUpStatusSuccess {
+		order.CompleteTime = now
+	}
+	if err := tx.Save(&order).Error; err != nil {
+		return 0, "", err
+	}
+	topUp.Status = nextStatus
+	topUp.RefundedMoney = refundedMoney.InexactFloat64()
+	topUp.RefundedQuota = 0
+	if err := tx.Save(topUp).Error; err != nil {
+		return 0, "", err
+	}
+
+	if err := setReferralCommissionRefundTargetTx(tx, ReferralCommissionSourceSubscription, order.Id, refundedMoney, orderMoney); err != nil {
+		return 0, "", err
+	}
+
+	cacheGroup := ""
+	cacheUserId := 0
+	sub, err := findRefundableUserSubscriptionForOrderTx(tx, order)
+	if err != nil {
+		return 0, "", err
+	}
+	if sub != nil {
+		switch {
+		case nextStatus == common.TopUpStatusRefunded:
+			if err := tx.Model(&UserSubscription{}).
+				Where("id = ?", sub.Id).
+				Updates(map[string]interface{}{
+					"status":     "cancelled",
+					"updated_at": now,
+				}).Error; err != nil {
+				return 0, "", err
+			}
+			target, err := downgradeUserGroupForSubscriptionTx(tx, sub, now)
+			if err != nil {
+				return 0, "", err
+			}
+			cacheGroup = target
+			cacheUserId = sub.UserId
+		case nextStatus == common.TopUpStatusSuccess && sub.Status == "cancelled":
+			if err := tx.Model(&UserSubscription{}).
+				Where("id = ?", sub.Id).
+				Updates(map[string]interface{}{
+					"status":     "active",
+					"updated_at": now,
+				}).Error; err != nil {
+				return 0, "", err
+			}
+			if strings.TrimSpace(sub.UpgradeGroup) != "" {
+				cacheGroup = strings.TrimSpace(sub.UpgradeGroup)
+				cacheUserId = sub.UserId
+			}
+		}
+	}
+	if nextStatus == common.TopUpStatusRefunded {
+		return cacheUserId, cacheGroup, reverseInviterRewardForFullRefundTx(tx, order.UserId)
+	}
+	return cacheUserId, cacheGroup, nil
 }
 
 // Admin bind (no payment). Creates a UserSubscription from a plan.
@@ -1082,6 +1095,149 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 	RecordLog(userId, LogTypeTopup, msg)
 	common.SysLog(fmt.Sprintf("余额订阅订单完成 subscription_order_id=%d", logOrderId))
 	return nil
+}
+
+type SelfServeSubscriptionPurchaseParams struct {
+	UserId        int
+	PlanId        int
+	PaymentMethod string
+	DeclaredMoney float64
+	TransactionNo string
+}
+
+type SelfServeSubscriptionPurchaseResult struct {
+	Order         *SubscriptionOrder   `json:"order"`
+	TopUp         *TopUp               `json:"topup"`
+	Audit         *SelfServeTopUpAudit `json:"audit"`
+	Subscription  *UserSubscription    `json:"subscription"`
+	ExpectedMoney float64              `json:"expected_money"`
+}
+
+func selfServeSubscriptionTradeNo(userId int) string {
+	return fmt.Sprintf("SSSUBUSR%dNO%d%s", userId, common.GetTimestamp(), strings.ToUpper(common.GetUUID()[:8]))
+}
+
+func calculateSelfServeSubscriptionMoney(priceAmount float64) decimal.Decimal {
+	price := decimal.NewFromFloat(priceAmount)
+	unitPrice := decimal.NewFromFloat(setting.SelfServeTopUpUnitPrice)
+	return price.Mul(unitPrice).RoundCeil(2)
+}
+
+func PurchaseSubscriptionWithSelfServe(params SelfServeSubscriptionPurchaseParams) (*SelfServeSubscriptionPurchaseResult, error) {
+	if params.UserId <= 0 || params.PlanId <= 0 {
+		return nil, errors.New("invalid userId or planId")
+	}
+	paymentMethod := NormalizeSelfServePaymentMethod(params.PaymentMethod)
+	if paymentMethod == "" {
+		return nil, ErrPaymentMethodMismatch
+	}
+	transactionNo := strings.TrimSpace(params.TransactionNo)
+	if len(transactionNo) < 6 || len(transactionNo) > 128 {
+		return nil, errors.New("交易订单号长度必须为 6 到 128 个字符")
+	}
+	declaredMoney := normalizeSelfServeMoney(params.DeclaredMoney)
+	if !declaredMoney.IsPositive() {
+		return nil, errors.New("支付金额必须大于 0")
+	}
+	if setting.SelfServeTopUpUnitPrice <= 0 {
+		return nil, errors.New("自助充值价格配置错误")
+	}
+
+	var result SelfServeSubscriptionPurchaseResult
+	upgradeGroup := ""
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		plan, err := getSubscriptionPlanByIdTx(tx, params.PlanId)
+		if err != nil {
+			return err
+		}
+		if !plan.Enabled {
+			return errors.New("套餐未启用")
+		}
+		if plan.PriceAmount < 0.01 {
+			return errors.New("套餐金额过低")
+		}
+		expectedMoney := calculateSelfServeSubscriptionMoney(plan.PriceAmount)
+		if !declaredMoney.Equal(expectedMoney) {
+			return fmt.Errorf("自助订阅支付金额应为 %.2f 元", expectedMoney.InexactFloat64())
+		}
+		if _, err := validateSelfServeTopUpMoneyTx(tx, params.UserId, declaredMoney, 0); err != nil {
+			return err
+		}
+		var existingAudit SelfServeTopUpAudit
+		if err := tx.Where("transaction_no = ?", transactionNo).First(&existingAudit).Error; err == nil {
+			return errors.New("该交易订单号已提交")
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		now := common.GetTimestamp()
+		tradeNo := selfServeSubscriptionTradeNo(params.UserId)
+		order := &SubscriptionOrder{
+			UserId:          params.UserId,
+			PlanId:          plan.Id,
+			Money:           expectedMoney.InexactFloat64(),
+			Fee:             0,
+			TradeNo:         tradeNo,
+			PaymentMethod:   paymentMethod,
+			PaymentProvider: PaymentProviderSelfServe,
+			Status:          common.TopUpStatusSuccess,
+			CreateTime:      now,
+			CompleteTime:    now,
+			ProviderPayload: fmt.Sprintf("transaction_no=%s", transactionNo),
+		}
+		var user User
+		if err := withRowLock(tx).Select("id").Where("id = ?", params.UserId).First(&user).Error; err != nil {
+			return err
+		}
+		subscription, err := createUserSubscriptionFromPlanTxLocked(tx, params.UserId, plan, "order")
+		if err != nil {
+			return err
+		}
+		if err := tx.Create(order).Error; err != nil {
+			return err
+		}
+		if err := upsertSubscriptionTopUpTx(tx, order); err != nil {
+			return err
+		}
+		topUp := &TopUp{}
+		if err := tx.Where("trade_no = ?", tradeNo).First(topUp).Error; err != nil {
+			return err
+		}
+		audit := &SelfServeTopUpAudit{
+			TopUpId:       topUp.Id,
+			UserId:        params.UserId,
+			TradeNo:       tradeNo,
+			TransactionNo: transactionNo,
+			PaymentMethod: paymentMethod,
+			DeclaredMoney: expectedMoney.InexactFloat64(),
+			CreditedQuota: 0,
+			Status:        SelfServeTopUpAuditStatusPending,
+			CreateTime:    now,
+			UpdateTime:    now,
+		}
+		if err := tx.Create(audit).Error; err != nil {
+			return err
+		}
+		upgradeGroup = strings.TrimSpace(plan.UpgradeGroup)
+		result = SelfServeSubscriptionPurchaseResult{
+			Order:         order,
+			TopUp:         topUp,
+			Audit:         audit,
+			Subscription:  subscription,
+			ExpectedMoney: expectedMoney.InexactFloat64(),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if upgradeGroup != "" {
+		_ = UpdateUserGroupCache(params.UserId, upgradeGroup)
+	}
+	_ = InvalidateUserCache(params.UserId)
+	msg := fmt.Sprintf("使用自助支付购买订阅成功，订单号：%s，支付金额：%.2f，支付方式：%s，等待管理员审核", result.Order.TradeNo, result.Order.Money, result.Order.PaymentMethod)
+	RecordLog(params.UserId, LogTypeTopup, msg)
+	return &result, nil
 }
 
 // GetAllActiveUserSubscriptions returns all active subscriptions for a user.

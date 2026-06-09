@@ -28,8 +28,13 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import { ImageUp, ShieldAlert } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../../helpers';
+import {
+  decodeQRCodeImage,
+  isLegacyQRCodeImageValue,
+} from '../../../components/topup/qrCodeUtils';
 
 const QR_MAX_BYTES = 300 * 1024;
 
@@ -60,7 +65,6 @@ export default function SettingsPaymentGatewaySelfServe(props) {
     SelfServeTopUpUnitPrice: 1.0,
     SelfServeTopUpSingleMaxAmount: '',
     SelfServeTopUpDailyMaxAmount: '',
-    SelfServeRejectAutoBan: true,
   });
   const [originInputs, setOriginInputs] = useState({});
   const formApiRef = useRef(null);
@@ -87,10 +91,6 @@ export default function SettingsPaymentGatewaySelfServe(props) {
         SelfServeTopUpDailyMaxAmount: normalizeLimitInput(
           props.options.SelfServeTopUpDailyMaxAmount,
         ),
-        SelfServeRejectAutoBan:
-          props.options.SelfServeRejectAutoBan !== undefined
-            ? Boolean(props.options.SelfServeRejectAutoBan)
-            : true,
       };
       setInputs(currentInputs);
       setOriginInputs({ ...currentInputs });
@@ -107,7 +107,7 @@ export default function SettingsPaymentGatewaySelfServe(props) {
     formApiRef.current?.setValue(field, value);
   };
 
-  const handleQRCodeFile = (field, event) => {
+  const handleQRCodeFile = async (field, event) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
@@ -119,12 +119,13 @@ export default function SettingsPaymentGatewaySelfServe(props) {
       showError(t('二维码图片不能超过 300KB'));
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setFieldValue(field, String(reader.result || ''));
-    };
-    reader.onerror = () => showError(t('读取图片失败'));
-    reader.readAsDataURL(file);
+    try {
+      const decoded = await decodeQRCodeImage(file);
+      setFieldValue(field, decoded);
+      showSuccess(t('二维码已解码并填入'));
+    } catch (error) {
+      showError(t('未能识别二维码，请上传清晰的收款码图片'));
+    }
   };
 
   const validateInputs = () => {
@@ -181,7 +182,6 @@ export default function SettingsPaymentGatewaySelfServe(props) {
         'SelfServeTopUpUnitPrice',
         'SelfServeTopUpSingleMaxAmount',
         'SelfServeTopUpDailyMaxAmount',
-        'SelfServeRejectAutoBan',
       ];
       const options = optionKeys
         .filter((key) => originInputs[key] !== inputs[key])
@@ -226,10 +226,10 @@ export default function SettingsPaymentGatewaySelfServe(props) {
       <Form.TextArea
         field={field}
         label={label}
-        placeholder={t('可粘贴图片链接，或上传二维码图片自动填入')}
+        placeholder={t('可粘贴二维码内容或支付链接，上传图片会自动解码')}
         autosize
         extraText={t(
-          '支持 HTTPS 图片链接，或 300KB 以内的 PNG、JPG、WebP 图片',
+          '系统只保存二维码内容；展示时会重新生成二维码，不保存上传原图',
         )}
       />
       <input
@@ -253,11 +253,17 @@ export default function SettingsPaymentGatewaySelfServe(props) {
       </div>
       {inputs[field] ? (
         <div className='rounded-lg border border-[var(--semi-color-border)] p-3 inline-block'>
-          <img
-            src={inputs[field]}
-            alt={label}
-            style={{ width: 160, height: 160, objectFit: 'contain' }}
-          />
+          {isLegacyQRCodeImageValue(inputs[field]) ? (
+            <img
+              src={inputs[field]}
+              alt={label}
+              style={{ width: 160, height: 160, objectFit: 'contain' }}
+            />
+          ) : (
+            <div className='bg-white p-2 rounded-md'>
+              <QRCodeSVG value={String(inputs[field])} size={144} level='M' />
+            </div>
+          )}
         </div>
       ) : null}
     </div>
@@ -284,12 +290,12 @@ export default function SettingsPaymentGatewaySelfServe(props) {
             <Text strong>{t('自助充值限额')}</Text>
             <div className='mt-2 text-sm text-[var(--semi-color-text-1)]'>
               {t(
-                '请手动配置单笔和每日限额；例如单笔 199.99 元、每日 499.99 元。未配置完整时用户不能使用自助充值。',
+                '请手动配置单笔和每日限额；未配置完整时用户不能使用自助充值。',
               )}
             </div>
           </div>
           <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}>
-            <Col xs={24} sm={24} md={6} lg={6} xl={6}>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.Switch
                 field='SelfServeTopUpEnabled'
                 label={t('启用自助充值')}
@@ -297,7 +303,7 @@ export default function SettingsPaymentGatewaySelfServe(props) {
                 uncheckedText='〇'
               />
             </Col>
-            <Col xs={24} sm={24} md={6} lg={6} xl={6}>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.Switch
                 field='SelfServeAlipayEnabled'
                 label={t('启用支付宝自助')}
@@ -305,18 +311,10 @@ export default function SettingsPaymentGatewaySelfServe(props) {
                 uncheckedText='〇'
               />
             </Col>
-            <Col xs={24} sm={24} md={6} lg={6} xl={6}>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.Switch
                 field='SelfServeWechatPayEnabled'
                 label={t('启用微信自助')}
-                checkedText='｜'
-                uncheckedText='〇'
-              />
-            </Col>
-            <Col xs={24} sm={24} md={6} lg={6} xl={6}>
-              <Form.Switch
-                field='SelfServeRejectAutoBan'
-                label={t('拒绝时默认封禁')}
                 checkedText='｜'
                 uncheckedText='〇'
               />
@@ -345,7 +343,7 @@ export default function SettingsPaymentGatewaySelfServe(props) {
                 min={0.01}
                 step={0.01}
                 precision={2}
-                placeholder={t('例如：199.99')}
+                placeholder={t('请输入单笔最高金额')}
                 extraText={t('用户每次自助充值可提交的最高金额')}
                 style={{ width: '100%' }}
               />
@@ -357,7 +355,7 @@ export default function SettingsPaymentGatewaySelfServe(props) {
                 min={0.01}
                 step={0.01}
                 precision={2}
-                placeholder={t('例如：499.99')}
+                placeholder={t('请输入每日最高金额')}
                 extraText={t('单个用户每天自助充值可提交的最高累计金额')}
                 style={{ width: '100%' }}
               />

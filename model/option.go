@@ -170,7 +170,6 @@ func InitOptionMap() {
 	common.OptionMap["SelfServeTopUpUnitPrice"] = strconv.FormatFloat(setting.SelfServeTopUpUnitPrice, 'f', -1, 64)
 	common.OptionMap["SelfServeTopUpSingleMaxAmount"] = formatSelfServeTopUpLimitOption(setting.SelfServeTopUpSingleMaxAmount)
 	common.OptionMap["SelfServeTopUpDailyMaxAmount"] = formatSelfServeTopUpLimitOption(setting.SelfServeTopUpDailyMaxAmount)
-	common.OptionMap["SelfServeRejectAutoBan"] = strconv.FormatBool(setting.SelfServeRejectAutoBan)
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
 	common.OptionMap["AutoGroups"] = setting.AutoGroups2JsonString()
@@ -253,6 +252,9 @@ func loadOptionsFromDatabase() {
 	hasAlipayTimeoutSec := false
 	legacyAlipayTimeoutMin := ""
 	for _, option := range options {
+		if isDeprecatedOptionKey(option.Key) {
+			continue
+		}
 		switch option.Key {
 		case "AlipayOfficialOrderTimeoutSec":
 			hasAlipayTimeoutSec = true
@@ -281,6 +283,12 @@ func SyncOptions(frequency int) {
 }
 
 func UpdateOption(key string, value string) error {
+	if isDeprecatedOptionKey(key) {
+		common.OptionMapRWMutex.Lock()
+		delete(common.OptionMap, key)
+		common.OptionMapRWMutex.Unlock()
+		return DB.Where(&Option{Key: key}).Delete(&Option{}).Error
+	}
 	if err := validateOptionValue(key, value); err != nil {
 		return err
 	}
@@ -314,6 +322,10 @@ func UpdateOption(key string, value string) error {
 func updateOptionMap(key string, value string) (err error) {
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
+	if isDeprecatedOptionKey(key) {
+		delete(common.OptionMap, key)
+		return nil
+	}
 	if err = validateOptionValue(key, value); err != nil {
 		return err
 	}
@@ -338,7 +350,7 @@ func updateOptionMap(key string, value string) (err error) {
 			common.ImageDownloadPermission = intValue
 		}
 	}
-	if strings.HasSuffix(key, "Enabled") || key == "DefaultCollapseSidebar" || key == "DefaultUseAutoGroup" || key == "SMTPForceAuthLogin" || key == "SelfServeRejectAutoBan" {
+	if strings.HasSuffix(key, "Enabled") || key == "DefaultCollapseSidebar" || key == "DefaultUseAutoGroup" || key == "SMTPForceAuthLogin" {
 		boolValue := value == "true"
 		switch key {
 		case "PasswordRegisterEnabled":
@@ -431,8 +443,6 @@ func updateOptionMap(key string, value string) (err error) {
 			setting.SelfServeAlipayEnabled = boolValue
 		case "SelfServeWechatPayEnabled":
 			setting.SelfServeWechatPayEnabled = boolValue
-		case "SelfServeRejectAutoBan":
-			setting.SelfServeRejectAutoBan = boolValue
 		}
 	}
 	switch key {
@@ -793,6 +803,15 @@ func validateOptionValue(key string, value string) error {
 	return nil
 }
 
+func isDeprecatedOptionKey(key string) bool {
+	switch key {
+	case "SelfServeRejectAutoBan":
+		return true
+	default:
+		return false
+	}
+}
+
 func validatePositiveFloatOption(key string, value string) error {
 	amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
 	if err != nil || amount <= 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
@@ -836,18 +855,19 @@ func validateSelfServeQRCodeValue(key string, value string) error {
 	if trimmed == "" {
 		return nil
 	}
-	if len(trimmed) > 512*1024 {
-		return fmt.Errorf("%s is too large", key)
-	}
-	if strings.HasPrefix(trimmed, "http://") ||
-		strings.HasPrefix(trimmed, "https://") ||
-		strings.HasPrefix(trimmed, "data:image/png;base64,") ||
+	if strings.HasPrefix(trimmed, "data:image/png;base64,") ||
 		strings.HasPrefix(trimmed, "data:image/jpeg;base64,") ||
 		strings.HasPrefix(trimmed, "data:image/jpg;base64,") ||
 		strings.HasPrefix(trimmed, "data:image/webp;base64,") {
+		if len(trimmed) > 512*1024 {
+			return fmt.Errorf("%s is too large", key)
+		}
 		return nil
 	}
-	return fmt.Errorf("invalid %s", key)
+	if len([]rune(trimmed)) > 4096 {
+		return fmt.Errorf("%s is too large", key)
+	}
+	return nil
 }
 
 func validateServiceFeePercentValue(key string, value string, allowEmpty bool) error {

@@ -15,7 +15,8 @@ export const isSubscriptionTopup = (record) => {
   return (
     tradeNo.startsWith('SUB') ||
     tradeNo.startsWith('ALIPAYSUB') ||
-    tradeNo.startsWith('WXSUB')
+    tradeNo.startsWith('WXSUB') ||
+    tradeNo.startsWith('SSSUB')
   );
 };
 
@@ -83,6 +84,19 @@ export const isOfficialRefundable = (record) => {
     record.status === 'success' || record.status === 'partial_refunded';
   return (
     isOfficialPaymentTopup(record) &&
+    statusAllowsRefund &&
+    getRemainingRefundMoney(record) > 0
+  );
+};
+
+export const isRefundRequestable = (record) => {
+  if (!record) {
+    return false;
+  }
+  const statusAllowsRefund =
+    record.status === 'success' || record.status === 'partial_refunded';
+  return (
+    (isOfficialPaymentTopup(record) || isSelfServeTopup(record)) &&
     statusAllowsRefund &&
     getRemainingRefundMoney(record) > 0
   );

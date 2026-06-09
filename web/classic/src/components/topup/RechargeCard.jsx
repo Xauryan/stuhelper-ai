@@ -113,6 +113,8 @@ const RechargeCard = ({
   enableAlipayOfficialTopUp,
   enableWechatPayOfficialTopUp,
   enableSelfServeTopUp,
+  selfServeQrCodes,
+  selfServeLimits,
   subscriptionLoading = false,
   subscriptionPlans = [],
   billingPreference,
@@ -706,6 +708,9 @@ const RechargeCard = ({
                     enableCreemTopUp={enableCreemTopUp}
                     enableAlipayOfficialTopUp={enableAlipayOfficialTopUp}
                     enableWechatPayOfficialTopUp={enableWechatPayOfficialTopUp}
+                    enableSelfServeTopUp={enableSelfServeTopUp}
+                    selfServeQrCodes={selfServeQrCodes}
+                    selfServeLimits={selfServeLimits}
                     priceRatio={priceRatio}
                     getPaymentServiceFeePercent={getPaymentServiceFeePercent}
                     billingPreference={billingPreference}

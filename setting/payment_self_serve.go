@@ -9,7 +9,6 @@ var (
 	SelfServeTopUpUnitPrice       = 1.0
 	SelfServeTopUpSingleMaxAmount float64
 	SelfServeTopUpDailyMaxAmount  float64
-	SelfServeRejectAutoBan        = true
 )
 
 func SelfServeTopUpLimitsConfigured() bool {

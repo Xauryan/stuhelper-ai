@@ -340,3 +340,128 @@ func TestRejectSelfServeTopUpCanBanAlreadyRejectedWithoutDoubleDeduct(t *testing
 	require.NoError(t, DB.Model(&TopUpRefund{}).Where("trade_no = ?", created.TopUp.TradeNo).Count(&refundCount).Error)
 	assert.Equal(t, int64(1), refundCount)
 }
+
+func TestSelfServeRefundRequestRequiresQRCodeAndFillsBillingRecord(t *testing.T) {
+	truncateTables(t)
+	setSelfServeTopUpPricingForTest(t)
+
+	insertRankingUser(t, 5111, "self-serve-refund-user")
+	created, err := CreateSelfServeTopUp(SelfServeTopUpCreateParams{
+		UserId:        5111,
+		PaymentMethod: PaymentMethodAlipaySelfServe,
+		DeclaredMoney: 10,
+		TransactionNo: "SELF_SERVE_REFUND_TX",
+	})
+	require.NoError(t, err)
+
+	_, _, err = CreateTopUpRefundRequest(5111, created.TopUp.TradeNo, 5, "refund without qr")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "请上传或填写退款收款码")
+
+	request, preview, err := CreateTopUpRefundRequest(5111, created.TopUp.TradeNo, 5, "refund with qr", "alipay-refund-qr-content")
+	require.NoError(t, err)
+	require.NotNil(t, request)
+	require.NotNil(t, preview)
+	assert.Equal(t, PaymentProviderSelfServe, request.PaymentProvider)
+	assert.Equal(t, "alipay-refund-qr-content", request.RefundQRCode)
+	assert.Equal(t, 10.0, preview.MaxRefundAmount)
+
+	rows, total, err := GetUserTopUpsWithOptions(5111, TopUpQueryOptions{PendingRefund: true}, &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, rows, 1)
+	assert.Equal(t, request.Id, rows[0].RefundRequestId)
+	assert.Equal(t, TopUpRefundRequestStatusPending, rows[0].RefundRequestStatus)
+	assert.Equal(t, "alipay-refund-qr-content", rows[0].RefundRequestQRCode)
+}
+
+func TestCreateSelfServeManualRefundDeductsQuotaAndMarksRefunded(t *testing.T) {
+	truncateTables(t)
+	setSelfServeTopUpPricingForTest(t)
+
+	insertRankingUser(t, 5112, "self-serve-manual-refund-user")
+	created, err := CreateSelfServeTopUp(SelfServeTopUpCreateParams{
+		UserId:        5112,
+		PaymentMethod: PaymentMethodWechatSelfServe,
+		DeclaredMoney: 10,
+		TransactionNo: "SELF_SERVE_MANUAL_REFUND_TX",
+	})
+	require.NoError(t, err)
+
+	refund, err := CreateSelfServeManualRefund(created.TopUp.TradeNo, 4, "manual refund", false)
+	require.NoError(t, err)
+	require.NotNil(t, refund)
+	assert.Equal(t, TopUpRefundStatusSuccess, refund.Status)
+	assert.Equal(t, int64(4000), refund.RefundQuota)
+	assert.Equal(t, PaymentProviderSelfServe, refund.PaymentProvider)
+	assert.Equal(t, 6000, getUserQuotaForPaymentGuardTest(t, 5112))
+
+	topUp := GetTopUpByTradeNo(created.TopUp.TradeNo)
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusPartialRefunded, topUp.Status)
+	assert.Equal(t, 4.0, topUp.RefundedMoney)
+	assert.Equal(t, int64(4000), topUp.RefundedQuota)
+}
+
+func TestPurchaseSubscriptionWithSelfServeCreatesPendingAuditAndRejectCancelsSubscription(t *testing.T) {
+	truncateTables(t)
+	setSelfServeTopUpPricingForTest(t)
+	setting.SelfServeTopUpUnitPrice = 2
+
+	insertRankingUser(t, 5113, "self-serve-subscription-user")
+	plan := &SubscriptionPlan{
+		Id:            5113,
+		Title:         "Self Serve Plan",
+		PriceAmount:   12.34,
+		Currency:      "USD",
+		DurationUnit:  SubscriptionDurationMonth,
+		DurationValue: 1,
+		Enabled:       true,
+		TotalAmount:   123456,
+		UpgradeGroup:  "vip",
+	}
+	require.NoError(t, DB.Create(plan).Error)
+
+	result, err := PurchaseSubscriptionWithSelfServe(SelfServeSubscriptionPurchaseParams{
+		UserId:        5113,
+		PlanId:        plan.Id,
+		PaymentMethod: PaymentMethodWechatSelfServe,
+		DeclaredMoney: 24.68,
+		TransactionNo: "SELF_SERVE_SUBSCRIPTION_TX",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 24.68, result.ExpectedMoney)
+	assert.Equal(t, PaymentProviderSelfServe, result.Order.PaymentProvider)
+	assert.Equal(t, PaymentMethodWechatSelfServe, result.Order.PaymentMethod)
+	assert.Equal(t, common.TopUpStatusSuccess, result.Order.Status)
+	assert.Equal(t, common.TopUpStatusSuccess, result.TopUp.Status)
+	assert.Equal(t, SelfServeTopUpAuditStatusPending, result.Audit.Status)
+	assert.Equal(t, int64(0), result.Audit.CreditedQuota)
+	assert.Equal(t, "SSSUB", result.TopUp.TradeNo[:5])
+	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 5113))
+
+	var sub UserSubscription
+	require.NoError(t, DB.Where("id = ?", result.Subscription.Id).First(&sub).Error)
+	assert.Equal(t, "active", sub.Status)
+	assert.Equal(t, "vip", sub.UpgradeGroup)
+
+	rejected, err := RejectSelfServeTopUp(result.TopUp.TradeNo, 19, "subscription not paid", false)
+	require.NoError(t, err)
+	require.NotNil(t, rejected)
+	assert.Equal(t, SelfServeTopUpAuditStatusRejected, rejected.Audit.Status)
+	assert.Equal(t, int64(0), rejected.QuotaDelta)
+	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 5113))
+
+	var order SubscriptionOrder
+	require.NoError(t, DB.Where("trade_no = ?", result.Order.TradeNo).First(&order).Error)
+	assert.Equal(t, common.TopUpStatusRefunded, order.Status)
+
+	require.NoError(t, DB.Where("id = ?", result.Subscription.Id).First(&sub).Error)
+	assert.Equal(t, "cancelled", sub.Status)
+
+	topUp := GetTopUpByTradeNo(result.TopUp.TradeNo)
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusRefunded, topUp.Status)
+	assert.Equal(t, 24.68, topUp.RefundedMoney)
+}

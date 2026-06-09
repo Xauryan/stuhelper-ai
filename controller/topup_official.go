@@ -59,6 +59,7 @@ type OfficialRefundApplyRequest struct {
 	TradeNo      string  `json:"trade_no"`
 	RefundAmount float64 `json:"refund_amount"`
 	Reason       string  `json:"reason"`
+	RefundQRCode string  `json:"refund_qrcode"`
 }
 
 type AdminRefundRequestActionRequest struct {
@@ -425,7 +426,7 @@ func ApplyOfficialPaymentRefund(c *gin.Context) {
 		common.ApiErrorMsg(c, "请填写退款原因")
 		return
 	}
-	request, preview, err := model.CreateTopUpRefundRequest(c.GetInt("id"), req.TradeNo, req.RefundAmount, req.Reason)
+	request, preview, err := model.CreateTopUpRefundRequest(c.GetInt("id"), req.TradeNo, req.RefundAmount, req.Reason, req.RefundQRCode)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -686,7 +687,13 @@ func AdminApproveOfficialPaymentRefundRequest(c *gin.Context) {
 	if amount <= 0 {
 		amount = refundRequest.RequestedAmount
 	}
-	result, err := executeOfficialPaymentRefund(c.Request.Context(), refundRequest.TradeNo, amount, firstNonEmptyString(req.Reason, refundRequest.Reason), c.ClientIP(), refundRequest.PaymentProvider, refundRequest.PaymentMethod, req.FullRefund)
+	var result gin.H
+	var err error
+	if refundRequest.PaymentProvider == model.PaymentProviderSelfServe {
+		result, err = executeSelfServeManualRefund(c.Request.Context(), refundRequest.TradeNo, amount, firstNonEmptyString(req.Reason, refundRequest.Reason), c.ClientIP(), req.FullRefund)
+	} else {
+		result, err = executeOfficialPaymentRefund(c.Request.Context(), refundRequest.TradeNo, amount, firstNonEmptyString(req.Reason, refundRequest.Reason), c.ClientIP(), refundRequest.PaymentProvider, refundRequest.PaymentMethod, req.FullRefund)
+	}
 	if err != nil {
 		_ = model.MarkTopUpRefundRequestFailed(refundRequest.Id, c.GetInt("id"), err.Error())
 		common.ApiError(c, err)
@@ -698,6 +705,40 @@ func AdminApproveOfficialPaymentRefundRequest(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, result)
+}
+
+func executeSelfServeManualRefund(ctx context.Context, tradeNo string, refundAmountInput float64, reason string, callerIP string, allowFullRefund bool) (gin.H, error) {
+	tradeNo = strings.TrimSpace(tradeNo)
+	refundAmount := decimal.NewFromFloat(refundAmountInput).Round(2)
+	if tradeNo == "" {
+		return nil, errors.New("未提供订单号")
+	}
+	if !refundAmount.IsPositive() {
+		return nil, errors.New("退款金额必须大于 0")
+	}
+
+	LockOrder(tradeNo)
+	defer UnlockOrder(tradeNo)
+
+	refund, err := model.CreateSelfServeManualRefund(tradeNo, refundAmount.InexactFloat64(), reason, allowFullRefund)
+	if err != nil {
+		return nil, err
+	}
+	model.RecordTopupRefundLog(
+		refund.UserId,
+		fmt.Sprintf("管理员登记自助充值人工退款成功，订单号：%s，退款金额：%.2f，退回额度：%s", refund.TradeNo, refund.RefundAmount, logger.FormatQuota(int(refund.RefundQuota))),
+		callerIP,
+		refund.PaymentMethod,
+		refund.PaymentProvider,
+	)
+	logger.LogInfo(ctx, fmt.Sprintf("自助充值人工退款登记成功 trade_no=%s out_request_no=%s refund_amount=%.2f refund_quota=%d", refund.TradeNo, refund.OutRequestNo, refund.RefundAmount, refund.RefundQuota))
+	return gin.H{
+		"out_request_no": refund.OutRequestNo,
+		"refund_amount":  refund.RefundAmount,
+		"refund_quota":   refund.RefundQuota,
+		"provider":       refund.PaymentProvider,
+		"manual":         true,
+	}, nil
 }
 
 func AdminRejectOfficialPaymentRefundRequest(c *gin.Context) {

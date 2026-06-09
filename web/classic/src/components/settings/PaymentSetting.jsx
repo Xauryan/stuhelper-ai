@@ -88,7 +88,6 @@ const PaymentSetting = () => {
     SelfServeTopUpUnitPrice: 1.0,
     SelfServeTopUpSingleMaxAmount: '',
     SelfServeTopUpDailyMaxAmount: '',
-    SelfServeRejectAutoBan: true,
   });
 
   let [loading, setLoading] = useState(false);
@@ -150,9 +149,6 @@ const PaymentSetting = () => {
           case 'SelfServeTopUpDailyMaxAmount':
             newInputs[item.key] =
               item.value === '' ? '' : parseFloat(item.value);
-            break;
-          case 'SelfServeRejectAutoBan':
-            newInputs[item.key] = toBoolean(item.value);
             break;
           default:
             if (item.key.endsWith('Enabled')) {

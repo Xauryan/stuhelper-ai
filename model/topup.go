@@ -31,6 +31,7 @@ type TopUp struct {
 	RefundRequestStatus string  `json:"refund_request_status" gorm:"-"`
 	RefundRequestAmount float64 `json:"refund_request_amount" gorm:"-"`
 	RefundRequestReason string  `json:"refund_request_reason" gorm:"-"`
+	RefundRequestQRCode string  `json:"refund_request_qrcode,omitempty" gorm:"-"`
 	TradeNo             string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
 	PaymentMethod       string  `json:"payment_method" gorm:"type:varchar(50)"`
 	PaymentProvider     string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
@@ -209,6 +210,7 @@ type TopUpRefundRequest struct {
 	MaxRefundAmount       float64 `json:"max_refund_amount"`
 	MaxRefundQuota        int64   `json:"max_refund_quota"`
 	Reason                string  `json:"reason" gorm:"type:varchar(255);default:''"`
+	RefundQRCode          string  `json:"refund_qrcode,omitempty" gorm:"column:refund_qrcode;type:text"`
 	AdminReason           string  `json:"admin_reason" gorm:"type:varchar(255);default:''"`
 	Status                string  `json:"status" gorm:"type:varchar(32);index"`
 	OutRequestNo          string  `json:"out_request_no" gorm:"type:varchar(255);index;default:''"`
@@ -371,8 +373,8 @@ func calculateOfficialPaymentRefundPreviewFromTopUp(tx *gorm.DB, topUp TopUp) (*
 		preview.Reason = "订单状态不可退款"
 		return preview, nil
 	}
-	if topUp.PaymentProvider != PaymentProviderAlipayOfficial && topUp.PaymentProvider != PaymentProviderWechatPayOfficial {
-		preview.Reason = "仅官方支付宝或微信支付订单支持在线退款"
+	if !IsOfficialPaymentProvider(topUp.PaymentProvider) && !IsSelfServeTopUpRecord(&topUp) {
+		preview.Reason = "仅官方支付或自助充值订单支持退款申请"
 		return preview, nil
 	}
 	orderMoney := decimal.NewFromFloat(topUp.Money).Round(2)
@@ -649,7 +651,7 @@ func refundAmountForQuota(refundQuota int64, totalQuota int64, orderMoney decima
 	return amount.InexactFloat64()
 }
 
-func CreateTopUpRefundRequest(userId int, tradeNo string, requestedAmount float64, reason string) (*TopUpRefundRequest, *OfficialPaymentRefundPreview, error) {
+func CreateTopUpRefundRequest(userId int, tradeNo string, requestedAmount float64, reason string, refundQRCode ...string) (*TopUpRefundRequest, *OfficialPaymentRefundPreview, error) {
 	if userId <= 0 {
 		return nil, nil, errors.New("无效用户")
 	}
@@ -665,6 +667,10 @@ func CreateTopUpRefundRequest(userId int, tradeNo string, requestedAmount float6
 	if reason == "" {
 		return nil, nil, errors.New("请填写退款原因")
 	}
+	refundQRCodeValue := ""
+	if len(refundQRCode) > 0 {
+		refundQRCodeValue = normalizeRefundQRCode(refundQRCode[0])
+	}
 	var request *TopUpRefundRequest
 	var preview *OfficialPaymentRefundPreview
 	err := DB.Transaction(func(tx *gorm.DB) error {
@@ -674,6 +680,9 @@ func CreateTopUpRefundRequest(userId int, tradeNo string, requestedAmount float6
 		}
 		if topUp.UserId != userId {
 			return ErrPaymentMethodMismatch
+		}
+		if IsSelfServeTopUpRecord(topUp) && refundQRCodeValue == "" {
+			return errors.New("请上传或填写退款收款码")
 		}
 		var pendingCount int64
 		if err := tx.Model(&TopUpRefundRequest{}).Where("trade_no = ? AND status = ?", tradeNo, TopUpRefundRequestStatusPending).Count(&pendingCount).Error; err != nil {
@@ -708,6 +717,7 @@ func CreateTopUpRefundRequest(userId int, tradeNo string, requestedAmount float6
 			MaxRefundAmount:       preview.MaxRefundAmount,
 			MaxRefundQuota:        preview.MaxRefundQuota,
 			Reason:                reason,
+			RefundQRCode:          refundQRCodeValue,
 			Status:                TopUpRefundRequestStatusPending,
 			IsSubscription:        preview.IsSubscription,
 			SubscriptionOrderId:   preview.SubscriptionOrderId,
@@ -734,6 +744,18 @@ func normalizeRefundRequestReason(reason string) string {
 		return reason
 	}
 	return string(runes[:255])
+}
+
+func normalizeRefundQRCode(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= 4096 {
+		return value
+	}
+	return string(runes[:4096])
 }
 
 func ListPendingTopUpsBefore(paymentProvider string, createBefore int64, limit int) ([]*TopUp, error) {
@@ -910,6 +932,144 @@ func CreateOfficialPaymentRefund(params OfficialPaymentRefundCreateParams) (*Top
 	})
 	if err != nil {
 		return nil, err
+	}
+	return refund, nil
+}
+
+func selfServeManualRefundNo(tradeNo string) string {
+	return fmt.Sprintf("%s_MANUAL_RF_%d_%s", strings.TrimSpace(tradeNo), common.GetTimestamp(), strings.ToUpper(common.GetUUID()[:8]))
+}
+
+func CreateSelfServeManualRefund(tradeNo string, refundAmountInput float64, reason string, allowFullRefund bool) (*TopUpRefund, error) {
+	tradeNo = strings.TrimSpace(tradeNo)
+	if tradeNo == "" {
+		return nil, errors.New("未提供订单号")
+	}
+	refundAmount := decimal.NewFromFloat(refundAmountInput).Round(2)
+	if !refundAmount.IsPositive() {
+		return nil, errors.New("退款金额必须大于 0")
+	}
+
+	var refund *TopUpRefund
+	cacheUserId := 0
+	cacheGroup := ""
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		topUp := &TopUp{}
+		if err := withRowLock(tx).Where("trade_no = ?", tradeNo).First(topUp).Error; err != nil {
+			return ErrTopUpNotFound
+		}
+		if !IsSelfServeTopUpRecord(topUp) {
+			return ErrPaymentMethodMismatch
+		}
+		if topUp.Status != common.TopUpStatusSuccess &&
+			topUp.Status != common.TopUpStatusPartialRefunded {
+			return ErrTopUpStatusInvalid
+		}
+
+		var subscriptionOrder *SubscriptionOrder
+		var lockedSubscriptionOrder SubscriptionOrder
+		subscriptionQuery := tx.Where("trade_no = ?", topUp.TradeNo).First(&lockedSubscriptionOrder)
+		if subscriptionQuery.Error == nil {
+			subscriptionOrder = &lockedSubscriptionOrder
+		} else if !errors.Is(subscriptionQuery.Error, gorm.ErrRecordNotFound) {
+			return subscriptionQuery.Error
+		}
+
+		if !allowFullRefund {
+			preview, err := calculateOfficialPaymentRefundPreviewFromTopUp(tx, *topUp)
+			if err != nil {
+				return err
+			}
+			if !preview.Refundable {
+				if preview.Reason != "" {
+					return errors.New(preview.Reason)
+				}
+				return errors.New("该订单当前不可退款")
+			}
+			if refundAmount.GreaterThan(decimal.NewFromFloat(preview.MaxRefundAmount).Round(2)) {
+				return errors.New("退款金额超过当前可退金额")
+			}
+		}
+
+		orderMoney := decimal.NewFromFloat(topUp.Money).Round(2)
+		refundedMoney := decimal.NewFromFloat(topUp.RefundedMoney).Round(2)
+		remainingMoney := orderMoney.Sub(refundedMoney)
+		if refundAmount.GreaterThan(remainingMoney) {
+			return errors.New("退款金额超过可退金额")
+		}
+
+		totalQuota := topUpCreditedQuota(*topUp)
+		refundQuota := calculateOfficialRefundQuota(totalQuota, topUp.RefundedQuota, orderMoney, refundAmount, remainingMoney)
+		if subscriptionOrder != nil {
+			refundQuota = 0
+		}
+		if refundQuota <= 0 && subscriptionOrder == nil {
+			return errors.New("退款额度无效")
+		}
+		if subscriptionOrder == nil {
+			result := tx.Model(&User{}).
+				Where("id = ? AND quota >= ?", topUp.UserId, refundQuota).
+				Update("quota", gorm.Expr("quota - ?", refundQuota))
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return errors.New("用户当前余额不足以扣回退款额度")
+			}
+			if err := reverseTopUpReferralCommissionForRefundTx(tx, topUp.Id, refundAmount, orderMoney); err != nil {
+				return err
+			}
+		}
+
+		now := common.GetTimestamp()
+		refund = &TopUpRefund{
+			TopUpId:         topUp.Id,
+			UserId:          topUp.UserId,
+			TradeNo:         topUp.TradeNo,
+			OutRequestNo:    selfServeManualRefundNo(topUp.TradeNo),
+			PaymentMethod:   topUp.PaymentMethod,
+			PaymentProvider: topUp.PaymentProvider,
+			RefundAmount:    refundAmount.InexactFloat64(),
+			RefundQuota:     refundQuota,
+			Reason:          normalizeRefundRequestReason(reason),
+			Status:          TopUpRefundStatusSuccess,
+			RawResponse:     `{"provider":"self_serve","mode":"manual"}`,
+			CreateTime:      now,
+			CompleteTime:    now,
+		}
+		if err := tx.Create(refund).Error; err != nil {
+			return err
+		}
+
+		newRefundedMoney := refundedMoney.Add(refundAmount).Round(2)
+		topUp.RefundedMoney = newRefundedMoney.InexactFloat64()
+		topUp.RefundedQuota += refundQuota
+		topUp.Status = common.TopUpStatusPartialRefunded
+		if !newRefundedMoney.LessThan(orderMoney) {
+			topUp.Status = common.TopUpStatusRefunded
+		}
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+		if subscriptionOrder != nil {
+			userId, group, err := syncSubscriptionOrderRefundStateTx(tx, topUp.TradeNo, PaymentProviderSelfServe, allowFullRefund, now)
+			if err != nil {
+				return err
+			}
+			cacheUserId = userId
+			cacheGroup = group
+			return nil
+		}
+		if topUp.Status == common.TopUpStatusRefunded {
+			return reverseInviterRewardForFullRefundTx(tx, topUp.UserId)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if cacheGroup != "" && cacheUserId > 0 {
+		_ = UpdateUserGroupCache(cacheUserId, cacheGroup)
 	}
 	return refund, nil
 }
@@ -1501,7 +1661,7 @@ func fillTopUpPendingRefundRequests(topUps []*TopUp) {
 		return
 	}
 	var requests []TopUpRefundRequest
-	if err := DB.Select("id", "trade_no", "status", "requested_amount", "reason").
+	if err := DB.Select("id", "trade_no", "status", "requested_amount", "reason", "refund_qrcode").
 		Where("trade_no IN ? AND status = ?", tradeNos, TopUpRefundRequestStatusPending).
 		Order("id desc").
 		Find(&requests).Error; err != nil {
@@ -1522,6 +1682,7 @@ func fillTopUpPendingRefundRequests(topUps []*TopUp) {
 			topUp.RefundRequestStatus = request.Status
 			topUp.RefundRequestAmount = request.RequestedAmount
 			topUp.RefundRequestReason = request.Reason
+			topUp.RefundRequestQRCode = request.RefundQRCode
 		}
 	}
 }
@@ -1882,7 +2043,8 @@ func IsSubscriptionTopUpRecord(topUp *TopUp) bool {
 	tradeNo := strings.ToUpper(strings.TrimSpace(topUp.TradeNo))
 	return strings.HasPrefix(tradeNo, "SUB") ||
 		strings.HasPrefix(tradeNo, "ALIPAYSUB") ||
-		strings.HasPrefix(tradeNo, "WXSUB")
+		strings.HasPrefix(tradeNo, "WXSUB") ||
+		strings.HasPrefix(tradeNo, "SSSUB")
 }
 
 func adminTopUpTradeNo() string {
@@ -2213,7 +2375,16 @@ func ApproveSelfServeTopUp(tradeNo string, auditorId int, adminReason string) (*
 		if err := tx.Save(audit).Error; err != nil {
 			return err
 		}
-		referralResult, err := CreditInviteRewardsAfterPaymentTx(tx, topUp.UserId, topUp.Money, topUp.PaymentMethod, ReferralCommissionSourceTopUp, topUp.Id)
+		sourceType := ReferralCommissionSourceTopUp
+		sourceId := topUp.Id
+		var order SubscriptionOrder
+		if err := tx.Where("trade_no = ?", topUp.TradeNo).First(&order).Error; err == nil {
+			sourceType = ReferralCommissionSourceSubscription
+			sourceId = order.Id
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		referralResult, err := CreditInviteRewardsAfterPaymentTx(tx, topUp.UserId, topUp.Money, topUp.PaymentMethod, sourceType, sourceId)
 		if err != nil {
 			return err
 		}
@@ -2312,6 +2483,8 @@ func RejectSelfServeTopUp(tradeNo string, auditorId int, adminReason string, ban
 	}
 	now := common.GetTimestamp()
 	var result SelfServeTopUpReviewResult
+	cacheUserId := 0
+	cacheGroup := ""
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &TopUp{}
 		if err := withRowLock(tx).Where("trade_no = ?", tradeNo).First(topUp).Error; err != nil {
@@ -2338,8 +2511,18 @@ func RejectSelfServeTopUp(tradeNo string, auditorId int, adminReason string, ban
 		if audit.Status != SelfServeTopUpAuditStatusPending {
 			return ErrTopUpStatusInvalid
 		}
+		var subscriptionOrder SubscriptionOrder
+		hasSubscriptionOrder := false
+		if err := tx.Where("trade_no = ?", topUp.TradeNo).First(&subscriptionOrder).Error; err == nil {
+			hasSubscriptionOrder = true
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
 		refundQuota := audit.CreditedQuota - topUp.RefundedQuota
 		if refundQuota < 0 {
+			refundQuota = 0
+		}
+		if hasSubscriptionOrder {
 			refundQuota = 0
 		}
 		if refundQuota > 0 {
@@ -2387,6 +2570,14 @@ func RejectSelfServeTopUp(tradeNo string, auditorId int, adminReason string, ban
 				return err
 			}
 		}
+		if hasSubscriptionOrder {
+			userId, group, err := syncSubscriptionOrderRefundStateTx(tx, topUp.TradeNo, PaymentProviderSelfServe, true, now)
+			if err != nil {
+				return err
+			}
+			cacheUserId = userId
+			cacheGroup = group
+		}
 		result.TopUp = topUp
 		result.Audit = audit
 		result.QuotaDelta = -refundQuota
@@ -2401,6 +2592,9 @@ func RejectSelfServeTopUp(tradeNo string, auditorId int, adminReason string, ban
 		if result.Banned {
 			_ = InvalidateUserTokensCache(result.TopUp.UserId)
 		}
+	}
+	if cacheGroup != "" && cacheUserId > 0 {
+		_ = UpdateUserGroupCache(cacheUserId, cacheGroup)
 	}
 	return &result, nil
 }

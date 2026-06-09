@@ -18,6 +18,7 @@
     "highlight.js": "^11.11.1",
     "i18next": "^23.16.8",
     "i18next-browser-languagedetector": "^7.2.0",
+    "jsqr": "catalog:",
     "katex": "^0.16.22",
     "lucide-react": "^0.511.0",
     "marked": "^4.1.1",

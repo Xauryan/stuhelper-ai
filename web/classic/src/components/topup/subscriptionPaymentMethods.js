@@ -23,7 +23,9 @@ export function getEpayMethods(payMethods = []) {
       method.type !== 'stripe' &&
       method.type !== 'creem' &&
       method.type !== 'alipay_official' &&
-      method.type !== 'wxpay_official',
+      method.type !== 'wxpay_official' &&
+      method.type !== 'alipay_self_serve' &&
+      method.type !== 'wxpay_self_serve',
   );
 }
 
@@ -51,16 +53,69 @@ function normalizeServiceFeePercent(percent) {
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
+function getSelfServeMethod(payMethods, type) {
+  return (payMethods || []).find((method) => method?.type === type) || null;
+}
+
+export function getSelfServeMethods({
+  payMethods = [],
+  selfServeQrCodes = {},
+  selfServeUnitPrice,
+} = {}) {
+  const unitPrice = normalizeUnitPrice(selfServeUnitPrice);
+  if (!unitPrice) {
+    return [];
+  }
+
+  const candidates = [
+    {
+      type: 'alipay_self_serve',
+      name: '支付宝自助',
+      color: 'rgba(var(--semi-blue-5), 1)',
+    },
+    {
+      type: 'wxpay_self_serve',
+      name: '微信自助',
+      color: 'rgba(var(--semi-green-5), 1)',
+    },
+  ];
+
+  return candidates
+    .map((candidate) => {
+      const method = getSelfServeMethod(payMethods, candidate.type);
+      const qrCode = selfServeQrCodes?.[candidate.type] || '';
+      if (!qrCode) {
+        return null;
+      }
+      return {
+        key: `self_serve:${candidate.type}`,
+        type: candidate.type,
+        provider: 'self_serve',
+        name: method?.name || candidate.name,
+        unitPrice,
+        service_fee_percent: 0,
+        icon: method?.icon,
+        color: method?.color || candidate.color,
+        qrCode,
+        raw: method,
+      };
+    })
+    .filter(Boolean);
+}
+
 export function buildSubscriptionPaymentMethods({
   plan,
   payMethods = [],
   epayMethods = [],
   epayUnitPrice,
+  selfServeQrCodes = {},
+  selfServeUnitPrice,
   enableOnlineTopUp = false,
   enableStripeTopUp = false,
   enableCreemTopUp = false,
   enableAlipayOfficialTopUp = false,
   enableWechatPayOfficialTopUp = false,
+  enableSelfServeTopUp = false,
   hasAlipayOfficial = false,
   hasWechatPayOfficial = false,
 } = {}) {
@@ -151,6 +206,16 @@ export function buildSubscriptionPaymentMethods({
         raw: method,
       });
     });
+  }
+
+  if (enableSelfServeTopUp) {
+    methods.push(
+      ...getSelfServeMethods({
+        payMethods,
+        selfServeQrCodes,
+        selfServeUnitPrice,
+      }),
+    );
   }
 
   return methods;

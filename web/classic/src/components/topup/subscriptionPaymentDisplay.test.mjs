@@ -11,6 +11,14 @@ assert.equal(
   50.3,
 );
 assert.equal(calculateSubscriptionPayAmount(50, 1, 0.6, 'stripe'), 50);
+assert.equal(
+  calculateSubscriptionPayAmount(50, 1.2, 9.9, 'alipay_self_serve'),
+  60,
+);
+assert.equal(
+  calculateSubscriptionPayAmount(50, 1.2, 9.9, 'wxpay_self_serve'),
+  60,
+);
 assert.equal(calculateSubscriptionPayAmount(50, 'bad'), null);
 assert.equal(
   formatSubscriptionPayAmount({

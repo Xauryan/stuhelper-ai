@@ -63,13 +63,15 @@ const CardTable = ({
       : tableProps;
 
     return (
-      <Table
-        columns={columns}
-        dataSource={dataSource}
-        loading={loading}
-        rowKey={rowKey}
-        {...finalTableProps}
-      />
+      <div className='card-table-scroll-wrap'>
+        <Table
+          columns={columns}
+          dataSource={dataSource}
+          loading={loading}
+          rowKey={rowKey}
+          {...finalTableProps}
+        />
+      </div>
     );
   }
 

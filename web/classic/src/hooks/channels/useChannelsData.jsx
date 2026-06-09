@@ -115,6 +115,7 @@ export const useChannelsData = () => {
 
   // 使用 ref 来避免闭包问题，类似旧版实现
   const shouldStopBatchTestingRef = useRef(false);
+  const batchTestingActiveRef = useRef(false);
 
   // Multi-key management states
   const [showMultiKeyManageModal, setShowMultiKeyManageModal] = useState(false);
@@ -880,11 +881,17 @@ export const useChannelsData = () => {
     model,
     endpointType = '',
     stream = false,
+    options = {},
   ) => {
+    const silent = options?.silent === true;
+    const batchMode = options?.batch === true;
     const testKey = `${record.id}-${model}`;
 
     // 检查是否应该停止批量测试
-    if (shouldStopBatchTestingRef.current && isBatchTesting) {
+    if (
+      shouldStopBatchTestingRef.current &&
+      (batchMode || batchTestingActiveRef.current)
+    ) {
       return Promise.resolve();
     }
 
@@ -902,7 +909,10 @@ export const useChannelsData = () => {
       const res = await API.get(url);
 
       // 检查是否在请求期间被停止
-      if (shouldStopBatchTestingRef.current && isBatchTesting) {
+      if (
+        shouldStopBatchTestingRef.current &&
+        (batchMode || batchTestingActiveRef.current)
+      ) {
         return Promise.resolve();
       }
 
@@ -927,6 +937,9 @@ export const useChannelsData = () => {
           channel.test_time = Date.now() / 1000;
         });
 
+        if (silent) {
+          return;
+        }
         if (!model || model === '') {
           showInfo(
             t('通道 ${name} 测试成功，耗时 ${time.toFixed(2)} 秒。')
@@ -944,7 +957,9 @@ export const useChannelsData = () => {
           );
         }
       } else {
-        showError(message);
+        if (!silent) {
+          showError(message);
+        }
       }
     } catch (error) {
       // 处理网络错误
@@ -959,7 +974,9 @@ export const useChannelsData = () => {
           errorCode: null,
         },
       }));
-      showError(error.message || t('测试失败'));
+      if (!silent) {
+        showError(error.message || t('测试失败'));
+      }
     } finally {
       // 从正在测试的模型集合中移除
       setTestingModels((prev) => {
@@ -972,6 +989,10 @@ export const useChannelsData = () => {
 
   // 批量测试单个渠道的所有模型，参考旧版实现
   const batchTestModels = async () => {
+    if (batchTestingActiveRef.current) {
+      showInfo(t('批量测试正在进行中'));
+      return;
+    }
     if (!currentTestChannel || !currentTestChannel.models) {
       showError(t('渠道模型信息不完整'));
       return;
@@ -989,6 +1010,7 @@ export const useChannelsData = () => {
     }
 
     setIsBatchTesting(true);
+    batchTestingActiveRef.current = true;
     shouldStopBatchTestingRef.current = false; // 重置停止标志
 
     // 清空该渠道之前的测试结果
@@ -1021,19 +1043,13 @@ export const useChannelsData = () => {
         }
 
         const batch = models.slice(i, i + concurrencyLimit);
-        showInfo(
-          t('正在测试第 ${current} - ${end} 个模型 (共 ${total} 个)')
-            .replace('${current}', i + 1)
-            .replace('${end}', Math.min(i + concurrencyLimit, models.length))
-            .replace('${total}', models.length),
-        );
-
         const batchPromises = batch.map((model) =>
           testChannel(
             currentTestChannel,
             model,
             selectedEndpointType,
             isStreamTest,
+            { silent: true, batch: true },
           ),
         );
         const batchResults = await Promise.allSettled(batchPromises);
@@ -1087,6 +1103,7 @@ export const useChannelsData = () => {
       showError(t('批量测试过程中发生错误: ') + error.message);
     } finally {
       setIsBatchTesting(false);
+      batchTestingActiveRef.current = false;
     }
   };
 

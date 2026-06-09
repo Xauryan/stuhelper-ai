@@ -412,11 +412,7 @@ const TopUp = () => {
         showError(t('请先配置自助充值价格'));
         return;
       }
-      const initialMoney = Math.min(
-        singleMax,
-        dailyRemain,
-        calculatedMoney,
-      );
+      const initialMoney = Math.min(singleMax, dailyRemain, calculatedMoney);
       setPayWay(payment);
       setAmount(initialMoney);
       setSelfServePaymentMethod(payment);
@@ -1575,6 +1571,8 @@ const TopUp = () => {
           enableAlipayOfficialTopUp={enableAlipayOfficialTopUp}
           enableWechatPayOfficialTopUp={enableWechatPayOfficialTopUp}
           enableSelfServeTopUp={enableSelfServeTopUp}
+          selfServeQrCodes={selfServeQrCodes}
+          selfServeLimits={selfServeLimits}
           presetAmounts={presetAmounts}
           selectedPreset={selectedPreset}
           selectPresetAmount={selectPresetAmount}
