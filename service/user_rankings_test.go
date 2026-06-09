@@ -133,6 +133,35 @@ func TestGetUserRankingsSnapshotReturnsThreeMetricsForAnonymous(t *testing.T) {
 	assert.Equal(t, int64(1), resp.Consumption[0].RequestCount)
 }
 
+func TestGetUserRankingsSnapshotUsesRequestedConsumptionMetric(t *testing.T) {
+	db := setupUserRankingsServiceTestDB(t)
+	for i := 1; i <= userRankingLimit; i++ {
+		insertRankingTestUser(t, db, i, fmt.Sprintf("token%02d", i))
+		insertConsumeLog(t, db, i, int64(1000+i), 10, 1000-i, 0)
+	}
+	insertRankingTestUser(t, db, 21, "quota21")
+	insertConsumeLog(t, db, 21, 2000, 100000, 1, 0)
+
+	tokenResp, err := GetUserRankingsSnapshot("all", 0, model.UserConsumptionRankingMetricTokens)
+	require.NoError(t, err)
+	require.Len(t, tokenResp.Consumption, userRankingLimit)
+	assert.NotEqual(t, int64(100000), tokenResp.Consumption[0].TotalQuota)
+
+	quotaResp, err := GetUserRankingsSnapshot("all", 21, model.UserConsumptionRankingMetricQuota)
+	require.NoError(t, err)
+	require.Len(t, quotaResp.Consumption, userRankingLimit)
+	assert.Equal(t, int64(100000), quotaResp.Consumption[0].TotalQuota)
+	require.NotNil(t, quotaResp.Me)
+	assert.Equal(t, 1, quotaResp.Me.Rank)
+	assert.Equal(t, int64(100000), quotaResp.Me.TotalQuota)
+}
+
+func TestGetUserRankingsSnapshotRejectsInvalidConsumptionMetric(t *testing.T) {
+	_, err := GetUserRankingsSnapshot("all", 0, "money")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid ranking metric")
+}
+
 func TestGetUserRankingsSnapshotIncludesMeInsideTopN(t *testing.T) {
 	db := setupUserRankingsServiceTestDB(t)
 	insertRankingTestUser(t, db, 1, "alice")

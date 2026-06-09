@@ -12,7 +12,13 @@ import (
 	"gorm.io/gorm"
 )
 
-const userRankingDefaultLimit = 20
+const (
+	userRankingDefaultLimit = 20
+
+	UserConsumptionRankingMetricTokens = "tokens"
+	UserConsumptionRankingMetricQuota  = "quota"
+	UserConsumptionRankingMetricCalls  = "calls"
+)
 
 var adminRechargeQuotaContentPattern = regexp.MustCompile(`管理员(?:增加|充值)用户额度\s*[^0-9]*([0-9]+(?:\.[0-9]+)?)`)
 
@@ -57,17 +63,19 @@ func userConsumptionRankingBaseQuery(startTime int64, endTime int64) *gorm.DB {
 }
 
 func GetUserConsumptionRankingTotals(startTime int64, endTime int64, limit int) ([]UserRankingTotal, int64, error) {
+	return GetUserConsumptionRankingTotalsByMetric(startTime, endTime, limit, UserConsumptionRankingMetricTokens)
+}
+
+func GetUserConsumptionRankingTotalsByMetric(startTime int64, endTime int64, limit int, metric string) ([]UserRankingTotal, int64, error) {
 	if limit <= 0 {
 		limit = userRankingDefaultLimit
 	}
 	var rows []UserRankingTotal
 	if err := userConsumptionRankingBaseQuery(startTime, endTime).
-		Order("total_tokens DESC").
-		Order("user_id ASC").
 		Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
-	sortUserConsumptionRankingRows(rows)
+	sortUserConsumptionRankingRows(rows, metric)
 	total := sumUserRankingQuota(rows)
 	if len(rows) > limit {
 		rows = rows[:limit]
@@ -95,28 +103,80 @@ func GetUserConsumptionRankingTotalForUser(startTime int64, endTime int64, userI
 }
 
 func GetUserConsumptionRankingRank(startTime int64, endTime int64, me UserRankingTotal) (int, error) {
+	return GetUserConsumptionRankingRankByMetric(startTime, endTime, me, UserConsumptionRankingMetricTokens)
+}
+
+func GetUserConsumptionRankingRankByMetric(startTime int64, endTime int64, me UserRankingTotal, metric string) (int, error) {
 	if me.UserId <= 0 || me.TotalQuota <= 0 {
 		return 0, nil
 	}
 	base := userConsumptionRankingBaseQuery(startTime, endTime)
 	var betterCount int64
-	err := LOG_DB.Table("(?) AS ranked", base).
-		Where("total_tokens > ? OR (total_tokens = ? AND user_id < ?)",
+	query := LOG_DB.Table("(?) AS ranked", base)
+	var err error
+	switch normalizeUserConsumptionRankingMetric(metric) {
+	case UserConsumptionRankingMetricQuota:
+		err = query.Where(
+			"total_quota > ? OR (total_quota = ? AND total_tokens > ?) OR (total_quota = ? AND total_tokens = ? AND user_id < ?)",
+			me.TotalQuota,
+			me.TotalQuota, me.TotalTokens,
+			me.TotalQuota, me.TotalTokens, me.UserId,
+		).Count(&betterCount).Error
+	case UserConsumptionRankingMetricCalls:
+		err = query.Where(
+			"request_count > ? OR (request_count = ? AND total_tokens > ?) OR (request_count = ? AND total_tokens = ? AND user_id < ?)",
+			me.RequestCount,
+			me.RequestCount, me.TotalTokens,
+			me.RequestCount, me.TotalTokens, me.UserId,
+		).Count(&betterCount).Error
+	default:
+		err = query.Where("total_tokens > ? OR (total_tokens = ? AND user_id < ?)",
 			me.TotalTokens, me.TotalTokens, me.UserId).
-		Count(&betterCount).Error
+			Count(&betterCount).Error
+	}
 	if err != nil {
 		return 0, err
 	}
 	return int(betterCount) + 1, nil
 }
 
-func sortUserConsumptionRankingRows(rows []UserRankingTotal) {
+func sortUserConsumptionRankingRows(rows []UserRankingTotal, metric string) {
 	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].TotalTokens == rows[j].TotalTokens {
-			return rows[i].UserId < rows[j].UserId
-		}
-		return rows[i].TotalTokens > rows[j].TotalTokens
+		return userConsumptionRankingRowLess(rows[i], rows[j], metric)
 	})
+}
+
+func userConsumptionRankingRowLess(a UserRankingTotal, b UserRankingTotal, metric string) bool {
+	switch normalizeUserConsumptionRankingMetric(metric) {
+	case UserConsumptionRankingMetricQuota:
+		if a.TotalQuota != b.TotalQuota {
+			return a.TotalQuota > b.TotalQuota
+		}
+		if a.TotalTokens != b.TotalTokens {
+			return a.TotalTokens > b.TotalTokens
+		}
+	case UserConsumptionRankingMetricCalls:
+		if a.RequestCount != b.RequestCount {
+			return a.RequestCount > b.RequestCount
+		}
+		if a.TotalTokens != b.TotalTokens {
+			return a.TotalTokens > b.TotalTokens
+		}
+	default:
+		if a.TotalTokens != b.TotalTokens {
+			return a.TotalTokens > b.TotalTokens
+		}
+	}
+	return a.UserId < b.UserId
+}
+
+func normalizeUserConsumptionRankingMetric(metric string) string {
+	switch metric {
+	case UserConsumptionRankingMetricQuota, UserConsumptionRankingMetricCalls:
+		return metric
+	default:
+		return UserConsumptionRankingMetricTokens
+	}
 }
 
 func GetUserRechargeRankingTotals(startTime int64, endTime int64, limit int) ([]UserRankingTotal, int64, error) {

@@ -5043,6 +5043,15 @@
             }
           },
           {
+            "name": "metric",
+            "in": "query",
+            "description": "用户消费榜排序指标：tokens、quota 或 calls。不传时默认 tokens。",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "description": "",

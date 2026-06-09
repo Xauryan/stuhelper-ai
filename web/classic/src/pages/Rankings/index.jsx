@@ -415,7 +415,9 @@ const Rankings = () => {
     setLoading(true);
     setError(false);
     try {
-      const res = await API.get('/api/rankings/users', { params: { period } });
+      const res = await API.get('/api/rankings/users', {
+        params: { period, metric },
+      });
       if (res.data?.success) {
         setSnapshot(res.data.data);
       } else {
@@ -428,7 +430,7 @@ const Rankings = () => {
     } finally {
       setLoading(false);
     }
-  }, [period, t]);
+  }, [metric, period, t]);
 
   useEffect(() => {
     fetchRankings();
@@ -467,7 +469,7 @@ const Rankings = () => {
     );
     if (matchIndex >= 0) {
       return {
-        me: { ...me, rank: matchIndex + 1 },
+        me: { ...me, rank: sortedRows[matchIndex]?.rank || matchIndex + 1 },
         mode: 'inline',
       };
     }
@@ -576,7 +578,7 @@ const Rankings = () => {
                       <RankRow
                         key={`${row.display}-${i}`}
                         row={row}
-                        displayRank={i + 1}
+                        displayRank={row.rank || i + 1}
                         metric={activeMetric}
                         visibleMetrics={visibleMetrics}
                         rank1Value={rank1Value}

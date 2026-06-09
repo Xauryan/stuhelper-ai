@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	stdjson "encoding/json"
@@ -69,6 +70,8 @@ var supportedAccessPolicyOps = []string{
 	"exists",
 	"not_exists",
 }
+
+const oauthResponsePreviewLimit = 500
 
 // NewGenericOAuthProvider creates a new generic OAuth provider from config
 func NewGenericOAuthProvider(config *model.CustomOAuthProvider) *GenericOAuthProvider {
@@ -150,7 +153,14 @@ func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c
 	}
 
 	bodyStr := string(body)
-	logger.LogDebug(ctx, "[OAuth-Generic-%s] ExchangeToken response body: %s", p.config.Slug, bodyStr[:min(len(bodyStr), 500)])
+	bodyPreview := previewOAuthResponseBody(body)
+	logger.LogDebug(ctx, "[OAuth-Generic-%s] ExchangeToken response body: %s", p.config.Slug, bodyPreview)
+
+	if isHTMLLikeOAuthResponse(res.Header.Get("Content-Type"), body) {
+		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] ExchangeToken unexpected response: status=%d, content_type=%q, body=%s",
+			p.config.Slug, res.StatusCode, res.Header.Get("Content-Type"), bodyPreview))
+		return nil, newUnexpectedOAuthResponseError(p.config.Name, "Token", res.StatusCode, res.Header.Get("Content-Type"), bodyPreview)
+	}
 
 	// Try to parse as JSON first
 	var tokenResponse struct {
@@ -168,8 +178,9 @@ func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c
 		// Try to parse as URL-encoded (some OAuth servers like GitHub return this format)
 		parsedValues, parseErr := url.ParseQuery(bodyStr)
 		if parseErr != nil {
-			logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] ExchangeToken parse error: %s", p.config.Slug, err.Error()))
-			return nil, err
+			logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] ExchangeToken parse error: json=%s, form=%s, status=%d, content_type=%q, body=%s",
+				p.config.Slug, err.Error(), parseErr.Error(), res.StatusCode, res.Header.Get("Content-Type"), bodyPreview))
+			return nil, newUnexpectedOAuthResponseError(p.config.Name, "Token", res.StatusCode, res.Header.Get("Content-Type"), bodyPreview)
 		}
 		tokenResponse.AccessToken = parsedValues.Get("access_token")
 		tokenResponse.TokenType = parsedValues.Get("token_type")
@@ -180,6 +191,11 @@ func (p *GenericOAuthProvider) ExchangeToken(ctx context.Context, code string, c
 		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] ExchangeToken OAuth error: %s - %s",
 			p.config.Slug, tokenResponse.Error, tokenResponse.ErrorDesc))
 		return nil, NewOAuthErrorWithRaw(i18n.MsgOAuthTokenFailed, map[string]any{"Provider": p.config.Name}, tokenResponse.ErrorDesc)
+	}
+
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] ExchangeToken failed: status=%d, body=%s", p.config.Slug, res.StatusCode, bodyPreview))
+		return nil, NewOAuthErrorWithRaw(i18n.MsgOAuthTokenFailed, map[string]any{"Provider": p.config.Name}, fmt.Sprintf("status %d", res.StatusCode))
 	}
 
 	if tokenResponse.AccessToken == "" {
@@ -224,11 +240,6 @@ func (p *GenericOAuthProvider) GetUserInfo(ctx context.Context, token *OAuthToke
 
 	logger.LogDebug(ctx, "[OAuth-Generic-%s] GetUserInfo response status: %d", p.config.Slug, res.StatusCode)
 
-	if res.StatusCode != http.StatusOK {
-		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] GetUserInfo failed: status=%d", p.config.Slug, res.StatusCode))
-		return nil, NewOAuthError(i18n.MsgOAuthGetUserErr, nil)
-	}
-
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] GetUserInfo read body error: %s", p.config.Slug, err.Error()))
@@ -236,7 +247,26 @@ func (p *GenericOAuthProvider) GetUserInfo(ctx context.Context, token *OAuthToke
 	}
 
 	bodyStr := string(body)
-	logger.LogDebug(ctx, "[OAuth-Generic-%s] GetUserInfo response body: %s", p.config.Slug, bodyStr[:min(len(bodyStr), 500)])
+	bodyPreview := previewOAuthResponseBody(body)
+	logger.LogDebug(ctx, "[OAuth-Generic-%s] GetUserInfo response body: %s", p.config.Slug, bodyPreview)
+
+	if isHTMLLikeOAuthResponse(res.Header.Get("Content-Type"), body) {
+		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] GetUserInfo unexpected response: status=%d, content_type=%q, body=%s",
+			p.config.Slug, res.StatusCode, res.Header.Get("Content-Type"), bodyPreview))
+		return nil, newUnexpectedOAuthResponseError(p.config.Name, "UserInfo", res.StatusCode, res.Header.Get("Content-Type"), bodyPreview)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] GetUserInfo failed: status=%d, body=%s", p.config.Slug, res.StatusCode, bodyPreview))
+		return nil, NewOAuthErrorWithRaw(i18n.MsgOAuthGetUserErr, map[string]any{"Provider": p.config.Name}, fmt.Sprintf("status %d", res.StatusCode))
+	}
+
+	var userInfoPayload any
+	if err := common.Unmarshal(body, &userInfoPayload); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("[OAuth-Generic-%s] GetUserInfo parse error: %s, status=%d, content_type=%q, body=%s",
+			p.config.Slug, err.Error(), res.StatusCode, res.Header.Get("Content-Type"), bodyPreview))
+		return nil, newUnexpectedOAuthResponseError(p.config.Name, "UserInfo", res.StatusCode, res.Header.Get("Content-Type"), bodyPreview)
+	}
 
 	// Extract fields using gjson (supports JSONPath-like syntax)
 	userId := gjson.Get(bodyStr, p.config.UserIdField).String()
@@ -323,6 +353,31 @@ func normalizeAuthorizationTokenType(tokenType string) string {
 		return "Bearer"
 	}
 	return tokenType
+}
+
+func isHTMLLikeOAuthResponse(contentType string, body []byte) bool {
+	contentType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	if contentType == "text/html" || contentType == "application/xhtml+xml" {
+		return true
+	}
+	trimmed := bytes.TrimSpace(body)
+	return len(trimmed) > 0 && trimmed[0] == '<'
+}
+
+func previewOAuthResponseBody(body []byte) string {
+	preview := string(body)
+	if len(preview) > oauthResponsePreviewLimit {
+		return preview[:oauthResponsePreviewLimit] + "..."
+	}
+	return preview
+}
+
+func newUnexpectedOAuthResponseError(providerName string, endpoint string, statusCode int, contentType string, bodyPreview string) *OAuthError {
+	raw := fmt.Sprintf("unexpected OAuth %s response: status=%d content_type=%q body=%s", endpoint, statusCode, contentType, bodyPreview)
+	return NewOAuthErrorWithRaw(i18n.MsgOAuthUnexpectedResponse, map[string]any{
+		"Provider": providerName,
+		"Endpoint": endpoint,
+	}, raw)
 }
 
 // IsGenericProvider returns true for generic providers

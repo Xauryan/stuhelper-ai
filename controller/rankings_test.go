@@ -116,6 +116,20 @@ func TestGetUserRankingsRequiresAuthenticatedUserWhenConfigured(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), "login required")
 }
 
+func TestGetUserRankingsRejectsInvalidMetric(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	withHeaderNavModulesForRankingsTest(t, `{"rankings":{"enabled":true,"requireAuth":false}}`)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/rankings/users?metric=money", nil)
+
+	GetUserRankings(ctx)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "invalid ranking metric")
+}
+
 func TestRankingsRequireAuthAcceptsOptionalSessionAuth(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	withHeaderNavModulesForRankingsTest(t, `{"rankings":{"enabled":true,"requireAuth":true}}`)

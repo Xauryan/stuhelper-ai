@@ -202,6 +202,17 @@ let showSuccessOptions = { autoClose: toastConstants.SUCCESS_TIMEOUT };
 let showInfoOptions = { autoClose: toastConstants.INFO_TIMEOUT };
 let showNoticeOptions = { autoClose: false };
 
+const buildSemiToastOptions = (content, autoClose) => {
+  const options = { content };
+  const timeout = Number(autoClose);
+  if (Number.isFinite(timeout) && timeout > 0) {
+    options.duration = timeout / 1000;
+  } else if (autoClose === false || timeout === 0) {
+    options.duration = 0;
+  }
+  return options;
+};
+
 const isMobileScreen = window.matchMedia(
   `(max-width: ${MOBILE_BREAKPOINT - 1}px)`,
 ).matches;
@@ -231,42 +242,69 @@ export function showError(error) {
           window.location.href = '/login?expired=true';
           break;
         case 429:
-          Toast.error('错误：请求次数过多，请稍后再试！');
+          Toast.error(
+            buildSemiToastOptions(
+              '错误：请求次数过多，请稍后再试！',
+              toastConstants.ERROR_TIMEOUT,
+            ),
+          );
           break;
         case 500:
-          Toast.error('错误：服务器内部错误，请联系管理员！');
+          Toast.error(
+            buildSemiToastOptions(
+              '错误：服务器内部错误，请联系管理员！',
+              toastConstants.ERROR_TIMEOUT,
+            ),
+          );
           break;
         case 405:
-          Toast.info('本站仅作演示之用，无服务端！');
+          Toast.info(
+            buildSemiToastOptions(
+              '本站仅作演示之用，无服务端！',
+              toastConstants.INFO_TIMEOUT,
+            ),
+          );
           break;
         default:
-          Toast.error('错误：' + error.message);
+          Toast.error(
+            buildSemiToastOptions(
+              '错误：' + error.message,
+              toastConstants.ERROR_TIMEOUT,
+            ),
+          );
       }
       return;
     }
-    Toast.error('错误：' + error.message);
+    Toast.error(
+      buildSemiToastOptions(
+        '错误：' + error.message,
+        toastConstants.ERROR_TIMEOUT,
+      ),
+    );
   } else {
-    Toast.error('错误：' + error);
+    Toast.error(
+      buildSemiToastOptions('错误：' + error, toastConstants.ERROR_TIMEOUT),
+    );
   }
 }
 
 export function showWarning(message) {
-  Toast.warning(message);
+  Toast.warning(buildSemiToastOptions(message, toastConstants.WARNING_TIMEOUT));
 }
 
 export function showSuccess(message) {
-  Toast.success(message);
+  Toast.success(buildSemiToastOptions(message, toastConstants.SUCCESS_TIMEOUT));
 }
 
 export function showInfo(message) {
-  Toast.info(message);
+  Toast.info(buildSemiToastOptions(message, toastConstants.INFO_TIMEOUT));
 }
 
 export function showNotice(message, isHTML = false) {
   if (isHTML) {
     toast(<HTMLToastContent htmlContent={message} />, showNoticeOptions);
   } else {
-    Toast.info(message);
+    Toast.info(buildSemiToastOptions(message, toastConstants.NOTICE_TIMEOUT));
   }
 }
 

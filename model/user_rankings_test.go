@@ -127,6 +127,68 @@ func TestGetUserConsumptionRankingRankRespectsTokenTieBreaker(t *testing.T) {
 	assert.Equal(t, 3, carolRank)
 }
 
+func TestGetUserConsumptionRankingTotalsByMetric(t *testing.T) {
+	truncateTables(t)
+
+	insertRankingUser(t, 1, "alice")
+	insertRankingUser(t, 2, "bob")
+	insertRankingUser(t, 3, "carol")
+
+	require.NoError(t, LOG_DB.Create(&[]Log{
+		// alice: highest tokens, lower quota and calls.
+		{UserId: 1, CreatedAt: 1100, Type: LogTypeConsume, Quota: 100, PromptTokens: 600, CompletionTokens: 400},
+		// bob: highest quota.
+		{UserId: 2, CreatedAt: 1200, Type: LogTypeConsume, Quota: 900, PromptTokens: 10, CompletionTokens: 10},
+		// carol: highest request count, still positive quota.
+		{UserId: 3, CreatedAt: 1300, Type: LogTypeConsume, Quota: 10, PromptTokens: 3, CompletionTokens: 2},
+		{UserId: 3, CreatedAt: 1400, Type: LogTypeConsume, Quota: 10, PromptTokens: 3, CompletionTokens: 2},
+		{UserId: 3, CreatedAt: 1500, Type: LogTypeConsume, Quota: 10, PromptTokens: 3, CompletionTokens: 2},
+	}).Error)
+
+	tokenRows, _, err := GetUserConsumptionRankingTotalsByMetric(1000, 2000, 20, UserConsumptionRankingMetricTokens)
+	require.NoError(t, err)
+	require.Len(t, tokenRows, 3)
+	assert.Equal(t, 1, tokenRows[0].UserId)
+
+	quotaRows, _, err := GetUserConsumptionRankingTotalsByMetric(1000, 2000, 20, UserConsumptionRankingMetricQuota)
+	require.NoError(t, err)
+	require.Len(t, quotaRows, 3)
+	assert.Equal(t, 2, quotaRows[0].UserId)
+
+	callRows, _, err := GetUserConsumptionRankingTotalsByMetric(1000, 2000, 20, UserConsumptionRankingMetricCalls)
+	require.NoError(t, err)
+	require.Len(t, callRows, 3)
+	assert.Equal(t, 3, callRows[0].UserId)
+}
+
+func TestGetUserConsumptionRankingRankByMetric(t *testing.T) {
+	truncateTables(t)
+
+	insertRankingUser(t, 1, "alice")
+	insertRankingUser(t, 2, "bob")
+	insertRankingUser(t, 3, "carol")
+
+	require.NoError(t, LOG_DB.Create(&[]Log{
+		{UserId: 1, CreatedAt: 1100, Type: LogTypeConsume, Quota: 100, PromptTokens: 600, CompletionTokens: 400},
+		{UserId: 2, CreatedAt: 1200, Type: LogTypeConsume, Quota: 900, PromptTokens: 10, CompletionTokens: 10},
+		{UserId: 3, CreatedAt: 1300, Type: LogTypeConsume, Quota: 10, PromptTokens: 3, CompletionTokens: 2},
+		{UserId: 3, CreatedAt: 1400, Type: LogTypeConsume, Quota: 10, PromptTokens: 3, CompletionTokens: 2},
+		{UserId: 3, CreatedAt: 1500, Type: LogTypeConsume, Quota: 10, PromptTokens: 3, CompletionTokens: 2},
+	}).Error)
+
+	carolRow, err := GetUserConsumptionRankingTotalForUser(1000, 2000, 3)
+	require.NoError(t, err)
+	require.NotNil(t, carolRow)
+
+	tokenRank, err := GetUserConsumptionRankingRankByMetric(1000, 2000, *carolRow, UserConsumptionRankingMetricTokens)
+	require.NoError(t, err)
+	assert.Equal(t, 3, tokenRank)
+
+	callRank, err := GetUserConsumptionRankingRankByMetric(1000, 2000, *carolRow, UserConsumptionRankingMetricCalls)
+	require.NoError(t, err)
+	assert.Equal(t, 1, callRank)
+}
+
 func TestGetUserRechargeRankingTotalsIncludesAllRechargeSources(t *testing.T) {
 	truncateTables(t)
 

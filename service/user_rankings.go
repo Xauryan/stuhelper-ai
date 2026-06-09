@@ -54,20 +54,24 @@ func ClearUserRankingsCache() {
 	userRankingCacheMu.Unlock()
 }
 
-func GetUserRankingsSnapshot(period string, viewerUserId int) (*UserRankingsResponse, error) {
+func GetUserRankingsSnapshot(period string, viewerUserId int, consumptionMetricParam ...string) (*UserRankingsResponse, error) {
 	config, err := userRankingConfig(period)
 	if err != nil {
 		return nil, err
 	}
+	consumptionMetric, err := userRankingConsumptionMetric(consumptionMetricParam...)
+	if err != nil {
+		return nil, err
+	}
 
-	item, err := getCachedUserRankingsPublicSnapshot(config)
+	item, err := getCachedUserRankingsPublicSnapshot(config, consumptionMetric)
 	if err != nil {
 		return nil, err
 	}
 
 	out := cloneUserRankingsResponse(item.data)
 	if viewerUserId > 0 {
-		me, err := buildUserRankingMeRow(item, viewerUserId)
+		me, err := buildUserRankingMeRow(item, viewerUserId, consumptionMetric)
 		if err != nil {
 			return nil, err
 		}
@@ -81,11 +85,12 @@ func GetUserRankingsSnapshot(period string, viewerUserId int) (*UserRankingsResp
 	return out, nil
 }
 
-func getCachedUserRankingsPublicSnapshot(config userRankingPeriodConfig) (userRankingCacheItem, error) {
+func getCachedUserRankingsPublicSnapshot(config userRankingPeriodConfig, consumptionMetric string) (userRankingCacheItem, error) {
 	now := time.Now()
+	cacheKey := userRankingCacheKey(config, consumptionMetric)
 
 	userRankingCacheMu.Lock()
-	cached, ok := userRankingCache[config.id]
+	cached, ok := userRankingCache[cacheKey]
 	userRankingCacheMu.Unlock()
 	if ok && cached.expiresAt.After(now) {
 		return cached, nil
@@ -93,7 +98,7 @@ func getCachedUserRankingsPublicSnapshot(config userRankingPeriodConfig) (userRa
 
 	startTime, endTime := userRankingTimeRange(config, now)
 
-	consumptionRows, _, err := model.GetUserConsumptionRankingTotals(startTime, endTime, userRankingLimit)
+	consumptionRows, _, err := model.GetUserConsumptionRankingTotalsByMetric(startTime, endTime, userRankingLimit, consumptionMetric)
 	if err != nil {
 		return userRankingCacheItem{}, err
 	}
@@ -116,10 +121,14 @@ func getCachedUserRankingsPublicSnapshot(config userRankingPeriodConfig) (userRa
 	}
 
 	userRankingCacheMu.Lock()
-	userRankingCache[config.id] = item
+	userRankingCache[cacheKey] = item
 	userRankingCacheMu.Unlock()
 
 	return item, nil
+}
+
+func userRankingCacheKey(config userRankingPeriodConfig, consumptionMetric string) string {
+	return config.id + ":" + consumptionMetric
 }
 
 func cloneUserRankingsResponse(src *UserRankingsResponse) *UserRankingsResponse {
@@ -130,7 +139,7 @@ func cloneUserRankingsResponse(src *UserRankingsResponse) *UserRankingsResponse 
 	return &dst
 }
 
-func buildUserRankingMeRow(item userRankingCacheItem, viewerUserId int) (*RankedUser, error) {
+func buildUserRankingMeRow(item userRankingCacheItem, viewerUserId int, consumptionMetric string) (*RankedUser, error) {
 	for idx, row := range item.consumptionRows {
 		if row.UserId == viewerUserId {
 			return &RankedUser{
@@ -147,7 +156,7 @@ func buildUserRankingMeRow(item userRankingCacheItem, viewerUserId int) (*Ranked
 	if err != nil || row == nil {
 		return nil, err
 	}
-	rank, err := model.GetUserConsumptionRankingRank(item.startTime, item.endTime, *row)
+	rank, err := model.GetUserConsumptionRankingRankByMetric(item.startTime, item.endTime, *row, consumptionMetric)
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +191,21 @@ func userRankingConfig(period string) (userRankingPeriodConfig, error) {
 		return userRankingPeriodConfig{id: "all"}, nil
 	default:
 		return userRankingPeriodConfig{}, fmt.Errorf("invalid ranking period: %s", period)
+	}
+}
+
+func userRankingConsumptionMetric(metricParam ...string) (string, error) {
+	metric := model.UserConsumptionRankingMetricTokens
+	if len(metricParam) > 0 {
+		metric = metricParam[0]
+	}
+	switch metric {
+	case "", model.UserConsumptionRankingMetricTokens:
+		return model.UserConsumptionRankingMetricTokens, nil
+	case model.UserConsumptionRankingMetricQuota, model.UserConsumptionRankingMetricCalls:
+		return metric, nil
+	default:
+		return "", fmt.Errorf("invalid ranking metric: %s", metric)
 	}
 }
 
