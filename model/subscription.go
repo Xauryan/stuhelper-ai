@@ -1057,7 +1057,7 @@ func syncSubscriptionOrderRefundStateTx(tx *gorm.DB, tradeNo string, expectedPay
 	}
 	if sub != nil {
 		switch {
-		case nextStatus == common.TopUpStatusRefunded:
+		case nextStatus == common.TopUpStatusRefunded || nextStatus == common.TopUpStatusPartialRefunded:
 			if err := tx.Model(&UserSubscription{}).
 				Where("id = ?", sub.Id).
 				Updates(map[string]interface{}{
@@ -1187,7 +1187,7 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 		}
 
 		now := common.GetTimestamp()
-		tradeNo := BuildPaymentTradeNo("SUBBAL", userId)
+		tradeNo := BuildBalancePaymentTradeNo(userId)
 		order := &SubscriptionOrder{
 			UserId:          userId,
 			PlanId:          plan.Id,
@@ -1249,8 +1249,8 @@ type SelfServeSubscriptionPurchaseResult struct {
 	ExpectedMoney float64              `json:"expected_money"`
 }
 
-func selfServeSubscriptionTradeNo(userId int) string {
-	return BuildPaymentTradeNo("SSSUB", userId)
+func selfServeSubscriptionTradeNo(paymentMethod string, userId int) string {
+	return BuildSelfServePaymentTradeNo(paymentMethod, true, userId)
 }
 
 func calculateSelfServeSubscriptionMoney(priceAmount float64) decimal.Decimal {
@@ -1316,7 +1316,7 @@ func PurchaseSubscriptionWithSelfServe(params SelfServeSubscriptionPurchaseParam
 			return err
 		}
 		now := common.GetTimestamp()
-		tradeNo := selfServeSubscriptionTradeNo(params.UserId)
+		tradeNo := selfServeSubscriptionTradeNo(paymentMethod, params.UserId)
 		order := &SubscriptionOrder{
 			UserId:          params.UserId,
 			PlanId:          plan.Id,

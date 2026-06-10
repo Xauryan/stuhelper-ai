@@ -452,7 +452,7 @@ func TestPurchaseSubscriptionWithSelfServeCreatesPendingAuditAndRejectCancelsSub
 	assert.Equal(t, common.TopUpStatusSuccess, result.TopUp.Status)
 	assert.Equal(t, SelfServeTopUpAuditStatusPending, result.Audit.Status)
 	assert.Equal(t, int64(0), result.Audit.CreditedQuota)
-	assert.Equal(t, "SSSUB", result.TopUp.TradeNo[:5])
+	assert.Regexp(t, `^WXSUB_SS_5113_[A-Za-z0-9]+$`, result.TopUp.TradeNo)
 	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 5113))
 
 	var sub UserSubscription

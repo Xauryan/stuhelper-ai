@@ -24,3 +24,30 @@ func BuildWechatPayPaymentTradeNo(prefix string, userID int) string {
 	}
 	return tradeNo
 }
+
+func BuildSelfServePaymentTradeNo(paymentMethod string, subscription bool, userID int) string {
+	switch NormalizeSelfServePaymentMethod(paymentMethod) {
+	case PaymentMethodWechatSelfServe:
+		prefix := "WX_SS"
+		if subscription {
+			prefix = "WXSUB_SS"
+		}
+		return BuildWechatPayPaymentTradeNo(prefix, userID)
+	case PaymentMethodAlipaySelfServe:
+		prefix := "ALIPAY_SS"
+		if subscription {
+			prefix = "ALIPAYSUB_SS"
+		}
+		return BuildPaymentTradeNo(prefix, userID)
+	default:
+		prefix := "SS"
+		if subscription {
+			prefix = "SUB_SS"
+		}
+		return BuildPaymentTradeNo(prefix, userID)
+	}
+}
+
+func BuildBalancePaymentTradeNo(userID int) string {
+	return fmt.Sprintf("BALANCE__%d_%s", userID, common.GetRandomString(20))
+}

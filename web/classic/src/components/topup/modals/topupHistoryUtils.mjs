@@ -16,7 +16,8 @@ export const isSubscriptionTopup = (record) => {
     tradeNo.startsWith('SUB') ||
     tradeNo.startsWith('ALIPAYSUB') ||
     tradeNo.startsWith('WXSUB') ||
-    tradeNo.startsWith('SSSUB')
+    tradeNo.startsWith('SSSUB') ||
+    tradeNo.startsWith('BALANCE__')
   );
 };
 
@@ -167,7 +168,7 @@ export const TOPUP_PAYMENT_METHOD_LABELS = {
   wxpay_official: '微信',
   alipay_self_serve: '支付宝自助',
   wxpay_self_serve: '微信自助',
-  balance: '余额支付',
+  balance: '余额',
   admin_add: '管理员充值',
   管理员增加: '管理员充值',
   管理员充值: '管理员充值',
@@ -181,6 +182,6 @@ export const BILLING_PAYMENT_METHOD_FILTERS = [
   { value: 'alipay_official', key: '支付宝' },
   { value: 'wxpay_official', key: '微信' },
   { value: 'self_serve', key: '自助充值' },
-  { value: 'balance', key: '余额支付' },
+  { value: 'balance', key: '余额' },
   { value: 'admin_add', key: '管理员充值' },
 ];

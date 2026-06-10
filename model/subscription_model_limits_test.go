@@ -285,11 +285,46 @@ func TestPurchaseSubscriptionWithBalanceDeductsQuotaAndCreatesSubscriptionOrder(
 	assert.Equal(t, PaymentProviderBalance, topUp.PaymentProvider)
 	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
 	assert.Equal(t, order.Money, topUp.Money)
-	assert.Regexp(t, `^SUBBAL_3008_\d+_[A-Za-z0-9]+$`, topUp.TradeNo)
+	assert.Regexp(t, `^BALANCE__3008_[A-Za-z0-9]+$`, topUp.TradeNo)
 
 	var commissionCount int64
 	require.NoError(t, DB.Model(&ReferralCommission{}).Count(&commissionCount).Error)
 	assert.EqualValues(t, 0, commissionCount)
+}
+
+func TestTopUpListIncludesSubscriptionPlanTitle(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, DB.Create(&User{
+		Id:       3018,
+		Username: "subscription-title-billing-user",
+		Status:   common.UserStatusEnabled,
+		Quota:    1000,
+	}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1018, 1000, false, "")
+	plan.Title = "GPT10元/日周卡 · 订阅 #12"
+	plan.PriceAmount = 10
+	require.NoError(t, DB.Save(plan).Error)
+	InvalidateSubscriptionPlanCache(plan.Id)
+	now := common.GetTimestamp()
+	order := &SubscriptionOrder{
+		UserId:          3018,
+		PlanId:          plan.Id,
+		Money:           10,
+		TradeNo:         "WXSUB_TITLE_TEST",
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CreateTime:      now,
+		CompleteTime:    now,
+	}
+	require.NoError(t, order.Insert())
+
+	result, err := GetUserTopUpsResultWithOptions(3018, TopUpQueryOptions{}, &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, plan.Id, result.Items[0].SubscriptionPlanId)
+	assert.Equal(t, plan.Title, result.Items[0].SubscriptionPlanTitle)
 }
 
 func TestPurchaseSubscriptionWithBalanceExtendsSamePlanAndDefersFutureUse(t *testing.T) {
@@ -553,7 +588,7 @@ func TestBalanceSubscriptionRefundPreviewAndPartialRefund(t *testing.T) {
 
 	var sub UserSubscription
 	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3011, plan.Id).First(&sub).Error)
-	assert.Equal(t, "active", sub.Status)
+	assert.Equal(t, "cancelled", sub.Status)
 }
 
 func TestBalanceSubscriptionFullRefundReturnsRemainingQuotaAndCancelsSubscription(t *testing.T) {

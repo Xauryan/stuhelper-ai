@@ -24,7 +24,7 @@ assert.deepEqual(BILLING_PAYMENT_METHOD_FILTERS, [
   { value: 'alipay_official', key: '支付宝' },
   { value: 'wxpay_official', key: '微信' },
   { value: 'self_serve', key: '自助充值' },
-  { value: 'balance', key: '余额支付' },
+  { value: 'balance', key: '余额' },
   { value: 'admin_add', key: '管理员充值' },
 ]);
 assert.equal(
@@ -223,6 +223,13 @@ assert.equal(
 );
 assert.equal(
   isSubscriptionTopup({
+    trade_no: 'BALANCE__1_7dR0CQAn6ga4hI4stee1',
+    amount: 0,
+  }),
+  true,
+);
+assert.equal(
+  isSubscriptionTopup({
     trade_no: 'ALIPAY_1_1778750000_ABCDEF',
     amount: 0,
   }),
@@ -251,7 +258,7 @@ assert.equal(
 assert.equal(getTopupPaymentMethodLabel('管理员增加'), '管理员充值');
 assert.equal(getTopupPaymentMethodLabel('alipay_self_serve'), '支付宝自助');
 assert.equal(getTopupPaymentMethodLabel('wxpay_self_serve'), '微信自助');
-assert.equal(getTopupPaymentMethodLabel('balance'), '余额支付');
+assert.equal(getTopupPaymentMethodLabel('balance'), '余额');
 assert.equal(
   isSelfServeTopup({
     payment_provider: 'self_serve',

@@ -38,6 +38,7 @@ import {
   Checkbox,
   Radio,
   RadioGroup,
+  Tooltip,
 } from '@douyinfe/semi-ui';
 import {
   IllustrationNoResult,
@@ -45,7 +46,12 @@ import {
 } from '@douyinfe/semi-illustrations';
 import { Coins, ImageUp } from 'lucide-react';
 import { IconEdit, IconSearch } from '@douyinfe/semi-icons';
-import { API, timestamp2string, renderQuota } from '../../../helpers';
+import {
+  API,
+  timestamp2string,
+  renderQuota,
+  getQuotaPerUnit,
+} from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
 import CardTable from '../../common/ui/CardTable';
 import SelfServeQRCode from '../SelfServeQRCode';
@@ -130,13 +136,27 @@ const normalizeSelfServeLimits = (limits) => ({
   daily_max_money: positiveMoney(limits?.daily_max_money),
 });
 
-const getSelfServeDisplayMoney = (record) => {
-  const declaredMoney = Number(record?.declared_money);
-  if (Number.isFinite(declaredMoney) && declaredMoney > 0) {
-    return declaredMoney;
+const getSelfServeFallbackDisplayAmount = (record) => {
+  const declaredMoney = Number(record?.declared_money ?? record?.money);
+  return Number.isFinite(declaredMoney) && declaredMoney > 0
+    ? declaredMoney
+    : 0;
+};
+
+const getSelfServeDisplayAmount = (record) => {
+  const creditedQuota = Number(record?.credited_quota);
+  if (Number.isFinite(creditedQuota) && creditedQuota > 0) {
+    const quotaPerUnit = Number(getQuotaPerUnit());
+    if (Number.isFinite(quotaPerUnit) && quotaPerUnit > 0) {
+      return Number((creditedQuota / quotaPerUnit).toFixed(6));
+    }
+    return getSelfServeFallbackDisplayAmount(record);
   }
-  const paidMoney = Number(record?.money);
-  return Number.isFinite(paidMoney) && paidMoney > 0 ? paidMoney : 0;
+  const amount = Number(record?.amount);
+  if (Number.isFinite(amount) && amount > 0 && amount < 100000) {
+    return amount;
+  }
+  return getSelfServeFallbackDisplayAmount(record);
 };
 
 const TopupBillingTable = ({
@@ -1052,17 +1072,26 @@ const TopupBillingTable = ({
         key: 'amount',
         render: (amount, record) => {
           if (isSubscriptionTopup(record)) {
-            return (
+            const planTitle = String(
+              record?.subscription_plan_title || '',
+            ).trim();
+            const subscriptionTag = (
               <Tag color='purple' shape='circle' size='small'>
                 {t('订阅套餐')}
               </Tag>
             );
+            return planTitle ? (
+              <Tooltip content={planTitle}>{subscriptionTag}</Tooltip>
+            ) : (
+              subscriptionTag
+            );
           }
           if (isSelfServeTopup(record)) {
             return (
-              <Text type='danger'>
-                ¥{formatCurrency(getSelfServeDisplayMoney(record))}
-              </Text>
+              <span className='flex items-center gap-1'>
+                <Coins size={16} />
+                <Text>{getSelfServeDisplayAmount(record)}</Text>
+              </span>
             );
           }
           if (isAdminManagedTopup(record)) {
@@ -1618,7 +1647,7 @@ const TopupBillingTable = ({
               ? t('审批退款')
               : userIsAdmin
                 ? isBalanceTopup(refundRecord)
-                  ? t('余额支付退款')
+                  ? t('余额退款')
                   : isSelfServeTopup(refundRecord)
                     ? t('自助支付退款')
                     : t('官方支付退款')

@@ -1396,6 +1396,10 @@ func TestAdminQueryWechatPayOfficialRefundSyncsSubscriptionOrder(t *testing.T) {
 	reloadedOrder := model.GetSubscriptionOrderByTradeNo("WXSUB_REFUND_QUERY_SYNC")
 	require.NotNil(t, reloadedOrder)
 	assert.Equal(t, common.TopUpStatusPartialRefunded, reloadedOrder.Status)
+
+	var reloadedSub model.UserSubscription
+	require.NoError(t, db.Where("user_id = ? AND plan_id = ?", 87, plan.Id).First(&reloadedSub).Error)
+	assert.Equal(t, "cancelled", reloadedSub.Status)
 }
 
 func TestAdminQueryWechatPayOfficialRefundClosedRollsBackSubscriptionOrder(t *testing.T) {
@@ -1475,6 +1479,9 @@ func TestAdminQueryWechatPayOfficialRefundClosedRollsBackSubscriptionOrder(t *te
 	reloadedOrder := model.GetSubscriptionOrderByTradeNo(order.TradeNo)
 	require.NotNil(t, reloadedOrder)
 	require.Equal(t, common.TopUpStatusPartialRefunded, reloadedOrder.Status)
+	var cancelledSub model.UserSubscription
+	require.NoError(t, db.Where("user_id = ? AND plan_id = ?", 88, plan.Id).First(&cancelledSub).Error)
+	require.Equal(t, "cancelled", cancelledSub.Status)
 
 	newWechatPayOfficialClient = func() *service.WechatPayOfficialClient {
 		return &service.WechatPayOfficialClient{
@@ -1502,6 +1509,9 @@ func TestAdminQueryWechatPayOfficialRefundClosedRollsBackSubscriptionOrder(t *te
 	reloadedOrder = model.GetSubscriptionOrderByTradeNo("WXSUB_REFUND_QUERY_CLOSED")
 	require.NotNil(t, reloadedOrder)
 	assert.Equal(t, common.TopUpStatusSuccess, reloadedOrder.Status)
+	var restoredSub model.UserSubscription
+	require.NoError(t, db.Where("user_id = ? AND plan_id = ?", 88, plan.Id).First(&restoredSub).Error)
+	assert.Equal(t, "active", restoredSub.Status)
 }
 
 func TestAdminQueryWechatPayOfficialRefundClosedRollsBackBalanceTopUp(t *testing.T) {

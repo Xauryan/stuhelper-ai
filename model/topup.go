@@ -19,32 +19,34 @@ import (
 )
 
 type TopUp struct {
-	Id                  int     `json:"id"`
-	UserId              int     `json:"user_id" gorm:"index;index:idx_topup_user_create,priority:1"`
-	Username            string  `json:"username" gorm:"-"`
-	Amount              int64   `json:"amount"`
-	Money               float64 `json:"money"`
-	Fee                 float64 `json:"fee" gorm:"default:0"`
-	RefundedMoney       float64 `json:"refunded_money" gorm:"default:0"`
-	RefundedQuota       int64   `json:"refunded_quota" gorm:"default:0"`
-	RefundRequestId     int     `json:"refund_request_id" gorm:"-"`
-	RefundRequestStatus string  `json:"refund_request_status" gorm:"-"`
-	RefundRequestAmount float64 `json:"refund_request_amount" gorm:"-"`
-	RefundRequestReason string  `json:"refund_request_reason" gorm:"-"`
-	RefundRequestQRCode string  `json:"refund_request_qrcode,omitempty" gorm:"-"`
-	TradeNo             string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	PaymentMethod       string  `json:"payment_method" gorm:"type:varchar(50)"`
-	PaymentProvider     string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
-	CreateTime          int64   `json:"create_time" gorm:"index:idx_topup_user_create,priority:2"`
-	CompleteTime        int64   `json:"complete_time"`
-	Status              string  `json:"status"`
-	AuditStatus         string  `json:"audit_status,omitempty" gorm:"-"`
-	TransactionNo       string  `json:"transaction_no,omitempty" gorm:"-"`
-	DeclaredMoney       float64 `json:"declared_money,omitempty" gorm:"-"`
-	CreditedQuota       int64   `json:"credited_quota,omitempty" gorm:"-"`
-	AuditAdminReason    string  `json:"audit_admin_reason,omitempty" gorm:"-"`
-	AuditorId           int     `json:"auditor_id,omitempty" gorm:"-"`
-	ReviewedTime        int64   `json:"reviewed_time,omitempty" gorm:"-"`
+	Id                    int     `json:"id"`
+	UserId                int     `json:"user_id" gorm:"index;index:idx_topup_user_create,priority:1"`
+	Username              string  `json:"username" gorm:"-"`
+	Amount                int64   `json:"amount"`
+	Money                 float64 `json:"money"`
+	Fee                   float64 `json:"fee" gorm:"default:0"`
+	RefundedMoney         float64 `json:"refunded_money" gorm:"default:0"`
+	RefundedQuota         int64   `json:"refunded_quota" gorm:"default:0"`
+	RefundRequestId       int     `json:"refund_request_id" gorm:"-"`
+	RefundRequestStatus   string  `json:"refund_request_status" gorm:"-"`
+	RefundRequestAmount   float64 `json:"refund_request_amount" gorm:"-"`
+	RefundRequestReason   string  `json:"refund_request_reason" gorm:"-"`
+	RefundRequestQRCode   string  `json:"refund_request_qrcode,omitempty" gorm:"-"`
+	TradeNo               string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	PaymentMethod         string  `json:"payment_method" gorm:"type:varchar(50)"`
+	PaymentProvider       string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
+	CreateTime            int64   `json:"create_time" gorm:"index:idx_topup_user_create,priority:2"`
+	CompleteTime          int64   `json:"complete_time"`
+	Status                string  `json:"status"`
+	AuditStatus           string  `json:"audit_status,omitempty" gorm:"-"`
+	TransactionNo         string  `json:"transaction_no,omitempty" gorm:"-"`
+	DeclaredMoney         float64 `json:"declared_money,omitempty" gorm:"-"`
+	CreditedQuota         int64   `json:"credited_quota,omitempty" gorm:"-"`
+	SubscriptionPlanId    int     `json:"subscription_plan_id,omitempty" gorm:"-"`
+	SubscriptionPlanTitle string  `json:"subscription_plan_title,omitempty" gorm:"-"`
+	AuditAdminReason      string  `json:"audit_admin_reason,omitempty" gorm:"-"`
+	AuditorId             int     `json:"auditor_id,omitempty" gorm:"-"`
+	ReviewedTime          int64   `json:"reviewed_time,omitempty" gorm:"-"`
 }
 
 func (topUp TopUp) PaidMoney() float64 {
@@ -478,7 +480,7 @@ func calculateSubscriptionPaymentRefundPreview(tx *gorm.DB, topUp TopUp, order S
 	now := common.GetTimestamp()
 	timeRatio := subscriptionRefundTimeRatio(*sub, plan, now)
 	quotaRatio := subscriptionQuotaUsedRatio(*sub)
-	usedRatio := decimal.Max(timeRatio, quotaRatio)
+	usedRatio := quotaRatio
 	if usedRatio.LessThan(decimal.Zero) {
 		usedRatio = decimal.Zero
 	}
@@ -486,7 +488,8 @@ func calculateSubscriptionPaymentRefundPreview(tx *gorm.DB, topUp TopUp, order S
 		usedRatio = decimal.NewFromInt(1)
 	}
 	unusedRatio := decimal.NewFromInt(1).Sub(usedRatio)
-	maxMoney := orderMoney.Mul(unusedRatio).RoundFloor(2)
+	refundedMoney := decimal.NewFromFloat(topUp.RefundedMoney).Round(2)
+	maxMoney := orderMoney.Mul(unusedRatio).Sub(refundedMoney).RoundFloor(2)
 	if maxMoney.GreaterThan(remainingMoney) {
 		maxMoney = remainingMoney
 	}
@@ -1955,6 +1958,56 @@ func fillSelfServeTopUpAudits(topUps []*TopUp) {
 	}
 }
 
+func fillSubscriptionTopUpPlans(topUps []*TopUp) {
+	if len(topUps) == 0 {
+		return
+	}
+	tradeNos := make([]string, 0, len(topUps))
+	for _, topUp := range topUps {
+		if topUp != nil && strings.TrimSpace(topUp.TradeNo) != "" && topUp.Amount == 0 {
+			tradeNos = append(tradeNos, topUp.TradeNo)
+		}
+	}
+	if len(tradeNos) == 0 {
+		return
+	}
+	var orders []SubscriptionOrder
+	if err := DB.Select("trade_no", "plan_id").Where("trade_no IN ?", tradeNos).Find(&orders).Error; err != nil {
+		return
+	}
+	orderByTradeNo := make(map[string]SubscriptionOrder, len(orders))
+	planIds := make([]int, 0, len(orders))
+	for _, order := range orders {
+		orderByTradeNo[order.TradeNo] = order
+		if order.PlanId > 0 {
+			planIds = append(planIds, order.PlanId)
+		}
+	}
+	planIds = uniqueIntSlice(planIds)
+	if len(planIds) == 0 || (len(planIds) == 1 && planIds[0] == -1) {
+		return
+	}
+	var plans []SubscriptionPlan
+	if err := DB.Select("id", "title").Where("id IN ?", planIds).Find(&plans).Error; err != nil {
+		return
+	}
+	titleByPlanId := make(map[int]string, len(plans))
+	for _, plan := range plans {
+		titleByPlanId[plan.Id] = plan.Title
+	}
+	for _, topUp := range topUps {
+		if topUp == nil {
+			continue
+		}
+		order, ok := orderByTradeNo[topUp.TradeNo]
+		if !ok {
+			continue
+		}
+		topUp.SubscriptionPlanId = order.PlanId
+		topUp.SubscriptionPlanTitle = titleByPlanId[order.PlanId]
+	}
+}
+
 func parseTopUpUserIDKeyword(keyword string) (int, bool) {
 	value, err := strconv.Atoi(strings.TrimSpace(keyword))
 	if err != nil || value <= 0 {
@@ -2194,6 +2247,7 @@ func GetUserTopUpsResultWithOptions(userId int, options TopUpQueryOptions, pageI
 	// /topup/self 视图不展示用户名列，无需回填，省一次额外查询
 	fillTopUpPendingRefundRequests(result.Items)
 	fillSelfServeTopUpAudits(result.Items)
+	fillSubscriptionTopUpPlans(result.Items)
 
 	return result, nil
 }
@@ -2246,6 +2300,7 @@ func GetAllTopUpsResultWithOptions(options TopUpQueryOptions, pageInfo *common.P
 	fillTopUpUsernames(result.Items)
 	fillTopUpPendingRefundRequests(result.Items)
 	fillSelfServeTopUpAudits(result.Items)
+	fillSubscriptionTopUpPlans(result.Items)
 
 	return result, nil
 }
@@ -2272,7 +2327,8 @@ func IsSubscriptionTopUpRecord(topUp *TopUp) bool {
 	return strings.HasPrefix(tradeNo, "SUB") ||
 		strings.HasPrefix(tradeNo, "ALIPAYSUB") ||
 		strings.HasPrefix(tradeNo, "WXSUB") ||
-		strings.HasPrefix(tradeNo, "SSSUB")
+		strings.HasPrefix(tradeNo, "SSSUB") ||
+		strings.HasPrefix(tradeNo, "BALANCE__")
 }
 
 func adminTopUpTradeNo() string {
@@ -2361,7 +2417,11 @@ func SelfServeTopUpPaymentMethodName(paymentMethod string) string {
 }
 
 func selfServeTopUpTradeNo(userId int) string {
-	return BuildPaymentTradeNo("SSU", userId)
+	return selfServeTopUpTradeNoForPaymentMethod(PaymentMethodAlipaySelfServe, userId)
+}
+
+func selfServeTopUpTradeNoForPaymentMethod(paymentMethod string, userId int) string {
+	return BuildSelfServePaymentTradeNo(paymentMethod, false, userId)
 }
 
 func selfServeTopUpRejectNo() string {
@@ -2528,7 +2588,7 @@ func CreateSelfServeTopUp(params SelfServeTopUpCreateParams) (*SelfServeTopUpRev
 			Amount:          quotaToAdd,
 			Money:           money.InexactFloat64(),
 			Fee:             0,
-			TradeNo:         selfServeTopUpTradeNo(params.UserId),
+			TradeNo:         selfServeTopUpTradeNoForPaymentMethod(paymentMethod, params.UserId),
 			PaymentMethod:   paymentMethod,
 			PaymentProvider: PaymentProviderSelfServe,
 			CreateTime:      now,

@@ -410,8 +410,8 @@ func TestCalculateOfficialPaymentRefundPreviewUsesStrictSubscriptionUnusedRatio(
 	require.NoError(t, err)
 	require.True(t, preview.Refundable)
 	assert.True(t, preview.IsSubscription)
-	assert.InDelta(t, 50.00, preview.MaxRefundAmount, 0.0001)
-	assert.Equal(t, int64(500), preview.MaxRefundQuota)
+	assert.InDelta(t, 80.00, preview.MaxRefundAmount, 0.0001)
+	assert.Equal(t, int64(800), preview.MaxRefundQuota)
 }
 
 func TestCreateTopUpRefundRequestRequiresReasonAndExposesPendingRequest(t *testing.T) {
@@ -514,6 +514,10 @@ func TestCreateOfficialPaymentRefundAllowsSubscriptionRefundWithoutDeductingWall
 	reloadedOrder := GetSubscriptionOrderByTradeNo(order.TradeNo)
 	require.NotNil(t, reloadedOrder)
 	assert.Equal(t, common.TopUpStatusPartialRefunded, reloadedOrder.Status)
+
+	var sub UserSubscription
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 272, plan.Id).First(&sub).Error)
+	assert.Equal(t, "cancelled", sub.Status)
 }
 
 func TestRefundSubscriptionOrderReversesSubscriptionReferralCommission(t *testing.T) {
@@ -1683,7 +1687,7 @@ func TestCalculateOfficialPaymentRefundPreviewUsesResetCycleForSubscriptionTime(
 	require.NoError(t, err)
 	require.True(t, preview.IsSubscription)
 	assert.InDelta(t, float64(4)/7, preview.SubscriptionTimeRatio, 0.0001)
-	assert.InDelta(t, 24.85, preview.MaxRefundAmount, 0.0001)
-	assert.Equal(t, int64(30), preview.MaxRefundQuota)
+	assert.InDelta(t, 58.00, preview.MaxRefundAmount, 0.0001)
+	assert.Equal(t, int64(70), preview.MaxRefundQuota)
 	assert.InDelta(t, 58.00, preview.RemainingRefundAmount, 0.0001)
 }
