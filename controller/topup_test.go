@@ -247,7 +247,7 @@ func TestGetTopUpInfoIncludesSelfServeUnitPriceAndTopupGroupRatio(t *testing.T) 
 	setting.SelfServeTopUpEnabled = true
 	setting.SelfServeAlipayEnabled = true
 	setting.SelfServeWechatPayEnabled = false
-	setting.SelfServeAlipayQRCode = "data:image/png;base64,Zm9v"
+	setting.SelfServeAlipayQRCode = "https://qr.alipay.com/45t165972y9chxii0fm3fe8"
 	setting.SelfServeWechatPayQRCode = ""
 	setting.SelfServeTopUpUnitPrice = 1.23
 	setting.SelfServeTopUpSingleMaxAmount = 199.99
@@ -268,6 +268,7 @@ func TestGetTopUpInfoIncludesSelfServeUnitPriceAndTopupGroupRatio(t *testing.T) 
 			EnableSelfServeTopUp     bool                `json:"enable_self_serve_topup"`
 			SelfServeTopupGroupRatio float64             `json:"self_serve_topup_group_ratio"`
 			PayMethods               []map[string]string `json:"pay_methods"`
+			SelfServeQRCodes         map[string]string   `json:"self_serve_qrcodes"`
 			SelfServeLimits          struct {
 				SingleMaxMoney  float64 `json:"single_max_money"`
 				DailyMaxMoney   float64 `json:"daily_max_money"`
@@ -287,6 +288,7 @@ func TestGetTopUpInfoIncludesSelfServeUnitPriceAndTopupGroupRatio(t *testing.T) 
 	require.Len(t, payload.Data.PayMethods, 1)
 	require.Equal(t, model.PaymentMethodAlipaySelfServe, payload.Data.PayMethods[0]["type"])
 	require.Equal(t, "1.23", payload.Data.PayMethods[0]["unit_price"])
+	require.Contains(t, payload.Data.SelfServeQRCodes[model.PaymentMethodAlipaySelfServe], "data:image/png;base64,")
 }
 
 func TestBuildOfficialTradeNoUsesAlipaySafeCharacters(t *testing.T) {

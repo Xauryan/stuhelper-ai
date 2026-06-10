@@ -60,7 +60,6 @@ const SubscriptionPurchaseModal = ({
   purchaseLimitInfo = null,
   balanceCost = 0,
   availableBalance = 0,
-  insufficientBalance = false,
   onConfirm,
 }) => {
   const plan = selectedPlan?.plan;
@@ -86,11 +85,7 @@ const SubscriptionPurchaseModal = ({
       maskClosable={false}
       confirmLoading={paying}
       okButtonProps={{
-        disabled:
-          !selectedPaymentMethod ||
-          purchaseLimitReached ||
-          (selectedPaymentMethod?.provider === 'balance' &&
-            insufficientBalance),
+        disabled: !selectedPaymentMethod || purchaseLimitReached,
       }}
     >
       {plan ? (
@@ -199,7 +194,7 @@ const SubscriptionPurchaseModal = ({
                       {t('可用余额')}：
                     </Text>
                     <Text
-                      type={insufficientBalance ? 'danger' : 'secondary'}
+                      type='secondary'
                       className='text-slate-900 dark:text-slate-100'
                     >
                       {renderQuota(availableBalance)}
@@ -226,15 +221,6 @@ const SubscriptionPurchaseModal = ({
               closeIcon={null}
             />
           )}
-          {selectedPaymentMethod?.provider === 'balance' &&
-            insufficientBalance && (
-              <Banner
-                type='danger'
-                description={t('余额不足')}
-                className='!rounded-xl'
-                closeIcon={null}
-              />
-            )}
         </div>
       ) : null}
     </Modal>

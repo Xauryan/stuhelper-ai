@@ -365,6 +365,11 @@ classic 后台“订阅管理”还提供“允许余额支付”开关，对应
 支付宝官方、微信支付官方、易支付、Stripe 或 Creem 等现金支付通道。关闭后，
 classic 订阅购买页不再展示“余额支付”，后端也会拒绝
 `POST /api/subscription/balance/pay`，避免旧前端或直接调用绕过前端隐藏逻辑。
+classic 订阅购买页会展示所需余额和可用余额，但不会再根据本地缓存余额禁用
+余额支付按钮或提前提示余额不足；最终余额是否足够由
+`POST /api/subscription/balance/pay` 在后端事务中锁定用户并按
+`price_amount * QuotaPerUnit` 判定，避免前端缓存的余额或额度单位未及时刷新时
+误拦截用户。
 
 official 支付与其他支付方式在 classic 订阅购买页走同一套选择流程：用户先在
 套餐列表中选中一个套餐，再在套餐列表下方选择当前可用于订阅的支付方式，页面

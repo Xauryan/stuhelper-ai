@@ -62,10 +62,7 @@ export function getSelfServeMethods({
   selfServeQrCodes = {},
   selfServeUnitPrice,
 } = {}) {
-  const unitPrice = normalizeUnitPrice(selfServeUnitPrice);
-  if (!unitPrice) {
-    return [];
-  }
+  const configuredUnitPrice = normalizeUnitPrice(selfServeUnitPrice);
 
   const candidates = [
     {
@@ -83,6 +80,8 @@ export function getSelfServeMethods({
   return candidates
     .map((candidate) => {
       const method = getSelfServeMethod(payMethods, candidate.type);
+      const unitPrice =
+        configuredUnitPrice ?? normalizeUnitPrice(method?.unit_price);
       const qrCode = selfServeQrCodes?.[candidate.type] || '';
       if (!qrCode) {
         return null;

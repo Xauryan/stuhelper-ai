@@ -109,6 +109,25 @@ assert.deepEqual(
   ['self_serve:alipay_self_serve'],
 );
 assert.equal(
+  getSelfServeMethods({
+    payMethods: [
+      { name: '支付宝自助', type: 'alipay_self_serve', unit_price: '1.7' },
+    ],
+    selfServeQrCodes: {
+      alipay_self_serve: 'data:image/png;base64,generated-qr',
+    },
+  })[0]?.unitPrice,
+  1.7,
+);
+assert.deepEqual(
+  getSelfServeMethods({
+    selfServeQrCodes: {
+      alipay_self_serve: 'data:image/png;base64,generated-qr',
+    },
+  }).map((method) => [method.key, method.unitPrice]),
+  [['self_serve:alipay_self_serve', null]],
+);
+assert.equal(
   buildSubscriptionPaymentMethods({
     plan: {},
     payMethods: [{ name: '微信', type: 'wxpay_official', unit_price: '1.006' }],

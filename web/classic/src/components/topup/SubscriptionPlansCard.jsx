@@ -272,7 +272,6 @@ const SubscriptionPlansCard = ({
     Math.ceil(Number(selectedPlan?.plan?.price_amount || 0) * quotaPerUnit),
   );
   const availableBalance = Math.max(0, Number(userQuota || 0));
-  const insufficientBalance = availableBalance < balanceCost;
 
   React.useEffect(() => {
     if (!selectedPlan?.plan) {
@@ -324,9 +323,10 @@ const SubscriptionPlansCard = ({
   const selectedPayAmountDisplay =
     selectedPaymentMethod?.provider === 'balance'
       ? renderQuota(balanceCost)
-      : selectedPaymentMethod?.provider === 'self_serve' &&
-          selectedSelfServeExpectedMoney !== null
-        ? `¥${selectedSelfServeExpectedMoney.toFixed(2)}`
+      : selectedPaymentMethod?.provider === 'self_serve'
+        ? selectedSelfServeExpectedMoney !== null
+          ? `¥${selectedSelfServeExpectedMoney.toFixed(2)}`
+          : t('请先配置自助充值价格')
         : selectedPayAmount;
 
   const renderPaymentIcon = (method) => {
@@ -464,10 +464,6 @@ const SubscriptionPlansCard = ({
   const payBalance = async () => {
     if (!selectedPlan?.plan?.id) {
       showError(t('请选择订阅套餐'));
-      return;
-    }
-    if (insufficientBalance) {
-      showError(t('余额不足'));
       return;
     }
     setPaying(true);
@@ -711,10 +707,6 @@ const SubscriptionPlansCard = ({
     }
     if (!selectedPaymentMethod) {
       showError(t('请选择支付方式'));
-      return;
-    }
-    if (selectedPaymentMethod.provider === 'balance' && insufficientBalance) {
-      showError(t('余额不足'));
       return;
     }
     if (
@@ -1277,9 +1269,6 @@ const SubscriptionPlansCard = ({
                           type='primary'
                           icon={renderPaymentIcon(method)}
                           onClick={() => setSelectedPaymentKey(method.key)}
-                          disabled={
-                            method.provider === 'balance' && insufficientBalance
-                          }
                           className='!rounded-lg !px-4 !py-2'
                         >
                           {method.name}
@@ -1308,9 +1297,7 @@ const SubscriptionPlansCard = ({
                         loading={paying}
                         disabled={
                           !selectedPaymentMethod ||
-                          selectedPlanPurchaseLimitReached ||
-                          (selectedPaymentMethod.provider === 'balance' &&
-                            insufficientBalance)
+                          selectedPlanPurchaseLimitReached
                         }
                         onClick={openBuy}
                       >
@@ -1323,12 +1310,6 @@ const SubscriptionPlansCard = ({
                         {selectedPlanPurchaseLimit})
                       </Text>
                     )}
-                    {selectedPaymentMethod?.provider === 'balance' &&
-                      insufficientBalance && (
-                        <Text type='danger' size='small'>
-                          {t('余额不足')}
-                        </Text>
-                      )}
                   </>
                 ) : (
                   <Banner
@@ -1368,7 +1349,6 @@ const SubscriptionPlansCard = ({
         purchaseLimitInfo={selectedPlanPurchaseInfo}
         balanceCost={balanceCost}
         availableBalance={availableBalance}
-        insufficientBalance={insufficientBalance}
         onConfirm={confirmSubscriptionPurchase}
       />
 

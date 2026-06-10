@@ -174,8 +174,8 @@ func GetTopUpInfo(c *gin.Context) {
 		"enable_self_serve_alipay_topup":   enableSelfServeAlipay,
 		"enable_self_serve_wechat_topup":   enableSelfServeWechatPay,
 		"self_serve_qrcodes": gin.H{
-			model.PaymentMethodAlipaySelfServe: setting.SelfServeAlipayQRCode,
-			model.PaymentMethodWechatSelfServe: setting.SelfServeWechatPayQRCode,
+			model.PaymentMethodAlipaySelfServe: selfServeQRCodeDisplayValue(setting.SelfServeAlipayQRCode),
+			model.PaymentMethodWechatSelfServe: selfServeQRCodeDisplayValue(setting.SelfServeWechatPayQRCode),
 		},
 		"self_serve_limits": gin.H{
 			"single_max_money":  setting.SelfServeTopUpSingleMaxAmount,
