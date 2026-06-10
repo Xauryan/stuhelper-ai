@@ -292,6 +292,209 @@ func TestPurchaseSubscriptionWithBalanceDeductsQuotaAndCreatesSubscriptionOrder(
 	assert.EqualValues(t, 0, commissionCount)
 }
 
+func TestPurchaseSubscriptionWithBalanceExtendsSamePlanAndDefersFutureUse(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 1000
+	require.NoError(t, DB.Create(&User{
+		Id:       3014,
+		Username: "balance-subscription-renew-user",
+		Status:   common.UserStatusEnabled,
+		Quota:    3000,
+		Group:    "default",
+		AffCode:  "balance-subscription-renew-user",
+	}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1014, 1000, false, "")
+	plan.PriceAmount = 1
+	plan.DurationUnit = SubscriptionDurationCustom
+	plan.CustomSeconds = int64(time.Hour / time.Second)
+	require.NoError(t, DB.Save(plan).Error)
+	InvalidateSubscriptionPlanCache(plan.Id)
+
+	require.NoError(t, PurchaseSubscriptionWithBalance(3014, plan.Id))
+	require.NoError(t, PurchaseSubscriptionWithBalance(3014, plan.Id))
+
+	var subs []UserSubscription
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3014, plan.Id).
+		Order("start_time asc, id asc").
+		Find(&subs).Error)
+	require.Len(t, subs, 2)
+	assert.Equal(t, subs[0].EndTime, subs[1].StartTime)
+	assert.Equal(t, subs[1].StartTime+int64(time.Hour/time.Second), subs[1].EndTime)
+
+	activeSubs, err := GetAllActiveUserSubscriptions(3014)
+	require.NoError(t, err)
+	require.Len(t, activeSubs, 1)
+	assert.Equal(t, subs[0].Id, activeSubs[0].Subscription.Id)
+
+	hasActive, err := HasActiveUserSubscription(3014)
+	require.NoError(t, err)
+	assert.True(t, hasActive)
+
+	result, err := PreConsumeUserSubscription("balance-renew-current-only", 3014, "", 0, 10)
+	require.NoError(t, err)
+	assert.Equal(t, subs[0].Id, result.UserSubscriptionId)
+
+	var futureSub UserSubscription
+	require.NoError(t, DB.Where("id = ?", subs[1].Id).First(&futureSub).Error)
+	assert.EqualValues(t, 0, futureSub.AmountUsed)
+}
+
+func TestBalanceSubscriptionRefundTargetsOrderSubscriptionFromPayload(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 1000
+	require.NoError(t, DB.Create(&User{
+		Id:       3015,
+		Username: "balance-subscription-refund-target-user",
+		Status:   common.UserStatusEnabled,
+		Quota:    3000,
+		Group:    "default",
+		AffCode:  "balance-subscription-refund-target-user",
+	}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1015, 1000, false, "")
+	plan.PriceAmount = 1
+	plan.DurationUnit = SubscriptionDurationCustom
+	plan.CustomSeconds = int64(time.Hour / time.Second)
+	require.NoError(t, DB.Save(plan).Error)
+	InvalidateSubscriptionPlanCache(plan.Id)
+
+	require.NoError(t, PurchaseSubscriptionWithBalance(3015, plan.Id))
+	require.NoError(t, PurchaseSubscriptionWithBalance(3015, plan.Id))
+
+	var orders []SubscriptionOrder
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3015, plan.Id).
+		Order("id asc").
+		Find(&orders).Error)
+	require.Len(t, orders, 2)
+	var subs []UserSubscription
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3015, plan.Id).
+		Order("id asc").
+		Find(&subs).Error)
+	require.Len(t, subs, 2)
+
+	firstPayloadSubId, ok := providerPayloadSubscriptionID(orders[0].ProviderPayload)
+	require.True(t, ok)
+	secondPayloadSubId, ok := providerPayloadSubscriptionID(orders[1].ProviderPayload)
+	require.True(t, ok)
+	assert.Equal(t, subs[0].Id, firstPayloadSubId)
+	assert.Equal(t, subs[1].Id, secondPayloadSubId)
+
+	refund, err := CreateBalanceSubscriptionRefund(orders[1].TradeNo, 1, "refund renewed segment", true)
+	require.NoError(t, err)
+	require.NotNil(t, refund)
+	assert.EqualValues(t, 1000, refund.RefundQuota)
+	assert.Equal(t, 2000, getUserQuotaForPaymentGuardTest(t, 3015))
+
+	var firstSub UserSubscription
+	require.NoError(t, DB.Where("id = ?", subs[0].Id).First(&firstSub).Error)
+	assert.Equal(t, "active", firstSub.Status)
+	var secondSub UserSubscription
+	require.NoError(t, DB.Where("id = ?", subs[1].Id).First(&secondSub).Error)
+	assert.Equal(t, "cancelled", secondSub.Status)
+}
+
+func TestRenewedSubscriptionUpgradeGroupAppliesWhenStarted(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 1000
+	require.NoError(t, DB.Create(&User{
+		Id:       3017,
+		Username: "balance-subscription-renew-group-user",
+		Status:   common.UserStatusEnabled,
+		Quota:    3000,
+		Group:    "default",
+		AffCode:  "balance-subscription-renew-group-user",
+	}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1017, 1000, false, "")
+	plan.PriceAmount = 1
+	plan.UpgradeGroup = "vip"
+	plan.DurationUnit = SubscriptionDurationCustom
+	plan.CustomSeconds = int64(time.Hour / time.Second)
+	require.NoError(t, DB.Save(plan).Error)
+	InvalidateSubscriptionPlanCache(plan.Id)
+
+	require.NoError(t, PurchaseSubscriptionWithBalance(3017, plan.Id))
+	require.NoError(t, PurchaseSubscriptionWithBalance(3017, plan.Id))
+
+	var orders []SubscriptionOrder
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3017, plan.Id).
+		Order("id asc").
+		Find(&orders).Error)
+	require.Len(t, orders, 2)
+	var subs []UserSubscription
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3017, plan.Id).
+		Order("start_time asc, id asc").
+		Find(&subs).Error)
+	require.Len(t, subs, 2)
+	assert.Equal(t, "default", subs[0].PrevUserGroup)
+	assert.Equal(t, "default", subs[1].PrevUserGroup)
+	assert.Equal(t, "vip", getUserGroupForPaymentGuardTest(t, 3017))
+
+	_, err := CreateBalanceSubscriptionRefund(orders[0].TradeNo, 1, "refund current segment", true)
+	require.NoError(t, err)
+	assert.Equal(t, "default", getUserGroupForPaymentGuardTest(t, 3017))
+
+	now := common.GetTimestamp()
+	require.NoError(t, DB.Model(&UserSubscription{}).
+		Where("id = ?", subs[1].Id).
+		Updates(map[string]interface{}{
+			"start_time": now - 10,
+			"end_time":   now + int64(time.Hour/time.Second),
+		}).Error)
+	applied, err := ApplyStartedSubscriptionUpgradeGroups(20)
+	require.NoError(t, err)
+	assert.Equal(t, 1, applied)
+	assert.Equal(t, "vip", getUserGroupForPaymentGuardTest(t, 3017))
+}
+
+func TestBalanceSubscriptionRefundRequestCanBeCreated(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 1000
+	require.NoError(t, DB.Create(&User{
+		Id:       3016,
+		Username: "balance-subscription-request-user",
+		Status:   common.UserStatusEnabled,
+		Quota:    2000,
+		Group:    "default",
+		AffCode:  "balance-subscription-request-user",
+	}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1016, 1000, false, "")
+	plan.PriceAmount = 1
+	require.NoError(t, DB.Save(plan).Error)
+	InvalidateSubscriptionPlanCache(plan.Id)
+
+	require.NoError(t, PurchaseSubscriptionWithBalance(3016, plan.Id))
+	var order SubscriptionOrder
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3016, plan.Id).First(&order).Error)
+
+	request, preview, err := CreateTopUpRefundRequest(3016, order.TradeNo, 0.5, "balance subscription refund request")
+	require.NoError(t, err)
+	require.NotNil(t, request)
+	require.NotNil(t, preview)
+	assert.True(t, preview.Refundable)
+	assert.True(t, preview.IsSubscription)
+	assert.Equal(t, TopUpRefundRequestStatusPending, request.Status)
+	assert.Equal(t, PaymentProviderBalance, request.PaymentProvider)
+}
+
 func TestBalanceSubscriptionRefundPreviewAndPartialRefund(t *testing.T) {
 	truncateTables(t)
 

@@ -760,9 +760,13 @@ func AdminApproveOfficialPaymentRefundRequest(c *gin.Context) {
 	}
 	var result gin.H
 	var err error
-	if refundRequest.PaymentProvider == model.PaymentProviderSelfServe {
+	isSelfServeRefundRequest := refundRequest.PaymentProvider == model.PaymentProviderSelfServe ||
+		model.NormalizeSelfServePaymentMethod(refundRequest.PaymentMethod) != ""
+	isBalanceRefundRequest := refundRequest.PaymentProvider == model.PaymentProviderBalance ||
+		refundRequest.PaymentMethod == model.PaymentMethodBalance
+	if isSelfServeRefundRequest {
 		result, err = executeSelfServeManualRefund(c.Request.Context(), refundRequest.TradeNo, amount, firstNonEmptyString(req.Reason, refundRequest.Reason), c.ClientIP(), req.FullRefund)
-	} else if refundRequest.PaymentProvider == model.PaymentProviderBalance {
+	} else if isBalanceRefundRequest {
 		result, err = executeBalanceSubscriptionRefund(c.Request.Context(), refundRequest.TradeNo, amount, firstNonEmptyString(req.Reason, refundRequest.Reason), c.ClientIP(), req.FullRefund)
 	} else {
 		result, err = executeOfficialPaymentRefund(c.Request.Context(), refundRequest.TradeNo, amount, firstNonEmptyString(req.Reason, refundRequest.Reason), c.ClientIP(), refundRequest.PaymentProvider, refundRequest.PaymentMethod, req.FullRefund)

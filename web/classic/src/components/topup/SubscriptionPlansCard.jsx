@@ -618,6 +618,27 @@ const SubscriptionPlansCard = ({
   const hasActiveSubscription = activeSubscriptions.length > 0;
   const hasAnySubscription = allSubscriptions.length > 0;
   const disableSubscriptionPreference = !hasActiveSubscription;
+  const subscriptionStatusCounts = useMemo(() => {
+    const now = Date.now() / 1000;
+    return (allSubscriptions || []).reduce(
+      (counts, sub) => {
+        const subscription = sub?.subscription;
+        if (!subscription) {
+          return counts;
+        }
+        const status = subscription.status;
+        const startTime = Number(subscription.start_time || 0);
+        const endTime = Number(subscription.end_time || 0);
+        if (status === 'active' && startTime > now && endTime > now) {
+          counts.pendingStart += 1;
+        } else if (status !== 'active' || endTime <= now) {
+          counts.inactive += 1;
+        }
+        return counts;
+      },
+      { pendingStart: 0, inactive: 0 },
+    );
+  }, [allSubscriptions]);
   const isSubscriptionPreference =
     billingPreference === 'subscription_first' ||
     billingPreference === 'subscription_only';
@@ -911,10 +932,18 @@ const SubscriptionPlansCard = ({
                   </Tag>
                 )}
                 {allSubscriptions.length > activeSubscriptions.length && (
-                  <Tag color='white' size='small' shape='circle'>
-                    {allSubscriptions.length - activeSubscriptions.length}{' '}
-                    {t('个已过期')}
-                  </Tag>
+                  <>
+                    {subscriptionStatusCounts.pendingStart > 0 && (
+                      <Tag color='white' size='small' shape='circle'>
+                        {subscriptionStatusCounts.pendingStart} {t('未开始')}
+                      </Tag>
+                    )}
+                    {subscriptionStatusCounts.inactive > 0 && (
+                      <Tag color='white' size='small' shape='circle'>
+                        {subscriptionStatusCounts.inactive} {t('个已过期')}
+                      </Tag>
+                    )}
+                  </>
                 )}
               </div>
               <div className='flex items-center gap-2'>
@@ -982,10 +1011,17 @@ const SubscriptionPlansCard = ({
                     const remainDays = getRemainingDays(sub);
                     const usagePercent = getUsagePercent(sub);
                     const now = Date.now() / 1000;
-                    const isExpired = (subscription?.end_time || 0) < now;
+                    const hasStarted = (subscription?.start_time || 0) <= now;
+                    const isExpired = (subscription?.end_time || 0) <= now;
                     const isCancelled = subscription?.status === 'cancelled';
                     const isActive =
-                      subscription?.status === 'active' && !isExpired;
+                      subscription?.status === 'active' &&
+                      hasStarted &&
+                      !isExpired;
+                    const isPendingStart =
+                      subscription?.status === 'active' &&
+                      !hasStarted &&
+                      !isExpired;
 
                     return (
                       <div key={subscription?.id || subIndex}>
@@ -1006,6 +1042,10 @@ const SubscriptionPlansCard = ({
                               >
                                 {t('生效')}
                               </Tag>
+                            ) : isPendingStart ? (
+                              <Tag color='white' size='small' shape='circle'>
+                                {t('未开始')}
+                              </Tag>
                             ) : isCancelled ? (
                               <Tag color='white' size='small' shape='circle'>
                                 {t('已作废')}
@@ -1025,9 +1065,16 @@ const SubscriptionPlansCard = ({
                         <div className='text-xs text-gray-500 mb-2'>
                           {isActive
                             ? t('至')
-                            : isCancelled
-                              ? t('作废于')
-                              : t('过期于')}{' '}
+                            : isPendingStart
+                              ? t('未开始')
+                              : isCancelled
+                                ? t('作废于')
+                                : t('过期于')}{' '}
+                          {isPendingStart
+                            ? `${new Date(
+                                (subscription?.start_time || 0) * 1000,
+                              ).toLocaleString()} - `
+                            : ''}
                           {new Date(
                             (subscription?.end_time || 0) * 1000,
                           ).toLocaleString()}

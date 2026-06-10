@@ -88,6 +88,13 @@ func getUserQuotaForPaymentGuardTest(t *testing.T, userID int) int {
 	return user.Quota
 }
 
+func getUserGroupForPaymentGuardTest(t *testing.T, userID int) string {
+	t.Helper()
+	var user User
+	require.NoError(t, DB.Select(commonGroupCol).Where("id = ?", userID).First(&user).Error)
+	return user.Group
+}
+
 func TestRechargeWaffoPancake_RejectsMismatchedPaymentMethod(t *testing.T) {
 	truncateTables(t)
 

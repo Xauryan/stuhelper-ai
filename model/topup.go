@@ -543,6 +543,20 @@ func findRefundableUserSubscriptionForOrderTx(tx *gorm.DB, order SubscriptionOrd
 		tx = DB
 	}
 	var sub UserSubscription
+	if subscriptionId, ok := providerPayloadSubscriptionID(order.ProviderPayload); ok {
+		query := tx.Where("id = ? AND user_id = ? AND plan_id = ? AND source = ?",
+			subscriptionId,
+			order.UserId,
+			order.PlanId,
+			"order",
+		).First(&sub)
+		if query.Error == nil {
+			return &sub, nil
+		}
+		if !errors.Is(query.Error, gorm.ErrRecordNotFound) {
+			return nil, query.Error
+		}
+	}
 	query := tx.Where("user_id = ? AND plan_id = ? AND source = ? AND created_at >= ?",
 		order.UserId,
 		order.PlanId,
