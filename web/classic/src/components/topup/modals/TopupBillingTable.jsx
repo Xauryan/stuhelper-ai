@@ -56,9 +56,10 @@ import {
   getRemainingAdminRefundQuota,
   getRemainingRefundMoney,
   getTopupPaymentMethodLabel,
+  isAdminMoneyRefundable,
   isAdminManagedTopup,
   isAdminManagedTopupRefundable,
-  isOfficialRefundable,
+  isBalanceTopup,
   isRefundRequestable,
   isSelfServeTopup,
   isSubscriptionTopup,
@@ -81,8 +82,8 @@ const SELF_SERVE_AUDIT_STATUS_CONFIG = {
   rejected: { type: 'danger', key: '已拒绝' },
 };
 
-const isOfficialTopupRefundable = (record) =>
-  isOfficialRefundable(record) && !record.refund_request_id;
+const isAdminDirectMoneyRefundable = (record) =>
+  isAdminMoneyRefundable(record) && !record.refund_request_id;
 
 const isUserRefundRequestable = (record) =>
   isRefundRequestable(record) && !record.refund_request_id;
@@ -576,10 +577,13 @@ const TopupBillingTable = ({
         const isWechatOfficial =
           refundRecord.payment_provider === 'wxpay_official' ||
           refundRecord.payment_method === 'wxpay_official';
+        const isBalancePayment = isBalanceTopup(refundRecord);
         const endpoint = userIsAdmin
-          ? isWechatOfficial
-            ? '/api/user/topup/wechat-pay-official/refund'
-            : '/api/user/topup/alipay-official/refund'
+          ? isBalancePayment
+            ? '/api/user/topup/balance/refund'
+            : isWechatOfficial
+              ? '/api/user/topup/wechat-pay-official/refund'
+              : '/api/user/topup/alipay-official/refund'
           : '/api/user/topup/official/refund/apply';
         res = await API.post(endpoint, {
           trade_no: refundRecord.trade_no,
@@ -1196,7 +1200,7 @@ const TopupBillingTable = ({
         }
         if (
           userIsAdmin &&
-          isOfficialTopupRefundable(record) &&
+          isAdminDirectMoneyRefundable(record) &&
           record.refund_request_status !== 'pending'
         ) {
           actions.push(
@@ -1613,7 +1617,9 @@ const TopupBillingTable = ({
             : refundMode === 'approve'
               ? t('审批退款')
               : userIsAdmin
-                ? t('官方支付退款')
+                ? isBalanceTopup(refundRecord)
+                  ? t('余额支付退款')
+                  : t('官方支付退款')
                 : t('申请退款')
         }
         visible={refundVisible}

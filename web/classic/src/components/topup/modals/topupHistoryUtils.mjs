@@ -31,6 +31,24 @@ export const isSelfServeTopup = (record) =>
   record?.payment_method === 'alipay_self_serve' ||
   record?.payment_method === 'wxpay_self_serve';
 
+export const isBalanceTopup = (record) =>
+  record?.payment_provider === 'balance' ||
+  record?.payment_method === 'balance';
+
+export const isBalanceSubscriptionRefundable = (record) => {
+  if (!record) {
+    return false;
+  }
+  const statusAllowsRefund =
+    record.status === 'success' || record.status === 'partial_refunded';
+  return (
+    isBalanceTopup(record) &&
+    isSubscriptionTopup(record) &&
+    statusAllowsRefund &&
+    getRemainingRefundMoney(record) > 0
+  );
+};
+
 export const ADMIN_TOPUP_PAYMENT_METHODS = [
   'admin_add',
   '管理员增加',
@@ -96,11 +114,16 @@ export const isRefundRequestable = (record) => {
   const statusAllowsRefund =
     record.status === 'success' || record.status === 'partial_refunded';
   return (
-    (isOfficialPaymentTopup(record) || isSelfServeTopup(record)) &&
+    (isOfficialPaymentTopup(record) ||
+      isSelfServeTopup(record) ||
+      isBalanceSubscriptionRefundable(record)) &&
     statusAllowsRefund &&
     getRemainingRefundMoney(record) > 0
   );
 };
+
+export const isAdminMoneyRefundable = (record) =>
+  isOfficialRefundable(record) || isBalanceSubscriptionRefundable(record);
 
 export const isAdminManagedTopupRefundable = (record) => {
   if (!record) {
@@ -128,6 +151,7 @@ export const TOPUP_PAYMENT_METHOD_LABELS = {
   wxpay_official: '微信',
   alipay_self_serve: '支付宝自助',
   wxpay_self_serve: '微信自助',
+  balance: '余额支付',
   admin_add: '管理员充值',
   管理员增加: '管理员充值',
   管理员充值: '管理员充值',
@@ -141,5 +165,6 @@ export const BILLING_PAYMENT_METHOD_FILTERS = [
   { value: 'alipay_official', key: '支付宝' },
   { value: 'wxpay_official', key: '微信' },
   { value: 'self_serve', key: '自助充值' },
+  { value: 'balance', key: '余额支付' },
   { value: 'admin_add', key: '管理员充值' },
 ];

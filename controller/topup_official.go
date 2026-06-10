@@ -17,7 +17,6 @@ import (
 	"github.com/Xauryan/stuhelper-ai/setting"
 	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 	"github.com/shopspring/decimal"
-	"github.com/thanhpk/randstr"
 
 	"github.com/gin-gonic/gin"
 )
@@ -484,6 +483,20 @@ func AdminRefundWechatPayOfficialTopUp(c *gin.Context) {
 	common.ApiSuccess(c, result)
 }
 
+func AdminRefundBalanceSubscriptionTopUp(c *gin.Context) {
+	var req AdminRefundTopUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	result, err := executeBalanceSubscriptionRefund(c.Request.Context(), strings.TrimSpace(req.TradeNo), req.RefundAmount, req.Reason, c.ClientIP(), req.FullRefund)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
+}
+
 func executeOfficialPaymentRefund(ctx context.Context, tradeNo string, refundAmountInput float64, reason string, callerIP string, paymentProvider string, paymentMethod string, allowFullRefund bool) (gin.H, error) {
 	tradeNo = strings.TrimSpace(tradeNo)
 	refundAmount := decimal.NewFromFloat(refundAmountInput).Round(2)
@@ -574,6 +587,40 @@ func executeOfficialPaymentRefund(ctx context.Context, tradeNo string, refundAmo
 		"refund_amount":  refund.RefundAmount,
 		"refund_quota":   refund.RefundQuota,
 		"provider":       refund.PaymentProvider,
+	}, nil
+}
+
+func executeBalanceSubscriptionRefund(ctx context.Context, tradeNo string, refundAmountInput float64, reason string, callerIP string, allowFullRefund bool) (gin.H, error) {
+	tradeNo = strings.TrimSpace(tradeNo)
+	refundAmount := decimal.NewFromFloat(refundAmountInput).Round(2)
+	if tradeNo == "" {
+		return nil, errors.New("未提供订单号")
+	}
+	if !refundAmount.IsPositive() {
+		return nil, errors.New("退款金额必须大于 0")
+	}
+
+	LockOrder(tradeNo)
+	defer UnlockOrder(tradeNo)
+
+	refund, err := model.CreateBalanceSubscriptionRefund(tradeNo, refundAmount.InexactFloat64(), reason, allowFullRefund)
+	if err != nil {
+		return nil, err
+	}
+	model.RecordTopupRefundLog(
+		refund.UserId,
+		fmt.Sprintf("管理员登记余额订阅退款成功，订单号：%s，退款金额：%.2f，返还余额：%s", refund.TradeNo, refund.RefundAmount, logger.FormatQuota(int(refund.RefundQuota))),
+		callerIP,
+		refund.PaymentMethod,
+		refund.PaymentProvider,
+	)
+	logger.LogInfo(ctx, fmt.Sprintf("余额订阅退款登记成功 trade_no=%s out_request_no=%s refund_amount=%.2f refund_quota=%d", refund.TradeNo, refund.OutRequestNo, refund.RefundAmount, refund.RefundQuota))
+	return gin.H{
+		"out_request_no": refund.OutRequestNo,
+		"refund_amount":  refund.RefundAmount,
+		"refund_quota":   refund.RefundQuota,
+		"provider":       refund.PaymentProvider,
+		"local":          true,
 	}, nil
 }
 
@@ -691,6 +738,8 @@ func AdminApproveOfficialPaymentRefundRequest(c *gin.Context) {
 	var err error
 	if refundRequest.PaymentProvider == model.PaymentProviderSelfServe {
 		result, err = executeSelfServeManualRefund(c.Request.Context(), refundRequest.TradeNo, amount, firstNonEmptyString(req.Reason, refundRequest.Reason), c.ClientIP(), req.FullRefund)
+	} else if refundRequest.PaymentProvider == model.PaymentProviderBalance {
+		result, err = executeBalanceSubscriptionRefund(c.Request.Context(), refundRequest.TradeNo, amount, firstNonEmptyString(req.Reason, refundRequest.Reason), c.ClientIP(), req.FullRefund)
 	} else {
 		result, err = executeOfficialPaymentRefund(c.Request.Context(), refundRequest.TradeNo, amount, firstNonEmptyString(req.Reason, refundRequest.Reason), c.ClientIP(), refundRequest.PaymentProvider, refundRequest.PaymentMethod, req.FullRefund)
 	}
@@ -1647,24 +1696,15 @@ func normalizeOfficialPaymentScene(scene string) string {
 }
 
 func buildOfficialTradeNo(prefix string, userID int) string {
-	return fmt.Sprintf("%s_%d_%d_%s", prefix, userID, time.Now().UnixMilli(), randstr.String(6))
+	return model.BuildPaymentTradeNo(prefix, userID)
 }
 
 func buildWechatPayOfficialTradeNo(prefix string, userID int) string {
-	base := fmt.Sprintf("%s_%d_", prefix, userID)
-	randomLength := 32 - len(base)
-	if randomLength < 6 {
-		randomLength = 6
-	}
-	tradeNo := base + randstr.String(randomLength)
-	if len(tradeNo) > 32 {
-		return tradeNo[:32]
-	}
-	return tradeNo
+	return model.BuildWechatPayPaymentTradeNo(prefix, userID)
 }
 
 func buildOfficialRefundRequestNo(tradeNo string) string {
-	return fmt.Sprintf("%s_RF_%d_%s", strings.TrimSpace(tradeNo), time.Now().UnixMilli(), randstr.String(4))
+	return fmt.Sprintf("%s_RF_%d_%s", strings.TrimSpace(tradeNo), time.Now().UnixMilli(), common.GetRandomString(4))
 }
 
 func normalizeAlipayRefundReason(reason string) string {

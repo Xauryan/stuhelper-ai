@@ -116,12 +116,20 @@ func isSelfServeTopUpEnabled() bool {
 		(isSelfServeAlipayTopUpEnabled() || isSelfServeWechatPayTopUpEnabled())
 }
 
+func selfServeQRCodeContent(value string) string {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "data:image/") {
+		return ""
+	}
+	return value
+}
+
 func isSelfServeAlipayTopUpEnabled() bool {
 	return setting.SelfServeTopUpEnabled &&
 		setting.SelfServeTopUpLimitsConfigured() &&
 		setting.SelfServeTopUpPricingConfigured() &&
 		setting.SelfServeAlipayEnabled &&
-		strings.TrimSpace(setting.SelfServeAlipayQRCode) != ""
+		selfServeQRCodeContent(setting.SelfServeAlipayQRCode) != ""
 }
 
 func isSelfServeWechatPayTopUpEnabled() bool {
@@ -129,7 +137,7 @@ func isSelfServeWechatPayTopUpEnabled() bool {
 		setting.SelfServeTopUpLimitsConfigured() &&
 		setting.SelfServeTopUpPricingConfigured() &&
 		setting.SelfServeWechatPayEnabled &&
-		strings.TrimSpace(setting.SelfServeWechatPayQRCode) != ""
+		selfServeQRCodeContent(setting.SelfServeWechatPayQRCode) != ""
 }
 
 func isEpayTopUpEnabled() bool {

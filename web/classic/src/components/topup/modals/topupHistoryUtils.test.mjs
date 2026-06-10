@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import {
   BILLING_PAYMENT_METHOD_FILTERS,
   canAdminCompleteTopup,
-  getTopupPaymentMethodLabel,
   getRemainingAdminRefundQuota,
   getRemainingRefundMoney,
+  getTopupPaymentMethodLabel,
   isAlipayOfficialRefundable,
+  isAdminMoneyRefundable,
   isAdminManagedTopup,
   isAdminManagedTopupRefundable,
+  isBalanceSubscriptionRefundable,
+  isBalanceTopup,
   isOfficialPaymentTopup,
   isOfficialRefundable,
   isRefundRequestable,
@@ -20,6 +23,7 @@ assert.deepEqual(BILLING_PAYMENT_METHOD_FILTERS, [
   { value: 'alipay_official', key: '支付宝' },
   { value: 'wxpay_official', key: '微信' },
   { value: 'self_serve', key: '自助充值' },
+  { value: 'balance', key: '余额支付' },
   { value: 'admin_add', key: '管理员充值' },
 ]);
 assert.equal(
@@ -211,6 +215,13 @@ assert.equal(
 );
 assert.equal(
   isSubscriptionTopup({
+    trade_no: 'SUBBAL_1_1778750000_ABCDEF',
+    amount: 0,
+  }),
+  true,
+);
+assert.equal(
+  isSubscriptionTopup({
     trade_no: 'ALIPAY_1_1778750000_ABCDEF',
     amount: 0,
   }),
@@ -239,6 +250,7 @@ assert.equal(
 assert.equal(getTopupPaymentMethodLabel('管理员增加'), '管理员充值');
 assert.equal(getTopupPaymentMethodLabel('alipay_self_serve'), '支付宝自助');
 assert.equal(getTopupPaymentMethodLabel('wxpay_self_serve'), '微信自助');
+assert.equal(getTopupPaymentMethodLabel('balance'), '余额支付');
 assert.equal(
   isSelfServeTopup({
     payment_provider: 'self_serve',
@@ -262,6 +274,49 @@ assert.equal(
     payment_method: 'alipay_official',
   }),
   false,
+);
+assert.equal(
+  isBalanceTopup({
+    payment_provider: 'balance',
+    payment_method: 'balance',
+  }),
+  true,
+);
+assert.equal(
+  isBalanceSubscriptionRefundable({
+    trade_no: 'SUBBAL_1_1778750000_ABCDEF',
+    amount: 0,
+    payment_provider: 'balance',
+    payment_method: 'balance',
+    status: 'success',
+    money: 9.99,
+    refunded_money: 0,
+  }),
+  true,
+);
+assert.equal(
+  isRefundRequestable({
+    trade_no: 'SUBBAL_1_1778750000_ABCDEF',
+    amount: 0,
+    payment_provider: 'balance',
+    payment_method: 'balance',
+    status: 'success',
+    money: 9.99,
+    refunded_money: 0,
+  }),
+  true,
+);
+assert.equal(
+  isAdminMoneyRefundable({
+    trade_no: 'SUBBAL_1_1778750000_ABCDEF',
+    amount: 0,
+    payment_provider: 'balance',
+    payment_method: 'balance',
+    status: 'partial_refunded',
+    money: 9.99,
+    refunded_money: 4,
+  }),
+  true,
 );
 assert.equal(
   getRemainingAdminRefundQuota({

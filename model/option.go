@@ -855,14 +855,8 @@ func validateSelfServeQRCodeValue(key string, value string) error {
 	if trimmed == "" {
 		return nil
 	}
-	if strings.HasPrefix(trimmed, "data:image/png;base64,") ||
-		strings.HasPrefix(trimmed, "data:image/jpeg;base64,") ||
-		strings.HasPrefix(trimmed, "data:image/jpg;base64,") ||
-		strings.HasPrefix(trimmed, "data:image/webp;base64,") {
-		if len(trimmed) > 512*1024 {
-			return fmt.Errorf("%s is too large", key)
-		}
-		return nil
+	if strings.HasPrefix(trimmed, "data:image/") {
+		return fmt.Errorf("%s must be decoded QR content, not image data", key)
 	}
 	if len([]rune(trimmed)) > 4096 {
 		return fmt.Errorf("%s is too large", key)

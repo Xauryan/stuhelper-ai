@@ -922,21 +922,74 @@ html.dark .sbg-variant-green {
 }
 
 /* 表格滚动条样式 */
-.semi-table-body::-webkit-scrollbar {
+.semi-table-body,
+.semi-table-container,
+.semi-table-content,
+.semi-table-scroll-position-both,
+.table-scroll-card .semi-card-body {
+  scrollbar-width: thin;
+  scrollbar-color: var(--semi-color-fill-2) transparent;
+}
+
+.semi-table-body::-webkit-scrollbar,
+.semi-table-container::-webkit-scrollbar,
+.semi-table-content::-webkit-scrollbar,
+.semi-table-scroll-position-both::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-.semi-table-body::-webkit-scrollbar-thumb {
-  background: rgba(var(--semi-grey-2), 0.3);
+.semi-table-body::-webkit-scrollbar-thumb,
+.semi-table-container::-webkit-scrollbar-thumb,
+.semi-table-content::-webkit-scrollbar-thumb,
+.semi-table-scroll-position-both::-webkit-scrollbar-thumb {
+  background: var(--semi-color-fill-2);
   border-radius: 2px;
 }
 
-.semi-table-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--semi-grey-2), 0.5);
+.semi-table-body::-webkit-scrollbar-thumb:hover,
+.semi-table-container::-webkit-scrollbar-thumb:hover,
+.semi-table-content::-webkit-scrollbar-thumb:hover,
+.semi-table-scroll-position-both::-webkit-scrollbar-thumb:hover {
+  background: var(--semi-color-fill-1);
 }
 
-.semi-table-body::-webkit-scrollbar-track {
+.semi-table-body::-webkit-scrollbar-track,
+.semi-table-container::-webkit-scrollbar-track,
+.semi-table-content::-webkit-scrollbar-track,
+.semi-table-scroll-position-both::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body[theme-mode='dark'] .semi-table-body,
+body[theme-mode='dark'] .semi-table-container,
+body[theme-mode='dark'] .semi-table-content,
+body[theme-mode='dark'] .semi-table-scroll-position-both,
+body[theme-mode='dark'] .table-scroll-card .semi-card-body {
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+body[theme-mode='dark'] .semi-table-body::-webkit-scrollbar-thumb,
+body[theme-mode='dark'] .semi-table-container::-webkit-scrollbar-thumb,
+body[theme-mode='dark'] .semi-table-content::-webkit-scrollbar-thumb,
+body[theme-mode='dark']
+  .semi-table-scroll-position-both::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+body[theme-mode='dark'] .semi-table-body::-webkit-scrollbar-thumb:hover,
+body[theme-mode='dark'] .semi-table-container::-webkit-scrollbar-thumb:hover,
+body[theme-mode='dark'] .semi-table-content::-webkit-scrollbar-thumb:hover,
+body[theme-mode='dark']
+  .semi-table-scroll-position-both::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+body[theme-mode='dark'] .semi-table-body::-webkit-scrollbar-track,
+body[theme-mode='dark'] .semi-table-container::-webkit-scrollbar-track,
+body[theme-mode='dark'] .semi-table-content::-webkit-scrollbar-track,
+body[theme-mode='dark']
+  .semi-table-scroll-position-both::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -1673,15 +1726,33 @@ html.dark .with-pastel-balls::before {
 }
 
 .table-scroll-card .semi-card-body::-webkit-scrollbar-thumb {
-  background: rgba(var(--semi-grey-2), 0.3);
+  background: var(--semi-color-fill-2);
   border-radius: 2px;
 }
 
 .table-scroll-card .semi-card-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--semi-grey-2), 0.5);
+  background: var(--semi-color-fill-1);
 }
 
 .table-scroll-card .semi-card-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body[theme-mode='dark']
+  .table-scroll-card
+  .semi-card-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+body[theme-mode='dark']
+  .table-scroll-card
+  .semi-card-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+body[theme-mode='dark']
+  .table-scroll-card
+  .semi-card-body::-webkit-scrollbar-track {
   background: transparent;
 }
 

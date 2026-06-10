@@ -285,10 +285,146 @@ func TestPurchaseSubscriptionWithBalanceDeductsQuotaAndCreatesSubscriptionOrder(
 	assert.Equal(t, PaymentProviderBalance, topUp.PaymentProvider)
 	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
 	assert.Equal(t, order.Money, topUp.Money)
+	assert.Regexp(t, `^SUBBAL_3008_\d+_[A-Za-z0-9]+$`, topUp.TradeNo)
 
 	var commissionCount int64
 	require.NoError(t, DB.Model(&ReferralCommission{}).Count(&commissionCount).Error)
 	assert.EqualValues(t, 0, commissionCount)
+}
+
+func TestBalanceSubscriptionRefundPreviewAndPartialRefund(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 1000
+	require.NoError(t, DB.Create(&User{
+		Id:       3011,
+		Username: "balance-subscription-refund-user",
+		Status:   common.UserStatusEnabled,
+		Quota:    3000,
+		Group:    "default",
+		AffCode:  "balance-subscription-refund-user",
+	}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1011, 1000, false, "")
+	plan.PriceAmount = 2
+	require.NoError(t, DB.Save(plan).Error)
+
+	require.NoError(t, PurchaseSubscriptionWithBalance(3011, plan.Id))
+	assert.Equal(t, 1000, getUserQuotaForPaymentGuardTest(t, 3011))
+
+	var order SubscriptionOrder
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3011, plan.Id).First(&order).Error)
+	require.NoError(t, DB.Model(&UserSubscription{}).
+		Where("user_id = ? AND plan_id = ?", 3011, plan.Id).
+		Update("amount_used", 250).Error)
+
+	preview, err := CalculateOfficialPaymentRefundPreview(order.TradeNo)
+	require.NoError(t, err)
+	require.NotNil(t, preview)
+	assert.True(t, preview.Refundable)
+	assert.True(t, preview.IsSubscription)
+	assert.Equal(t, order.Id, preview.SubscriptionOrderId)
+	assert.InDelta(t, 1.50, preview.MaxRefundAmount, 0.0001)
+	assert.EqualValues(t, 1500, preview.MaxRefundQuota)
+
+	refund, err := CreateBalanceSubscriptionRefund(order.TradeNo, 1, "partial balance subscription refund", false)
+	require.NoError(t, err)
+	require.NotNil(t, refund)
+	assert.Equal(t, TopUpRefundStatusSuccess, refund.Status)
+	assert.Equal(t, PaymentProviderBalance, refund.PaymentProvider)
+	assert.EqualValues(t, 1000, refund.RefundQuota)
+	assert.Equal(t, 2000, getUserQuotaForPaymentGuardTest(t, 3011))
+
+	topUp := GetTopUpByTradeNo(order.TradeNo)
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusPartialRefunded, topUp.Status)
+	assert.InDelta(t, 1.0, topUp.RefundedMoney, 0.0001)
+	assert.EqualValues(t, 1000, topUp.RefundedQuota)
+
+	reloadedOrder := GetSubscriptionOrderByTradeNo(order.TradeNo)
+	require.NotNil(t, reloadedOrder)
+	assert.Equal(t, common.TopUpStatusPartialRefunded, reloadedOrder.Status)
+
+	var sub UserSubscription
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3011, plan.Id).First(&sub).Error)
+	assert.Equal(t, "active", sub.Status)
+}
+
+func TestBalanceSubscriptionFullRefundReturnsRemainingQuotaAndCancelsSubscription(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 1000
+	require.NoError(t, DB.Create(&User{
+		Id:       3012,
+		Username: "balance-subscription-full-refund-user",
+		Status:   common.UserStatusEnabled,
+		Quota:    3000,
+		Group:    "default",
+		AffCode:  "balance-subscription-full-refund-user",
+	}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1012, 1000, false, "")
+	plan.PriceAmount = 2
+	plan.UpgradeGroup = "vip"
+	require.NoError(t, DB.Save(plan).Error)
+
+	require.NoError(t, PurchaseSubscriptionWithBalance(3012, plan.Id))
+	assert.Equal(t, 1000, getUserQuotaForPaymentGuardTest(t, 3012))
+
+	var order SubscriptionOrder
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3012, plan.Id).First(&order).Error)
+
+	refund, err := CreateBalanceSubscriptionRefund(order.TradeNo, 2, "full balance subscription refund", true)
+	require.NoError(t, err)
+	require.NotNil(t, refund)
+	assert.EqualValues(t, 2000, refund.RefundQuota)
+	assert.Equal(t, 3000, getUserQuotaForPaymentGuardTest(t, 3012))
+
+	topUp := GetTopUpByTradeNo(order.TradeNo)
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusRefunded, topUp.Status)
+	assert.InDelta(t, 2.0, topUp.RefundedMoney, 0.0001)
+	assert.EqualValues(t, 2000, topUp.RefundedQuota)
+
+	reloadedOrder := GetSubscriptionOrderByTradeNo(order.TradeNo)
+	require.NotNil(t, reloadedOrder)
+	assert.Equal(t, common.TopUpStatusRefunded, reloadedOrder.Status)
+
+	var sub UserSubscription
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3012, plan.Id).First(&sub).Error)
+	assert.Equal(t, "cancelled", sub.Status)
+}
+
+func TestBalancePlainTopUpRefundRequestIsRejected(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, DB.Create(&User{
+		Id:       3013,
+		Username: "balance-plain-refund-user",
+		Status:   common.UserStatusEnabled,
+		Quota:    1000,
+	}).Error)
+	require.NoError(t, DB.Create(&TopUp{
+		UserId:          3013,
+		Amount:          0,
+		Money:           1,
+		TradeNo:         "BALANCE_PLAIN_TOPUP",
+		PaymentMethod:   PaymentMethodBalance,
+		PaymentProvider: PaymentProviderBalance,
+		Status:          common.TopUpStatusSuccess,
+		CreateTime:      common.GetTimestamp(),
+		CompleteTime:    common.GetTimestamp(),
+	}).Error)
+
+	_, _, err := CreateTopUpRefundRequest(3013, "BALANCE_PLAIN_TOPUP", 1, "not subscription")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "仅官方支付、自助支付或余额订阅订单支持退款申请")
 }
 
 func TestPurchaseSubscriptionWithBalanceRejectsDisabledBalancePayPlan(t *testing.T) {

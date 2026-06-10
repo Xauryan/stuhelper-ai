@@ -86,7 +86,7 @@ const ModelsTable = (modelsData) => {
     <CardTable
       columns={tableColumns}
       dataSource={models}
-      scroll={compactMode ? undefined : { x: 'max-content' }}
+      scroll={{ x: 'max-content' }}
       pagination={{
         currentPage: activePage,
         pageSize: pageSize,

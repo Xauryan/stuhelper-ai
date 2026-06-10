@@ -17,35 +17,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@xauryan.com
 */
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
 import { QRCodeSVG } from 'qrcode.react';
-import { isLegacyQRCodeImageValue } from './qrCodeUtils';
 
 const SelfServeQRCode = ({ value, alt = '', size = 220, level = 'M' }) => {
   const text = String(value || '').trim();
-  const [imageFailed, setImageFailed] = useState(false);
-
-  useEffect(() => {
-    setImageFailed(false);
-  }, [text]);
 
   if (!text) {
     return null;
   }
 
-  if (isLegacyQRCodeImageValue(text) && !imageFailed) {
-    return (
-      <img
-        src={text}
-        alt={alt}
-        style={{ width: size, height: size, objectFit: 'contain' }}
-        onError={() => setImageFailed(true)}
-      />
-    );
-  }
-
-  return <QRCodeSVG value={text} size={size} level={level} />;
+  return (
+    <QRCodeSVG
+      value={text}
+      size={size}
+      level={level}
+      title={alt || undefined}
+    />
+  );
 };
 
 SelfServeQRCode.propTypes = {

@@ -288,7 +288,7 @@ func TestGetTopUpInfoIncludesSelfServeUnitPriceAndTopupGroupRatio(t *testing.T) 
 	require.Len(t, payload.Data.PayMethods, 1)
 	require.Equal(t, model.PaymentMethodAlipaySelfServe, payload.Data.PayMethods[0]["type"])
 	require.Equal(t, "1.23", payload.Data.PayMethods[0]["unit_price"])
-	require.Contains(t, payload.Data.SelfServeQRCodes[model.PaymentMethodAlipaySelfServe], "data:image/png;base64,")
+	require.Equal(t, "https://qr.alipay.com/45t165972y9chxii0fm3fe8", payload.Data.SelfServeQRCodes[model.PaymentMethodAlipaySelfServe])
 }
 
 func TestBuildOfficialTradeNoUsesAlipaySafeCharacters(t *testing.T) {

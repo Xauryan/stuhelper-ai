@@ -908,7 +908,9 @@ func syncSubscriptionOrderRefundStateTx(tx *gorm.DB, tradeNo string, expectedPay
 	}
 	topUp.Status = nextStatus
 	topUp.RefundedMoney = refundedMoney.InexactFloat64()
-	topUp.RefundedQuota = 0
+	if order.PaymentProvider != PaymentProviderBalance && topUp.PaymentProvider != PaymentProviderBalance {
+		topUp.RefundedQuota = 0
+	}
 	if err := tx.Save(topUp).Error; err != nil {
 		return 0, "", err
 	}
@@ -1052,7 +1054,7 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 		}
 
 		now := common.GetTimestamp()
-		tradeNo := fmt.Sprintf("SUBBALUSR%dNO%s%d", userId, common.GetRandomString(6), time.Now().UnixNano())
+		tradeNo := BuildPaymentTradeNo("SUBBAL", userId)
 		order := &SubscriptionOrder{
 			UserId:          userId,
 			PlanId:          plan.Id,
@@ -1114,7 +1116,7 @@ type SelfServeSubscriptionPurchaseResult struct {
 }
 
 func selfServeSubscriptionTradeNo(userId int) string {
-	return fmt.Sprintf("SSSUBUSR%dNO%d%s", userId, common.GetTimestamp(), strings.ToUpper(common.GetUUID()[:8]))
+	return BuildPaymentTradeNo("SSSUB", userId)
 }
 
 func calculateSelfServeSubscriptionMoney(priceAmount float64) decimal.Decimal {

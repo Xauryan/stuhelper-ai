@@ -17,16 +17,13 @@
 - `SelfServeTopUpSingleMaxAmount`：每人单笔自助充值金额上限，单位为人民币元。
 - `SelfServeTopUpDailyMaxAmount`：每人每日自助充值累计金额上限，单位为人民币元。
 
-前端展示二维码时统一使用保存的二维码内容重新生成二维码。只有 `data:image/...` 或明确以 `png`、`jpg`、`jpeg`、`webp`、`gif` 结尾的历史图片 URL 才按图片渲染；`https://qr.alipay.com/...` 等支付链接必须作为二维码内容渲染，不能直接作为 `<img src>` 使用。
-
-为兼容已经部署的旧前端，`/api/user/topup/info` 下发 `self_serve_qrcodes` 时会把普通二维码文本或支付链接临时渲染成 `data:image/png;base64,...`。该兼容值只存在于接口响应中，数据库里的 `SelfServeAlipayQRCode` 和 `SelfServeWechatPayQRCode` 仍保存解码后的二维码文本/支付链接，不保存上传原图。
+前端展示二维码时统一使用保存的二维码内容重新生成二维码。`https://qr.alipay.com/...` 等支付链接必须作为二维码内容渲染，不能直接作为 `<img src>` 使用。`/api/user/topup/info` 下发的 `self_serve_qrcodes` 只包含保存的二维码文本或支付链接，不会把二维码渲染成 `data:image/...` 图片，避免保存和传输原图流量。
 
 二维码限制：
 
 - 前端上传限制为 `PNG/JPG/WebP` 且不超过 `300KB`。
-- 前端会先解码上传图片，只保存二维码文本内容；用户充值或购买订阅时再由前端或后端接口响应重新生成二维码展示。
-- 历史已保存的 `http/https` 图片地址或 `data:image/...;base64,...` 仍会兼容展示，但新配置不再建议保存原图。
-- 后端配置校验允许空值、普通二维码文本/支付链接和历史图片值；普通文本最多 4096 个字符，历史 `data:image/png|jpeg|jpg|webp;base64,...` 最大 `512KB`。
+- 前端会先解码上传图片，只保存二维码文本内容；用户充值或购买订阅时再由前端重新生成二维码展示。
+- 后端配置校验允许空值、普通二维码文本和支付链接；普通文本最多 4096 个字符。新配置不允许保存 `data:image/...` 原图。
 
 ## 风控限额
 
@@ -63,6 +60,16 @@
 结果向下取整。若系统价格、额度倍率或充值分组倍率配置错误，后端会拒绝提交。
 
 充值页选择“支付宝自助”或“微信自助”时，自动填写的扫码付款金额也按 `SelfServeTopUpUnitPrice` 和当前用户的 `TopupGroupRatio(user.group)` 反推，不复用易支付 `Price`、易支付手续费或其他支付方式遗留的实付金额状态。
+
+## 系统订单号
+
+自助充值、自助订阅和余额订阅的系统订单号统一使用官方支付同类格式：
+
+- 自助充值：`SSU_{user_id}_{unix_milli}_{random}`。
+- 自助订阅：`SSSUB_{user_id}_{unix_milli}_{random}`。
+- 余额订阅：`SUBBAL_{user_id}_{unix_milli}_{random}`。
+
+这些订单号是系统内部 `trade_no`，不同于用户填写的微信/支付宝交易订单号 `transaction_no`。管理员审核时应以用户填写的交易订单号核对微信/支付宝账单，以系统订单号定位站内账单。
 
 ## 自助购买订阅
 
@@ -122,6 +129,7 @@
   - 成功后立即开通订阅，并生成待审核记录。
 - `POST /api/user/topup/official/refund/apply`
   - 官方支付退款申请沿用该接口；自助支付订单也走同一接口，但必须额外提交 `refund_qrcode`。
+  - 余额订阅订单也走同一接口申请退款，不需要提交退款收款码；审批后系统本地返还钱包余额。
 
 管理员接口：
 
@@ -131,6 +139,9 @@
   - 请求：`trade_no`、`declared_money`、`transaction_no`、`reason`
 - `POST /api/user/topup/self-serve/reject`
   - 请求：`trade_no`、`reason`、`ban_user`
+- `POST /api/user/topup/balance/refund`
+  - 请求：`trade_no`、`refund_amount`、`reason`、`full_refund`
+  - 仅用于余额购买订阅的本地退款登记；不会调用支付宝、微信或其他第三方接口。
 
 账单查询：
 

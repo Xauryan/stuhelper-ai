@@ -70,6 +70,9 @@ import {
 
 const { Text } = Typography;
 
+const isApiSuccess = (data) =>
+  data?.success === true || data?.message === 'success';
+
 // 提交易支付表单
 function submitEpayForm({ url, params }) {
   const form = document.createElement('form');
@@ -386,7 +389,7 @@ const SubscriptionPlansCard = ({
       const res = await API.post('/api/subscription/stripe/pay', {
         plan_id: selectedPlan.plan.id,
       });
-      if (res.data?.message === 'success') {
+      if (isApiSuccess(res.data)) {
         window.open(res.data.data?.pay_link, '_blank');
         showSuccess(t('已打开支付页面'));
         closeBuy();
@@ -414,7 +417,7 @@ const SubscriptionPlansCard = ({
       const res = await API.post('/api/subscription/creem/pay', {
         plan_id: selectedPlan.plan.id,
       });
-      if (res.data?.message === 'success') {
+      if (isApiSuccess(res.data)) {
         window.open(res.data.data?.checkout_url, '_blank');
         showSuccess(t('已打开支付页面'));
         closeBuy();
@@ -443,7 +446,7 @@ const SubscriptionPlansCard = ({
         plan_id: selectedPlan.plan.id,
         payment_method: selectedPaymentMethod.type,
       });
-      if (res.data?.message === 'success') {
+      if (isApiSuccess(res.data)) {
         submitEpayForm({ url: res.data.url, params: res.data.data });
         showSuccess(t('已发起支付'));
         closeBuy();
@@ -471,10 +474,13 @@ const SubscriptionPlansCard = ({
       const res = await API.post('/api/subscription/balance/pay', {
         plan_id: selectedPlan.plan.id,
       });
-      if (res.data?.message === 'success') {
+      if (isApiSuccess(res.data)) {
         showSuccess(t('订阅购买成功'));
         closeBuy();
-        await Promise.all([reloadSubscriptionSelf?.(), reloadUserQuota?.()]);
+        await Promise.allSettled([
+          reloadSubscriptionSelf?.(),
+          reloadUserQuota?.(),
+        ]);
       } else {
         const errorMsg =
           typeof res.data?.data === 'string'
@@ -545,7 +551,7 @@ const SubscriptionPlansCard = ({
         plan_id: selectedPlan.plan.id,
         scene,
       });
-      if (res.data?.message === 'success') {
+      if (isApiSuccess(res.data)) {
         if (
           submitOfficialAlipayForm(res.data.data?.form_html || '', alipayWindow)
         ) {
@@ -587,7 +593,7 @@ const SubscriptionPlansCard = ({
         plan_id: selectedPlan.plan.id,
         scene,
       });
-      if (res.data?.message === 'success') {
+      if (isApiSuccess(res.data)) {
         if (openWechatOfficialPayment(res.data.data)) {
           showSuccess(t('已发起支付'));
           closeBuy();
@@ -762,10 +768,13 @@ const SubscriptionPlansCard = ({
         declared_money: selectedSelfServeExpectedMoney,
         transaction_no: selfServeTransactionNo.trim(),
       });
-      if (res.data?.success || res.data?.message === 'success') {
+      if (isApiSuccess(res.data)) {
         showSuccess(t('自助订阅已提交，订阅已立即开通'));
         closeSelfServeModal();
-        await Promise.all([reloadSubscriptionSelf?.(), reloadUserQuota?.()]);
+        await Promise.allSettled([
+          reloadSubscriptionSelf?.(),
+          reloadUserQuota?.(),
+        ]);
       } else {
         const errorMsg =
           typeof res.data?.data === 'string'

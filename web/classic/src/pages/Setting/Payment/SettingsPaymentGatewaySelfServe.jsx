@@ -49,6 +49,11 @@ const getPositiveLimit = (value) => {
   return Number.isFinite(amount) && amount > 0 ? amount : 0;
 };
 
+const isImageDataQRCode = (value) =>
+  String(value || '')
+    .trim()
+    .startsWith('data:image/');
+
 export default function SettingsPaymentGatewaySelfServe(props) {
   const { t } = useTranslation();
   const sectionTitle = props.hideSectionTitle ? undefined : t('自助充值');
@@ -157,10 +162,26 @@ export default function SettingsPaymentGatewaySelfServe(props) {
     }
     if (
       inputs.SelfServeTopUpEnabled &&
+      inputs.SelfServeAlipayEnabled &&
+      isImageDataQRCode(inputs.SelfServeAlipayQRCode)
+    ) {
+      showError(t('请上传支付宝收款码图片，系统会自动解码保存二维码内容'));
+      return false;
+    }
+    if (
+      inputs.SelfServeTopUpEnabled &&
       inputs.SelfServeWechatPayEnabled &&
       !inputs.SelfServeWechatPayQRCode
     ) {
       showError(t('请上传或填写微信收款码'));
+      return false;
+    }
+    if (
+      inputs.SelfServeTopUpEnabled &&
+      inputs.SelfServeWechatPayEnabled &&
+      isImageDataQRCode(inputs.SelfServeWechatPayQRCode)
+    ) {
+      showError(t('请上传微信收款码图片，系统会自动解码保存二维码内容'));
       return false;
     }
     return true;
