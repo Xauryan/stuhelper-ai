@@ -922,39 +922,21 @@ html.dark .sbg-variant-green {
 }
 
 /* 表格滚动条样式 */
-.semi-table-body,
-.card-table-scroll-wrap,
-.table-scroll-card .semi-card-body {
-  scrollbar-width: thin;
-  scrollbar-color: var(--semi-color-fill-2) transparent;
+.semi-table-body::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.semi-table-body::-webkit-scrollbar,
-.card-table-scroll-wrap::-webkit-scrollbar,
-.table-scroll-card .semi-card-body::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+.semi-table-body::-webkit-scrollbar-thumb {
+  background: rgba(var(--semi-grey-2), 0.3);
+  border-radius: 2px;
 }
 
-.semi-table-body::-webkit-scrollbar-thumb,
-.card-table-scroll-wrap::-webkit-scrollbar-thumb,
-.table-scroll-card .semi-card-body::-webkit-scrollbar-thumb {
-  background: var(--semi-color-fill-2);
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background-clip: content-box;
+.semi-table-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--semi-grey-2), 0.5);
 }
 
-.semi-table-body::-webkit-scrollbar-thumb:hover,
-.card-table-scroll-wrap::-webkit-scrollbar-thumb:hover,
-.table-scroll-card .semi-card-body::-webkit-scrollbar-thumb:hover {
-  background: var(--semi-color-fill-1);
-  background-clip: content-box;
-}
-
-.semi-table-body::-webkit-scrollbar-track,
-.card-table-scroll-wrap::-webkit-scrollbar-track,
-.table-scroll-card .semi-card-body::-webkit-scrollbar-track {
+.semi-table-body::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -1669,25 +1651,12 @@ html.dark .with-pastel-balls::before {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: auto;
 }
 
-.card-table-scroll-wrap {
-  width: 100%;
-  min-width: 0;
+.table-scroll-card .semi-table-body {
   overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 2px;
-}
-
-.card-table-scroll-wrap .semi-table-wrapper,
-.card-table-scroll-wrap .semi-table-container {
-  min-width: max-content;
-}
-
-.card-table-scroll-wrap .semi-table-body {
-  overflow-x: visible !important;
+  scrollbar-width: thin;
 }
 
 /* Ensure tables fill the card body width even when column content is narrow.
@@ -1697,6 +1666,23 @@ html.dark .with-pastel-balls::before {
  * viewport (logs/users) are unaffected — they continue to overflow + scroll. */
 .table-scroll-card .semi-table {
   min-width: 100%;
+}
+
+.table-scroll-card .semi-card-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.table-scroll-card .semi-card-body::-webkit-scrollbar-thumb {
+  background: rgba(var(--semi-grey-2), 0.3);
+  border-radius: 2px;
+}
+
+.table-scroll-card .semi-card-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--semi-grey-2), 0.5);
+}
+
+.table-scroll-card .semi-card-body::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 @media (max-width: 767px) {
