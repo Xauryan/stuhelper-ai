@@ -82,6 +82,8 @@ const SELF_SERVE_AUDIT_STATUS_CONFIG = {
   rejected: { type: 'danger', key: '已拒绝' },
 };
 
+const REFUNDED_STATUS_KEYS = ['partial_refunded', 'refunded'];
+
 const isAdminDirectMoneyRefundable = (record) =>
   isAdminMoneyRefundable(record) && !record.refund_request_id;
 
@@ -963,8 +965,20 @@ const TopupBillingTable = ({
   );
 
   // 渲染状态徽章
-  const renderStatusBadge = (status) => {
-    const config = STATUS_CONFIG[status] || { type: 'primary', key: status };
+  const renderStatusBadge = (status, record) => {
+    let config = STATUS_CONFIG[status] || { type: 'primary', key: status };
+
+    if (isSelfServeTopup(record) && record.audit_status) {
+      if (record.audit_status === 'rejected') {
+        config = SELF_SERVE_AUDIT_STATUS_CONFIG.rejected;
+      } else if (!REFUNDED_STATUS_KEYS.includes(status)) {
+        config = SELF_SERVE_AUDIT_STATUS_CONFIG[record.audit_status] || {
+          type: 'secondary',
+          key: record.audit_status,
+        };
+      }
+    }
+
     return (
       <span className='flex items-center gap-2'>
         <Badge dot type={config.type} />
@@ -977,22 +991,6 @@ const TopupBillingTable = ({
   const renderPaymentMethod = (pm) => {
     const displayName = getTopupPaymentMethodLabel(pm);
     return <Text>{displayName === '-' ? displayName : t(displayName)}</Text>;
-  };
-
-  const renderSelfServeAuditStatus = (record) => {
-    if (!isSelfServeTopup(record)) {
-      return <Text type='tertiary'>-</Text>;
-    }
-    const config = SELF_SERVE_AUDIT_STATUS_CONFIG[record.audit_status] || {
-      type: 'secondary',
-      key: record.audit_status || '待审核',
-    };
-    return (
-      <span className='flex items-center gap-2'>
-        <Badge dot type={config.type} />
-        <span>{t(config.key)}</span>
-      </span>
-    );
   };
 
   const renderQRCodePreview = (value, alt) => {
@@ -1119,12 +1117,6 @@ const TopupBillingTable = ({
         dataIndex: 'status',
         key: 'status',
         render: renderStatusBadge,
-      },
-      {
-        title: t('审核状态'),
-        dataIndex: 'audit_status',
-        key: 'audit_status',
-        render: (_, record) => renderSelfServeAuditStatus(record),
       },
     ];
 
