@@ -45,11 +45,11 @@ import {
 } from '@douyinfe/semi-illustrations';
 import { Coins, ImageUp } from 'lucide-react';
 import { IconEdit, IconSearch } from '@douyinfe/semi-icons';
-import { QRCodeSVG } from 'qrcode.react';
 import { API, timestamp2string, renderQuota } from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
 import CardTable from '../../common/ui/CardTable';
-import { decodeQRCodeImage, isLegacyQRCodeImageValue } from '../qrCodeUtils';
+import SelfServeQRCode from '../SelfServeQRCode';
+import { decodeQRCodeImage } from '../qrCodeUtils';
 import {
   canAdminCompleteTopup,
   formatCurrency,
@@ -733,11 +733,11 @@ const TopupBillingTable = ({
   );
 
   const handleSelfServeReject = useCallback(
-    (record, defaultBanUser = false) => {
+    (record) => {
       let rejectReason = '';
-      let banUser = defaultBanUser;
+      let banUser = false;
       Modal.confirm({
-        title: defaultBanUser ? t('拒绝并封禁用户') : t('拒绝自助充值审核'),
+        title: t('拒绝自助充值审核'),
         content: (
           <div className='space-y-3'>
             <Text type='warning'>
@@ -751,7 +751,6 @@ const TopupBillingTable = ({
               showClear
             />
             <Checkbox
-              defaultChecked={defaultBanUser}
               onChange={(event) => {
                 banUser = event.target.checked;
               }}
@@ -987,15 +986,7 @@ const TopupBillingTable = ({
     }
     return (
       <div className='inline-flex rounded-lg border border-[var(--semi-color-border)] bg-white p-2'>
-        {isLegacyQRCodeImageValue(text) ? (
-          <img
-            src={text}
-            alt={alt}
-            style={{ width: 128, height: 128, objectFit: 'contain' }}
-          />
-        ) : (
-          <QRCodeSVG value={text} size={128} level='M' />
-        )}
+        <SelfServeQRCode value={text} alt={alt} size={128} />
       </div>
     );
   };
@@ -1300,18 +1291,9 @@ const TopupBillingTable = ({
               size='small'
               type='danger'
               theme='outline'
-              onClick={() => handleSelfServeReject(record, false)}
+              onClick={() => handleSelfServeReject(record)}
             >
               {t('拒绝')}
-            </Button>,
-            <Button
-              key='self-serve-reject-ban'
-              size='small'
-              type='warning'
-              theme='outline'
-              onClick={() => handleSelfServeReject(record, true)}
-            >
-              {t('拒绝并封禁')}
             </Button>,
           );
         }

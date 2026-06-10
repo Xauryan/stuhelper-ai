@@ -19,10 +19,9 @@ For commercial licensing, please contact support@xauryan.com
 
 import React from 'react';
 import { Banner, Checkbox, Input, Modal, Typography } from '@douyinfe/semi-ui';
-import { QRCodeSVG } from 'qrcode.react';
 import { SiAlipay, SiWechat } from 'react-icons/si';
 import { ShieldAlert } from 'lucide-react';
-import { isLegacyQRCodeImageValue } from '../qrCodeUtils';
+import SelfServeQRCode from '../SelfServeQRCode';
 
 const { Text } = Typography;
 
@@ -97,15 +96,7 @@ const SelfServeSubscriptionModal = ({
         <div className='flex flex-col items-center gap-2'>
           {qrCode ? (
             <div className='rounded-lg border border-[var(--semi-color-border)] bg-white p-2'>
-              {isLegacyQRCodeImageValue(qrCode) ? (
-                <img
-                  src={qrCode}
-                  alt={label}
-                  style={{ width: 220, height: 220, objectFit: 'contain' }}
-                />
-              ) : (
-                <QRCodeSVG value={qrCode} size={220} level='M' />
-              )}
+              <SelfServeQRCode value={qrCode} alt={label} size={220} />
             </div>
           ) : (
             <div className='rounded-lg border border-dashed border-[var(--semi-color-border)] p-6 text-sm text-[var(--semi-color-text-2)]'>

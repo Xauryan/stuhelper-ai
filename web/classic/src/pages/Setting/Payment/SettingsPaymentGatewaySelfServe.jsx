@@ -28,13 +28,10 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import { ImageUp, ShieldAlert } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../../helpers';
-import {
-  decodeQRCodeImage,
-  isLegacyQRCodeImageValue,
-} from '../../../components/topup/qrCodeUtils';
+import SelfServeQRCode from '../../../components/topup/SelfServeQRCode';
+import { decodeQRCodeImage } from '../../../components/topup/qrCodeUtils';
 
 const QR_MAX_BYTES = 300 * 1024;
 
@@ -253,17 +250,9 @@ export default function SettingsPaymentGatewaySelfServe(props) {
       </div>
       {inputs[field] ? (
         <div className='rounded-lg border border-[var(--semi-color-border)] p-3 inline-block'>
-          {isLegacyQRCodeImageValue(inputs[field]) ? (
-            <img
-              src={inputs[field]}
-              alt={label}
-              style={{ width: 160, height: 160, objectFit: 'contain' }}
-            />
-          ) : (
-            <div className='bg-white p-2 rounded-md'>
-              <QRCodeSVG value={String(inputs[field])} size={144} level='M' />
-            </div>
-          )}
+          <div className='bg-white p-2 rounded-md'>
+            <SelfServeQRCode value={inputs[field]} alt={label} size={144} />
+          </div>
         </div>
       ) : null}
     </div>
