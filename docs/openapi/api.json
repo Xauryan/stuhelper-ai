@@ -5884,6 +5884,42 @@
         }
       }
     },
+    "/api/user/topup/self-serve/refund": {
+      "post": {
+        "summary": "管理员登记自助支付人工退款",
+        "deprecated": false,
+        "description": "👨‍💼 需要管理员权限（Admin）。仅用于已审核通过的自助支付订单；系统只登记本地退款、扣回余额或同步订阅退款状态，不调用支付宝、微信或其他第三方退款接口。请求体包含 trade_no、refund_amount、reason、full_refund。",
+        "tags": [
+          "充值"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          "description": "请求体"
+        }
+      }
+    },
     "/api/subscription/plans": {
       "get": {
         "summary": "获取可购买订阅套餐",

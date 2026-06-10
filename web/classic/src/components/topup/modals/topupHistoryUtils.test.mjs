@@ -14,6 +14,7 @@ import {
   isOfficialPaymentTopup,
   isOfficialRefundable,
   isRefundRequestable,
+  isSelfServeRefundable,
   isSelfServeTopup,
   isSubscriptionTopup,
 } from './topupHistoryUtils.mjs';
@@ -262,11 +263,56 @@ assert.equal(
   isRefundRequestable({
     payment_provider: 'self_serve',
     payment_method: 'alipay_self_serve',
+    audit_status: 'approved',
     status: 'success',
     money: 29.99,
     refunded_money: 0,
   }),
   true,
+);
+assert.equal(
+  isRefundRequestable({
+    payment_provider: 'self_serve',
+    payment_method: 'alipay_self_serve',
+    audit_status: 'pending',
+    status: 'success',
+    money: 29.99,
+    refunded_money: 0,
+  }),
+  false,
+);
+assert.equal(
+  isSelfServeRefundable({
+    payment_provider: 'self_serve',
+    payment_method: 'wxpay_self_serve',
+    audit_status: 'approved',
+    status: 'partial_refunded',
+    money: 29.99,
+    refunded_money: 10,
+  }),
+  true,
+);
+assert.equal(
+  isAdminMoneyRefundable({
+    payment_provider: 'self_serve',
+    payment_method: 'wxpay_self_serve',
+    audit_status: 'approved',
+    status: 'success',
+    money: 29.99,
+    refunded_money: 0,
+  }),
+  true,
+);
+assert.equal(
+  isAdminMoneyRefundable({
+    payment_provider: 'self_serve',
+    payment_method: 'wxpay_self_serve',
+    audit_status: 'pending',
+    status: 'success',
+    money: 29.99,
+    refunded_money: 0,
+  }),
+  false,
 );
 assert.equal(
   isSelfServeTopup({

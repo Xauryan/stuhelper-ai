@@ -115,15 +115,31 @@ export const isRefundRequestable = (record) => {
     record.status === 'success' || record.status === 'partial_refunded';
   return (
     (isOfficialPaymentTopup(record) ||
-      isSelfServeTopup(record) ||
+      isSelfServeRefundable(record) ||
       isBalanceSubscriptionRefundable(record)) &&
     statusAllowsRefund &&
     getRemainingRefundMoney(record) > 0
   );
 };
 
+export const isSelfServeRefundable = (record) => {
+  if (!record) {
+    return false;
+  }
+  const statusAllowsRefund =
+    record.status === 'success' || record.status === 'partial_refunded';
+  return (
+    isSelfServeTopup(record) &&
+    record.audit_status === 'approved' &&
+    statusAllowsRefund &&
+    getRemainingRefundMoney(record) > 0
+  );
+};
+
 export const isAdminMoneyRefundable = (record) =>
-  isOfficialRefundable(record) || isBalanceSubscriptionRefundable(record);
+  isOfficialRefundable(record) ||
+  isSelfServeRefundable(record) ||
+  isBalanceSubscriptionRefundable(record);
 
 export const isAdminManagedTopupRefundable = (record) => {
   if (!record) {

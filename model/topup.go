@@ -246,6 +246,25 @@ type SelfServeTopUpAudit struct {
 	ReviewedTime  int64   `json:"reviewed_time"`
 }
 
+func IsSelfServeTopUpAuditApproved(tradeNo string) (bool, error) {
+	tradeNo = strings.TrimSpace(tradeNo)
+	if tradeNo == "" {
+		return false, errors.New("未提供订单号")
+	}
+	return isSelfServeTopUpAuditApprovedTx(DB, tradeNo)
+}
+
+func isSelfServeTopUpAuditApprovedTx(tx *gorm.DB, tradeNo string) (bool, error) {
+	if tx == nil {
+		tx = DB
+	}
+	var audit SelfServeTopUpAudit
+	if err := tx.Select("status").Where("trade_no = ?", tradeNo).First(&audit).Error; err != nil {
+		return false, err
+	}
+	return audit.Status == SelfServeTopUpAuditStatusApproved, nil
+}
+
 type OfficialPaymentRefundPreview struct {
 	TradeNo                string  `json:"trade_no"`
 	PaymentMethod          string  `json:"payment_method"`
@@ -387,6 +406,16 @@ func calculateOfficialPaymentRefundPreviewFromTopUp(tx *gorm.DB, topUp TopUp) (*
 	if !IsOfficialPaymentProvider(topUp.PaymentProvider) && !IsSelfServeTopUpRecord(&topUp) && !isBalanceSubscription {
 		preview.Reason = "仅官方支付、自助支付或余额订阅订单支持退款申请"
 		return preview, nil
+	}
+	if IsSelfServeTopUpRecord(&topUp) {
+		auditApproved, err := isSelfServeTopUpAuditApprovedTx(tx, topUp.TradeNo)
+		if err != nil {
+			return nil, err
+		}
+		if !auditApproved {
+			preview.Reason = "自助支付订单审核通过后才能退款"
+			return preview, nil
+		}
 	}
 	orderMoney := decimal.NewFromFloat(topUp.Money).Round(2)
 	refundedMoney := decimal.NewFromFloat(topUp.RefundedMoney).Round(2)
@@ -1008,6 +1037,13 @@ func CreateSelfServeManualRefund(tradeNo string, refundAmountInput float64, reas
 		}
 		if !IsSelfServeTopUpRecord(topUp) {
 			return ErrPaymentMethodMismatch
+		}
+		auditApproved, err := isSelfServeTopUpAuditApprovedTx(tx, topUp.TradeNo)
+		if err != nil {
+			return err
+		}
+		if !auditApproved {
+			return errors.New("自助支付订单审核通过后才能退款")
 		}
 		if topUp.Status != common.TopUpStatusSuccess &&
 			topUp.Status != common.TopUpStatusPartialRefunded {

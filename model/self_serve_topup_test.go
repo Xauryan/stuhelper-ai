@@ -354,6 +354,13 @@ func TestSelfServeRefundRequestRequiresQRCodeAndFillsBillingRecord(t *testing.T)
 	})
 	require.NoError(t, err)
 
+	_, _, err = CreateTopUpRefundRequest(5111, created.TopUp.TradeNo, 5, "refund before audit", "alipay-refund-qr-content")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "自助支付订单审核通过后才能退款")
+
+	_, err = ApproveSelfServeTopUp(created.TopUp.TradeNo, 9, "matched")
+	require.NoError(t, err)
+
 	_, _, err = CreateTopUpRefundRequest(5111, created.TopUp.TradeNo, 5, "refund without qr")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "请上传或填写退款收款码")
@@ -386,6 +393,13 @@ func TestCreateSelfServeManualRefundDeductsQuotaAndMarksRefunded(t *testing.T) {
 		DeclaredMoney: 10,
 		TransactionNo: "SELF_SERVE_MANUAL_REFUND_TX",
 	})
+	require.NoError(t, err)
+
+	_, err = CreateSelfServeManualRefund(created.TopUp.TradeNo, 4, "manual refund before audit", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "自助支付订单审核通过后才能退款")
+
+	_, err = ApproveSelfServeTopUp(created.TopUp.TradeNo, 9, "matched")
 	require.NoError(t, err)
 
 	refund, err := CreateSelfServeManualRefund(created.TopUp.TradeNo, 4, "manual refund", false)

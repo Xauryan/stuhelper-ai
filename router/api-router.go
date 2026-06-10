@@ -156,6 +156,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/topup/self-serve/approve", middleware.RequireAdminRole(), controller.AdminApproveSelfServeTopUp)
 				adminRoute.POST("/topup/self-serve/update", middleware.RequireAdminRole(), controller.AdminUpdateSelfServeTopUp)
 				adminRoute.POST("/topup/self-serve/reject", middleware.RequireAdminRole(), controller.AdminRejectSelfServeTopUp)
+				adminRoute.POST("/topup/self-serve/refund", middleware.RequireAdminRole(), controller.AdminRefundSelfServeTopUp)
 				adminRoute.GET("/2fa/stats", middleware.RequireAdminRole(), controller.Admin2FAStats)
 				adminRoute.GET("/:id/oauth/bindings", middleware.RequireAdminRole(), controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", middleware.RequireAdminRole(), controller.UnbindCustomOAuthByAdmin)

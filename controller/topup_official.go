@@ -497,6 +497,30 @@ func AdminRefundBalanceSubscriptionTopUp(c *gin.Context) {
 	common.ApiSuccess(c, result)
 }
 
+func AdminRefundSelfServeTopUp(c *gin.Context) {
+	var req AdminRefundTopUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	tradeNo := strings.TrimSpace(req.TradeNo)
+	auditApproved, err := model.IsSelfServeTopUpAuditApproved(tradeNo)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if !auditApproved {
+		common.ApiErrorMsg(c, "自助支付订单审核通过后才能退款")
+		return
+	}
+	result, err := executeSelfServeManualRefund(c.Request.Context(), tradeNo, req.RefundAmount, req.Reason, c.ClientIP(), req.FullRefund)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
+}
+
 func executeOfficialPaymentRefund(ctx context.Context, tradeNo string, refundAmountInput float64, reason string, callerIP string, paymentProvider string, paymentMethod string, allowFullRefund bool) (gin.H, error) {
 	tradeNo = strings.TrimSpace(tradeNo)
 	refundAmount := decimal.NewFromFloat(refundAmountInput).Round(2)

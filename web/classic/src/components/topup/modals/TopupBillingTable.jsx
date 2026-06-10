@@ -128,6 +128,15 @@ const normalizeSelfServeLimits = (limits) => ({
   daily_max_money: positiveMoney(limits?.daily_max_money),
 });
 
+const getSelfServeDisplayMoney = (record) => {
+  const declaredMoney = Number(record?.declared_money);
+  if (Number.isFinite(declaredMoney) && declaredMoney > 0) {
+    return declaredMoney;
+  }
+  const paidMoney = Number(record?.money);
+  return Number.isFinite(paidMoney) && paidMoney > 0 ? paidMoney : 0;
+};
+
 const TopupBillingTable = ({
   active = true,
   compactMode = false,
@@ -578,12 +587,15 @@ const TopupBillingTable = ({
           refundRecord.payment_provider === 'wxpay_official' ||
           refundRecord.payment_method === 'wxpay_official';
         const isBalancePayment = isBalanceTopup(refundRecord);
+        const isSelfServePayment = isSelfServeTopup(refundRecord);
         const endpoint = userIsAdmin
           ? isBalancePayment
             ? '/api/user/topup/balance/refund'
-            : isWechatOfficial
-              ? '/api/user/topup/wechat-pay-official/refund'
-              : '/api/user/topup/alipay-official/refund'
+            : isSelfServePayment
+              ? '/api/user/topup/self-serve/refund'
+              : isWechatOfficial
+                ? '/api/user/topup/wechat-pay-official/refund'
+                : '/api/user/topup/alipay-official/refund'
           : '/api/user/topup/official/refund/apply';
         res = await API.post(endpoint, {
           trade_no: refundRecord.trade_no,
@@ -1037,17 +1049,6 @@ const TopupBillingTable = ({
           ),
       },
       {
-        title: t('申报金额'),
-        dataIndex: 'declared_money',
-        key: 'declared_money',
-        render: (declaredMoney, record) =>
-          isSelfServeTopup(record) ? (
-            <Text type='danger'>¥{formatCurrency(declaredMoney)}</Text>
-          ) : (
-            <Text type='tertiary'>-</Text>
-          ),
-      },
-      {
         title: t('充值额度'),
         dataIndex: 'amount',
         key: 'amount',
@@ -1057,6 +1058,13 @@ const TopupBillingTable = ({
               <Tag color='purple' shape='circle' size='small'>
                 {t('订阅套餐')}
               </Tag>
+            );
+          }
+          if (isSelfServeTopup(record)) {
+            return (
+              <Text type='danger'>
+                ¥{formatCurrency(getSelfServeDisplayMoney(record))}
+              </Text>
             );
           }
           if (isAdminManagedTopup(record)) {
@@ -1619,7 +1627,9 @@ const TopupBillingTable = ({
               : userIsAdmin
                 ? isBalanceTopup(refundRecord)
                   ? t('余额支付退款')
-                  : t('官方支付退款')
+                  : isSelfServeTopup(refundRecord)
+                    ? t('自助支付退款')
+                    : t('官方支付退款')
                 : t('申请退款')
         }
         visible={refundVisible}
