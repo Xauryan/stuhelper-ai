@@ -480,14 +480,8 @@ func calculateSubscriptionPaymentRefundPreview(tx *gorm.DB, topUp TopUp, order S
 	now := common.GetTimestamp()
 	timeRatio := subscriptionRefundTimeRatio(*sub, plan, now)
 	quotaRatio := subscriptionQuotaUsedRatio(*sub)
-	usedRatio := quotaRatio
-	if usedRatio.LessThan(decimal.Zero) {
-		usedRatio = decimal.Zero
-	}
-	if usedRatio.GreaterThan(decimal.NewFromInt(1)) {
-		usedRatio = decimal.NewFromInt(1)
-	}
-	unusedRatio := decimal.NewFromInt(1).Sub(usedRatio)
+	unusedRatio := subscriptionRefundUnusedRatio(*sub, plan, now)
+	usedRatio := decimal.NewFromInt(1).Sub(unusedRatio)
 	refundedMoney := decimal.NewFromFloat(topUp.RefundedMoney).Round(2)
 	maxMoney := orderMoney.Mul(unusedRatio).Sub(refundedMoney).RoundFloor(2)
 	if maxMoney.GreaterThan(remainingMoney) {
@@ -501,7 +495,7 @@ func calculateSubscriptionPaymentRefundPreview(tx *gorm.DB, topUp TopUp, order S
 	if remainingQuota < 0 {
 		remainingQuota = 0
 	}
-	maxQuota := decimal.NewFromInt(totalQuota).Mul(unusedRatio).RoundFloor(0).IntPart()
+	maxQuota := decimal.NewFromInt(totalQuota).Mul(unusedRatio).Round(8).RoundFloor(0).IntPart()
 	if maxQuota > remainingQuota {
 		maxQuota = remainingQuota
 	}
@@ -694,6 +688,109 @@ func ceilDivideInt64(value int64, divisor int64) int64 {
 	return (value + divisor - 1) / divisor
 }
 
+func subscriptionRefundUnusedRatio(sub UserSubscription, plan *SubscriptionPlan, now int64) decimal.Decimal {
+	if sub.StartTime <= 0 || sub.EndTime <= sub.StartTime {
+		return decimal.Zero
+	}
+	if now < sub.StartTime {
+		return decimal.NewFromInt(1)
+	}
+	if now >= sub.EndTime {
+		return decimal.Zero
+	}
+
+	quotaUnusedRatio := decimal.NewFromInt(1).Sub(subscriptionQuotaUsedRatio(sub))
+	quotaUnusedRatio = clampRatio(quotaUnusedRatio)
+	if plan == nil || NormalizeResetPeriod(plan.QuotaResetPeriod) == SubscriptionResetNever {
+		return quotaUnusedRatio
+	}
+
+	totalCycles, currentCycleIndex := subscriptionRefundCyclePosition(sub, plan, now)
+	if totalCycles <= 0 {
+		return quotaUnusedRatio
+	}
+	futureFullCycles := totalCycles - currentCycleIndex - 1
+	if futureFullCycles < 0 {
+		futureFullCycles = 0
+	}
+	refundableCycles := decimal.NewFromInt(futureFullCycles).Add(quotaUnusedRatio)
+	return clampRatio(refundableCycles.Div(decimal.NewFromInt(totalCycles)))
+}
+
+func subscriptionRefundCyclePosition(sub UserSubscription, plan *SubscriptionPlan, now int64) (int64, int64) {
+	if plan == nil || sub.StartTime <= 0 || sub.EndTime <= sub.StartTime {
+		return 0, 0
+	}
+	switch NormalizeResetPeriod(plan.QuotaResetPeriod) {
+	case SubscriptionResetDaily:
+		return subscriptionFixedRefundCyclePosition(sub, now, int64((24*time.Hour)/time.Second))
+	case SubscriptionResetWeekly:
+		return subscriptionFixedRefundCyclePosition(sub, now, int64((7*24*time.Hour)/time.Second))
+	case SubscriptionResetCustom:
+		return subscriptionFixedRefundCyclePosition(sub, now, plan.QuotaResetCustomSeconds)
+	case SubscriptionResetMonthly:
+		return subscriptionMonthlyRefundCyclePosition(sub, now)
+	default:
+		return 0, 0
+	}
+}
+
+func subscriptionFixedRefundCyclePosition(sub UserSubscription, now int64, cycleSeconds int64) (int64, int64) {
+	if cycleSeconds <= 0 || sub.StartTime <= 0 || sub.EndTime <= sub.StartTime {
+		return 0, 0
+	}
+	totalCycles := ceilDivideInt64(sub.EndTime-sub.StartTime, cycleSeconds)
+	if totalCycles <= 0 {
+		return 0, 0
+	}
+	currentCycleIndex := (now - sub.StartTime) / cycleSeconds
+	if currentCycleIndex < 0 {
+		currentCycleIndex = 0
+	}
+	if currentCycleIndex >= totalCycles {
+		currentCycleIndex = totalCycles - 1
+	}
+	return totalCycles, currentCycleIndex
+}
+
+func subscriptionMonthlyRefundCyclePosition(sub UserSubscription, now int64) (int64, int64) {
+	if sub.StartTime <= 0 || sub.EndTime <= sub.StartTime {
+		return 0, 0
+	}
+	start := time.Unix(sub.StartTime, 0)
+	end := time.Unix(sub.EndTime, 0)
+	current := time.Unix(now, 0)
+	advance := func(t time.Time) time.Time {
+		return t.AddDate(0, 1, 0)
+	}
+	totalCycles := countSubscriptionCalendarCycles(start, end, advance)
+	currentCycleIndex := countCompletedSubscriptionCalendarCycles(start, current, advance)
+	if currentCycleIndex < 0 {
+		currentCycleIndex = 0
+	}
+	if totalCycles > 0 && currentCycleIndex >= totalCycles {
+		currentCycleIndex = totalCycles - 1
+	}
+	return totalCycles, currentCycleIndex
+}
+
+func countCompletedSubscriptionCalendarCycles(start time.Time, end time.Time, advance func(time.Time) time.Time) int64 {
+	if !end.After(start) {
+		return 0
+	}
+	var count int64
+	cursor := start
+	for {
+		next := advance(cursor)
+		if !next.After(cursor) || next.After(end) {
+			break
+		}
+		count++
+		cursor = next
+	}
+	return count
+}
+
 func subscriptionQuotaUsedRatio(sub UserSubscription) decimal.Decimal {
 	if sub.AmountTotal <= 0 {
 		return decimal.Zero
@@ -705,6 +802,16 @@ func subscriptionQuotaUsedRatio(sub UserSubscription) decimal.Decimal {
 		return decimal.NewFromInt(1)
 	}
 	return decimal.NewFromInt(sub.AmountUsed).Div(decimal.NewFromInt(sub.AmountTotal))
+}
+
+func clampRatio(ratio decimal.Decimal) decimal.Decimal {
+	if ratio.LessThan(decimal.Zero) {
+		return decimal.Zero
+	}
+	if ratio.GreaterThan(decimal.NewFromInt(1)) {
+		return decimal.NewFromInt(1)
+	}
+	return ratio
 }
 
 func refundAmountForQuota(refundQuota int64, totalQuota int64, orderMoney decimal.Decimal, remainingMoney decimal.Decimal) float64 {

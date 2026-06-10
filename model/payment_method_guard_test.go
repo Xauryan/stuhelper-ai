@@ -377,7 +377,7 @@ func TestCalculateOfficialPaymentRefundPreviewCapsBalanceRefundByCurrentQuota(t 
 	assert.Equal(t, int64(50), preview.MaxRefundQuota)
 }
 
-func TestCalculateOfficialPaymentRefundPreviewUsesStrictSubscriptionUnusedRatio(t *testing.T) {
+func TestCalculateOfficialPaymentRefundPreviewUsesSubscriptionQuotaRatioWhenNoResetCycle(t *testing.T) {
 	truncateTables(t)
 
 	now := common.GetTimestamp()
@@ -1638,7 +1638,7 @@ func TestExpireSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) 
 	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
 }
 
-func TestCalculateOfficialPaymentRefundPreviewUsesResetCycleForSubscriptionTime(t *testing.T) {
+func TestCalculateOfficialPaymentRefundPreviewUsesResetCycleRefundRatio(t *testing.T) {
 	truncateTables(t)
 
 	now := common.GetTimestamp()
@@ -1687,7 +1687,61 @@ func TestCalculateOfficialPaymentRefundPreviewUsesResetCycleForSubscriptionTime(
 	require.NoError(t, err)
 	require.True(t, preview.IsSubscription)
 	assert.InDelta(t, float64(4)/7, preview.SubscriptionTimeRatio, 0.0001)
-	assert.InDelta(t, 58.00, preview.MaxRefundAmount, 0.0001)
-	assert.Equal(t, int64(70), preview.MaxRefundQuota)
+	assert.InDelta(t, 33.14, preview.MaxRefundAmount, 0.0001)
+	assert.Equal(t, int64(40), preview.MaxRefundQuota)
 	assert.InDelta(t, 58.00, preview.RemainingRefundAmount, 0.0001)
+}
+
+func TestCalculateOfficialPaymentRefundPreviewRefundsCurrentCycleUnusedQuota(t *testing.T) {
+	truncateTables(t)
+
+	now := common.GetTimestamp()
+	start := now - int64((2*24+3)*time.Hour/time.Second)
+	end := start + int64((7*24*time.Hour)/time.Second)
+
+	insertUserForPaymentGuardTest(t, 274, 0)
+	plan := &SubscriptionPlan{
+		Id:               409,
+		Title:            "Daily Reset Weekly 70",
+		PriceAmount:      70,
+		Currency:         "CNY",
+		DurationUnit:     SubscriptionDurationDay,
+		DurationValue:    7,
+		Enabled:          true,
+		TotalAmount:      1000,
+		QuotaResetPeriod: SubscriptionResetDaily,
+	}
+	require.NoError(t, DB.Create(plan).Error)
+	InvalidateSubscriptionPlanCache(plan.Id)
+	order := &SubscriptionOrder{
+		UserId:          274,
+		PlanId:          plan.Id,
+		Money:           70,
+		TradeNo:         "WXSUB_REFUND_CYCLE_CURRENT",
+		PaymentMethod:   PaymentMethodWechatPayOfficial,
+		PaymentProvider: PaymentProviderWechatPayOfficial,
+		Status:          common.TopUpStatusSuccess,
+		CreateTime:      start,
+		CompleteTime:    start,
+	}
+	require.NoError(t, order.Insert())
+	require.NoError(t, DB.Create(&UserSubscription{
+		UserId:      274,
+		PlanId:      plan.Id,
+		AmountTotal: 1000,
+		AmountUsed:  500,
+		StartTime:   start,
+		EndTime:     end,
+		Status:      "active",
+		Source:      "order",
+	}).Error)
+
+	preview, err := CalculateOfficialPaymentRefundPreview(order.TradeNo)
+	require.NoError(t, err)
+	require.True(t, preview.IsSubscription)
+	require.True(t, preview.Refundable)
+	assert.InDelta(t, 45.00, preview.MaxRefundAmount, 0.0001)
+	assert.InDelta(t, float64(4.5)/7, 1-preview.SubscriptionUsedRatio, 0.0001)
+	assert.InDelta(t, 0.5, preview.SubscriptionQuotaRatio, 0.0001)
+	assert.Equal(t, int64(500), preview.MaxRefundQuota)
 }
