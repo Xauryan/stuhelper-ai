@@ -235,7 +235,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
 
-		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) {
+		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) &&
+			!prepareAutoGroupRetryAfterRelayError(c, newAPIError, retryParam) {
 			break
 		}
 	}
@@ -348,6 +349,55 @@ func shouldRetry(c *gin.Context, openaiErr *types.StuHelperAIError, retryTimes i
 		return false
 	}
 	if _, ok := c.Get("specific_channel_id"); ok {
+		return false
+	}
+	code := openaiErr.StatusCode
+	if code >= 200 && code < 300 {
+		return false
+	}
+	if code < 100 || code > 599 {
+		return true
+	}
+	if operation_setting.IsAlwaysSkipRetryCode(openaiErr.GetErrorCode()) {
+		return false
+	}
+	return operation_setting.ShouldRetryByStatusCode(code)
+}
+
+func prepareAutoGroupRetryAfterRelayError(c *gin.Context, openaiErr *types.StuHelperAIError, retryParam *service.RetryParam) bool {
+	if retryParam == nil {
+		return false
+	}
+	if !service.HasNextAutoGroupRetry(c) {
+		return false
+	}
+	if !shouldRetryAutoGroupRelayError(c, openaiErr) {
+		return false
+	}
+	if !service.PrepareAutoGroupRetry(c) {
+		return false
+	}
+	retryParam.SetRetry(0)
+	retryParam.ResetRetryNextTry()
+	return true
+}
+
+func shouldRetryAutoGroupRelayError(c *gin.Context, openaiErr *types.StuHelperAIError) bool {
+	if openaiErr == nil {
+		return false
+	}
+	if _, ok := c.Get("specific_channel_id"); ok {
+		return false
+	}
+	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+		if !shouldFallbackChannelAffinityForError(c, openaiErr, 1) {
+			return false
+		}
+	}
+	if types.IsChannelError(openaiErr) {
+		return true
+	}
+	if types.IsSkipRetryError(openaiErr) {
 		return false
 	}
 	code := openaiErr.StatusCode
@@ -603,7 +653,8 @@ func RelayTask(c *gin.Context) {
 				types.NewOpenAIError(taskErr.Error, types.ErrorCodeBadResponseStatusCode, taskErr.StatusCode))
 		}
 
-		if !shouldRetryTaskRelay(c, channel.Id, taskErr, common.RetryTimes-retryParam.GetRetry()) {
+		if !shouldRetryTaskRelay(c, channel.Id, taskErr, common.RetryTimes-retryParam.GetRetry()) &&
+			!prepareAutoGroupRetryAfterTaskError(c, taskErr, retryParam) {
 			break
 		}
 	}
@@ -688,6 +739,60 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 	}
 	if taskErr.StatusCode == 408 {
 		// azure处理超时不重试
+		return false
+	}
+	if taskErr.LocalError {
+		return false
+	}
+	if taskErr.StatusCode/100 == 2 {
+		return false
+	}
+	return true
+}
+
+func prepareAutoGroupRetryAfterTaskError(c *gin.Context, taskErr *dto.TaskError, retryParam *service.RetryParam) bool {
+	if retryParam == nil {
+		return false
+	}
+	if !service.HasNextAutoGroupRetry(c) {
+		return false
+	}
+	if !shouldRetryAutoGroupTaskError(c, taskErr) {
+		return false
+	}
+	if !service.PrepareAutoGroupRetry(c) {
+		return false
+	}
+	retryParam.SetRetry(0)
+	retryParam.ResetRetryNextTry()
+	return true
+}
+
+func shouldRetryAutoGroupTaskError(c *gin.Context, taskErr *dto.TaskError) bool {
+	if taskErr == nil {
+		return false
+	}
+	if _, ok := c.Get("specific_channel_id"); ok {
+		return false
+	}
+	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+		if !shouldFallbackChannelAffinityForStatus(c, taskErr.StatusCode, 1) {
+			return false
+		}
+	}
+	if taskErr.StatusCode == http.StatusTooManyRequests {
+		return true
+	}
+	if taskErr.StatusCode == 307 {
+		return true
+	}
+	if taskErr.StatusCode/100 == 5 {
+		return !operation_setting.IsAlwaysSkipRetryStatusCode(taskErr.StatusCode)
+	}
+	if taskErr.StatusCode == http.StatusBadRequest {
+		return false
+	}
+	if taskErr.StatusCode == 408 {
 		return false
 	}
 	if taskErr.LocalError {

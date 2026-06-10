@@ -49,6 +49,65 @@ func (p *RetryParam) ResetRetryNextTry() {
 	p.resetNextTry = true
 }
 
+func nextAutoGroupRetryIndex(c *gin.Context) (int, []string, bool) {
+	if c == nil {
+		return 0, nil, false
+	}
+	if common.GetContextKeyString(c, constant.ContextKeyUsingGroup) != "auto" {
+		return 0, nil, false
+	}
+	if !common.GetContextKeyBool(c, constant.ContextKeyTokenCrossGroupRetry) {
+		return 0, nil, false
+	}
+
+	userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+	autoGroups := GetContextAutoGroups(c, userGroup)
+	if len(autoGroups) < 2 {
+		return 0, autoGroups, false
+	}
+
+	nextGroupIndex := -1
+	currentGroup := common.GetContextKeyString(c, constant.ContextKeyAutoGroup)
+	if currentGroup != "" {
+		for i, group := range autoGroups {
+			if group == currentGroup {
+				nextGroupIndex = i + 1
+				break
+			}
+		}
+	}
+	if nextGroupIndex < 0 {
+		if lastGroupIndex, exists := common.GetContextKey(c, constant.ContextKeyAutoGroupIndex); exists {
+			if idx, ok := lastGroupIndex.(int); ok {
+				nextGroupIndex = idx
+			}
+		}
+	}
+	if nextGroupIndex < 0 || nextGroupIndex >= len(autoGroups) {
+		return nextGroupIndex, autoGroups, false
+	}
+	return nextGroupIndex, autoGroups, true
+}
+
+func HasNextAutoGroupRetry(c *gin.Context) bool {
+	_, _, ok := nextAutoGroupRetryIndex(c)
+	return ok
+}
+
+// PrepareAutoGroupRetry advances an auto token request to the next concrete
+// group after the current selected group failed.
+func PrepareAutoGroupRetry(c *gin.Context) bool {
+	nextGroupIndex, autoGroups, ok := nextAutoGroupRetryIndex(c)
+	if !ok {
+		return false
+	}
+
+	common.SetContextKey(c, constant.ContextKeyAutoGroupIndex, nextGroupIndex)
+	common.SetContextKey(c, constant.ContextKeyAutoGroupRetryIndex, 0)
+	logger.LogDebug(c, "Auto group retry advancing to group: %s", autoGroups[nextGroupIndex])
+	return true
+}
+
 // CacheGetRandomSatisfiedChannel tries to get a random channel that satisfies the requirements.
 // 尝试获取一个满足要求的随机渠道。
 //

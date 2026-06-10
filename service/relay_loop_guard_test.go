@@ -168,6 +168,42 @@ func TestAutoSelectionUsesTokenPriorityBeforeSystemDefault(t *testing.T) {
 	require.Equal(t, "backup", selectGroup)
 }
 
+func TestPrepareAutoGroupRetrySelectsNextConcreteGroup(t *testing.T) {
+	db := setupRelayLoopGuardTestDB(t)
+	seedRelayLoopGuardChannel(t, db, 11, "default", "gpt-4o-mini")
+	seedRelayLoopGuardChannel(t, db, 22, "backup", "gpt-4o-mini")
+
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyUsingGroup, "auto")
+	common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+	common.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, true)
+
+	retry := common.GetPointer(0)
+	channel, selectGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        c,
+		TokenGroup: "auto",
+		ModelName:  "gpt-4o-mini",
+		Retry:      retry,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 11, channel.Id)
+	require.Equal(t, "default", selectGroup)
+
+	require.True(t, PrepareAutoGroupRetry(c))
+
+	channel, selectGroup, err = CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        c,
+		TokenGroup: "auto",
+		ModelName:  "gpt-4o-mini",
+		Retry:      retry,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 22, channel.Id)
+	require.Equal(t, "backup", selectGroup)
+}
+
 func TestAutoSelectionAllowsTokenPriorityWhenSystemAutoGroupsEmpty(t *testing.T) {
 	db := setupRelayLoopGuardTestDB(t)
 	require.NoError(t, setting.UpdateAutoGroupsByJsonString(`[]`))
