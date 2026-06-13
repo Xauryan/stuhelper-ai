@@ -939,23 +939,30 @@ func testAllChannels(notify bool) error {
 				shouldBanChannel = service.ShouldDisableChannel(result.newAPIError)
 			}
 
-			// 当错误检查通过，才检查响应时间
-			if common.AutomaticDisableChannelEnabled && !shouldBanChannel {
-				if milliseconds > disableThreshold {
-					err := fmt.Errorf("响应时间 %.2fs 超过阈值 %.2fs", float64(milliseconds)/1000.0, float64(disableThreshold)/1000.0)
-					newAPIError = types.NewOpenAIError(err, types.ErrorCodeChannelResponseTimeExceeded, http.StatusRequestTimeout)
-					shouldBanChannel = true
+			// A local error means the channel was never actually probed (e.g. an
+			// unsupported channel type, or a user-cache lookup failure). In that case
+			// result.context is nil, so skip all enable/disable decisions: do not
+			// blindly re-enable an untested channel, and do not dereference the nil
+			// context (which would panic and abort the whole test sweep).
+			if result.localErr == nil {
+				// 当错误检查通过，才检查响应时间
+				if common.AutomaticDisableChannelEnabled && !shouldBanChannel {
+					if milliseconds > disableThreshold {
+						err := fmt.Errorf("响应时间 %.2fs 超过阈值 %.2fs", float64(milliseconds)/1000.0, float64(disableThreshold)/1000.0)
+						newAPIError = types.NewOpenAIError(err, types.ErrorCodeChannelResponseTimeExceeded, http.StatusRequestTimeout)
+						shouldBanChannel = true
+					}
 				}
-			}
 
-			// disable channel
-			if isChannelEnabled && shouldBanChannel && channel.GetAutoBan() {
-				processChannelError(result.context, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
-			}
+				// disable channel
+				if isChannelEnabled && shouldBanChannel && channel.GetAutoBan() {
+					processChannelError(result.context, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
+				}
 
-			// enable channel
-			if !isChannelEnabled && service.ShouldEnableChannel(newAPIError, channel.Status) {
-				service.EnableChannel(channel.Id, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.Name)
+				// enable channel
+				if !isChannelEnabled && service.ShouldEnableChannel(newAPIError, channel.Status) {
+					service.EnableChannel(channel.Id, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.Name)
+				}
 			}
 
 			channel.UpdateResponseTime(milliseconds)
