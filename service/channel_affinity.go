@@ -701,6 +701,33 @@ func ShouldKeepChannelAffinityOnChannelDisabled() bool {
 	return setting.KeepOnChannelDisabled
 }
 
+// DropChannelAffinityPin deletes the current request's channel-affinity pin from
+// the cache so the next request re-selects a channel, WITHOUT touching this
+// request's skip-retry decision. Use this when the pinned channel fails with a
+// channel-side error (e.g. revoked upstream key) so future requests are not
+// stuck on a broken channel for the full pin TTL.
+func DropChannelAffinityPin(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	cacheKey, _, ok := getChannelAffinityContext(c)
+	if !ok || cacheKey == "" {
+		return false
+	}
+	cache := getChannelAffinityCache()
+	deleted, err := cache.DeleteMany([]string{cacheKey})
+	if err != nil {
+		common.SysError(fmt.Sprintf("channel affinity cache drop pin failed: err=%v", err))
+		return false
+	}
+	for _, ok := range deleted {
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
 func MarkChannelAffinityUsed(c *gin.Context, selectedGroup string, channelID int) {
 	if c == nil || channelID <= 0 {
 		return

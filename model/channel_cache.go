@@ -89,9 +89,21 @@ func InitChannelCache() {
 func SyncChannelCache(frequency int) {
 	for {
 		time.Sleep(time.Duration(frequency) * time.Second)
-		common.SysLog("syncing channels from database")
-		InitChannelCache()
+		syncChannelCacheOnce()
 	}
+}
+
+// syncChannelCacheOnce refreshes the channel cache with panic recovery so a
+// transient failure (e.g. a DB inconsistency that panics InitChannelCache) only
+// skips one sync cycle instead of crashing the whole process.
+func syncChannelCacheOnce() {
+	defer func() {
+		if r := recover(); r != nil {
+			common.SysLog(fmt.Sprintf("SyncChannelCache panic recovered, skipping this cycle: %v", r))
+		}
+	}()
+	common.SysLog("syncing channels from database")
+	InitChannelCache()
 }
 
 func GetRandomSatisfiedChannel(group string, model string, retry int) (*Channel, error) {
@@ -143,6 +155,15 @@ func GetRandomSatisfiedChannelExcluding(group string, model string, retry int, e
 
 	if retry >= len(uniquePriorities) {
 		retry = len(uniquePriorities) - 1
+	}
+	// When channels are being excluded (a failover retry that already dropped the
+	// failed channel(s)), prefer the highest-priority tier that still has available
+	// channels rather than descending tiers by retry count. This keeps retries within
+	// the top tier until its healthy channels are exhausted instead of prematurely
+	// falling back to lower-priority channels. `channels`/`uniquePriorities` are
+	// already computed over the post-exclusion set, so index 0 is the best live tier.
+	if len(excludeChannelIDs) > 0 {
+		retry = 0
 	}
 	targetPriority := int64(sortedUniquePriorities[retry])
 
