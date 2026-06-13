@@ -78,6 +78,10 @@ const (
 	ErrorCodeAwsInvokeError         ErrorCode = "aws_invoke_error"
 	ErrorCodeModelNotFound          ErrorCode = "model_not_found"
 	ErrorCodePromptBlocked          ErrorCode = "prompt_blocked"
+	// channel:-prefixed so IsChannelError treats an abnormally-interrupted upstream
+	// stream (timeout / scanner error / panic) as a channel failure: retryable when
+	// nothing was sent yet, and counted toward auto-disable statistics.
+	ErrorCodeStreamInterrupted ErrorCode = "channel:stream_interrupted"
 
 	// sql error
 	ErrorCodeQueryDataError  ErrorCode = "query_data_error"
@@ -90,6 +94,7 @@ const (
 
 type StuHelperAIError struct {
 	Err            error
+	internalErr    error
 	RelayError     any
 	skipRetry      bool
 	recordErrorLog *bool
@@ -130,6 +135,21 @@ func (e *StuHelperAIError) Error() string {
 		return string(e.errorCode)
 	}
 	return e.Err.Error()
+}
+
+// InternalError returns the original (pre-masking) error message for internal
+// classification such as auto-disable keyword matching, where the masked
+// client-facing message (set via ErrOptionWithHideErrMsg) would hide details
+// like "connection refused" / "no such host". Falls back to the client-facing
+// message when no masking was applied.
+func (e *StuHelperAIError) InternalError() string {
+	if e == nil {
+		return ""
+	}
+	if e.internalErr != nil {
+		return e.internalErr.Error()
+	}
+	return e.Error()
 }
 
 func (e *StuHelperAIError) ErrorWithStatusCode() string {
@@ -404,6 +424,11 @@ func ErrOptionWithHideErrMsg(replaceStr string) StuHelperAIErrorOptions {
 	return func(e *StuHelperAIError) {
 		if common.DebugEnabled {
 			fmt.Printf("ErrOptionWithHideErrMsg: %s, origin error: %s", replaceStr, e.Err)
+		}
+		// Preserve the original error for internal classification (e.g. auto-disable
+		// keyword matching) before masking the client-facing message.
+		if e.internalErr == nil {
+			e.internalErr = e.Err
 		}
 		e.Err = errors.New(replaceStr)
 	}

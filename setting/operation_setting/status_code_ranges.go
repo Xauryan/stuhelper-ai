@@ -33,9 +33,12 @@ var alwaysSkipRetryStatusCodes = map[int]struct{}{
 	524: {},
 }
 
-var alwaysSkipRetryCodes = map[types.ErrorCode]struct{}{
-	types.ErrorCodeBadResponseBody: {},
-}
+// alwaysSkipRetryCodes lists error codes that must never trigger a retry.
+// bad_response_body is intentionally NOT listed here: a non-streaming parse
+// failure happens before any byte is sent to the client and should fall over to
+// another channel. The "response already committed" case (e.g. a parse failure
+// mid-stream) is guarded separately via c.Writer.Written() in shouldRetry.
+var alwaysSkipRetryCodes = map[types.ErrorCode]struct{}{}
 
 func AutomaticDisableStatusCodesToString() string {
 	return statusCodeRangesToString(AutomaticDisableStatusCodeRanges)

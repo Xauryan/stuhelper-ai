@@ -162,6 +162,14 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		}
 	}
 
+	// If the upstream stream ended abnormally (timeout / scanner error / panic),
+	// surface a real error instead of sending a fake [DONE] and reporting success.
+	// This lets the channel be charged a failure and, when nothing was written yet,
+	// retried on another channel.
+	if interErr := helper.StreamInterruptionError(c, info); interErr != nil {
+		return usage, interErr
+	}
+
 	// 处理最后的响应
 	shouldSendLastResp := true
 	if err := handleLastResponse(lastStreamData, &responseId, &createAt, &systemFingerprint, &model, &usage,

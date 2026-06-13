@@ -1337,12 +1337,17 @@ func handleFinalStream(c *gin.Context, info *relaycommon.RelayInfo, resp *dto.Ch
 func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response, callback func(data string, geminiResponse *dto.GeminiChatResponse) bool) (*dto.Usage, *types.StuHelperAIError) {
 	var usage = &dto.Usage{}
 	var imageCount int
+	var streamErr *types.StuHelperAIError
 	responseText := strings.Builder{}
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		var geminiResponse dto.GeminiChatResponse
 		if err := common.UnmarshalJsonStr(data, &geminiResponse); err != nil {
-			sr.Stop(fmt.Errorf("unmarshal: %w", err))
+			// Malformed SSE chunk from upstream is a channel-side failure. Capture
+			// it so the caller can surface a real error (retry/disable/refund)
+			// instead of returning a silently truncated success.
+			streamErr = types.NewErrorWithStatusCode(fmt.Errorf("gemini stream unmarshal: %w", err), types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+			sr.Stop(err)
 			return
 		}
 
@@ -1368,10 +1373,16 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			*usage = mappedUsage
 		}
 
+		// callback 返回 false 通常是客户端写入失败（断连），不视作渠道错误，
+		// 仅终止流；上游数据解析失败才通过 streamErr 上报。
 		if !callback(data, &geminiResponse) {
 			sr.Stop(fmt.Errorf("gemini callback stopped"))
 		}
 	})
+
+	if streamErr != nil {
+		return usage, streamErr
+	}
 
 	if imageCount != 0 {
 		if usage.CompletionTokens == 0 {
