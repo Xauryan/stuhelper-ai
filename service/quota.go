@@ -226,8 +226,19 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
 	}
 
-	if err := SettleBilling(ctx, relayInfo, quota); err != nil {
-		logger.LogError(ctx, "error settling billing: "+err.Error())
+	// Realtime sessions already deduct each round's quota in real time via
+	// PreWssConsumeQuota -> PostConsumeQuota, so the session total is already
+	// charged against both the funding source and the token quota. Settling by the
+	// session total again here would double-charge the whole session (≈2x, exactly
+	// 2x for trust-bypass users whose pre-consume is 0). Instead, only return the
+	// initial pre-consumed reservation; the used-quota stats and consume log still
+	// record the true session total once.
+	if relayInfo.Billing != nil {
+		relayInfo.Billing.Refund(ctx)
+	} else if relayInfo.FinalPreConsumedQuota != 0 {
+		if err := PostConsumeQuota(relayInfo, -relayInfo.FinalPreConsumedQuota, relayInfo.FinalPreConsumedQuota, false); err != nil {
+			logger.LogError(ctx, "error refunding realtime pre-consumed quota: "+err.Error())
+		}
 	}
 
 	logModel := modelName
