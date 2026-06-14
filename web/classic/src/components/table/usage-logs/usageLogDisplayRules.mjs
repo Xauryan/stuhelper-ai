@@ -7,6 +7,7 @@ export function shouldShowLogIp(record, isAdminUser) {
     record?.ip &&
       (record?.type === 2 ||
         record?.type === 5 ||
+        record?.type === 7 ||
         (isAdminUser && (record?.type === 1 || record?.type === 6))),
   );
 }

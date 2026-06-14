@@ -152,6 +152,40 @@
 | `32805849` | 2026-06-05 | 合入 | 2026-06-05 12:18:57 +0800 | fix: reuse stream scanner buffer in channel handlers (#5225) | 合入 stream scanner buffer 复用。新增 `helper.NewStreamScanner` 并切换 Cloudflare、Cohere、Coze、Ollama、Tencent、Zhipu 等流式适配器，统一使用可配置的大行缓冲，补充大行 scanner 测试。 |
 | `b5331936` | 2026-06-06 | 忽略 | 2026-06-05 06:34:22 +0800 | feat(web): show user id on profile page | default-only profile header 展示用户 ID。本地已删除 `web/default`，classic 用户资料页不复用该组件，不移植。 |
 | `adc390c5` | 2026-06-06 | merge-only | 2026-06-06 00:45:13 +0800 | feat(web): show user id on profile page (#5317) | 上游 PR merge commit，实际内容由 `b5331936` 处理；default-only，不单独移植。 |
+| `979aeceb` | 2026-06-13 | 忽略 | 2026-05-28 19:17:47 +0800 | fix: align mobile usage log cost badge | default-only 使用日志移动端消费徽标样式修复。本地已删除 `web/default`，classic 使用日志移动端卡片未复用该组件，不移植。 |
+| `abad0d3c` | 2026-06-13 | 忽略 | 2026-06-03 14:49:08 +0800 | fix(model-pricing): detect visual pricing draft changes on save | default-only 模型价格视觉编辑器保存检测修复。已按规则复核 `pkg/billingexpr/expr.md`；该提交不改后端表达式、存储、结算或 classic 编辑器，本轮不移植。 |
+| `9e59ffc3` | 2026-06-14 | 部分合入 | 2026-06-03 18:27:07 +0800 | fix(model-pricing): align pricing mode editor spacing | default-only 模型价格编辑器布局不直接移植；按 classic 组件兼容吸收价格输入提示、搜索防抖和 IME 组合输入保护，避免中文输入时列表过早过滤。 |
+| `39e05118` | 2026-06-14 | 部分合入 | 2026-06-03 18:27:40 +0800 | fix(model-pricing): align pricing mode editor spacing | default-only 分层价格编辑器布局不直接移植；classic `TieredPricingEditor` 兼容扩大原始表达式编辑区并使用等宽排版，提高长表达式可读性。 |
+| `77d31575` | 2026-06-13 | 忽略 | 2026-06-04 17:22:50 +0800 | fix(model-pricing): commit visual pricing drafts on save | default-only 模型价格视觉草稿保存语义修复。本地 classic 的表达式编辑器和保存路径独立，且该提交不改 `pkg/billingexpr` 后端语义，本轮不移植。 |
+| `6e5a3591` | 2026-06-13 | 忽略 | 2026-06-05 00:06:41 +0800 | refactor(model-pricing): split visual pricing editor modules | default-only 模型价格视觉编辑器拆分重构。已复核计费表达式设计文档；本地 classic 组件树不同，不移植 default 模块拆分。 |
+| `5681c92b` | 2026-06-14 | 部分合入 | 2026-06-05 01:04:47 +0800 | perf(model-pricing): refine visual editor actions | default-only 视觉编辑器动作不直接移植；classic 兼容吸收模型价格搜索防抖、IME 组合输入保护与小数输入提示，未改后端表达式计费、存储、预扣或结算语义。 |
+| `c8d37680` | 2026-06-13 | 忽略 | 2026-06-05 14:02:26 +0800 | fix: respect theme for multiselect combobox popover | default-only combobox 主题修复，本地 classic 使用 Semi 组件，不移植。 |
+| `e2dbd02c` | 2026-06-13 | merge-only | 2026-06-05 14:11:55 +0800 | Merge remote-tracking branch 'upstream/main' into fix/mobile-usage-log-cost-alignment | 上游 merge commit，不单独移植；按其父提交实际内容分别处理。 |
+| `e8c36762` | 2026-06-14 | 部分合入 | 2026-06-05 17:24:33 +0800 | fix: support six-decimal steps in model pricing editor | 上游 default 分层价格输入步进从 `0.01` 改为 `0.000001`。classic 原本未受 step 限制，本轮补充 `inputMode='decimal'` 与“支持最多 6 位小数”提示，便于管理员明确输入精度。 |
+| `81d3dc08` | 2026-06-13 | 忽略 | 2026-06-06 14:15:44 +0800 | perf(model-pricing): reduce duplicate model name display | default-only 模型价格编辑器展示优化，本地 classic 不移植。 |
+| `75c05bb4` | 2026-06-14 | 部分合入 | 2026-06-06 14:36:21 +0800 | perf(model-pricing): improve JSON pricing editor layout | default-only JSON 价格编辑器不直接移植；classic 原始表达式 TextArea 兼容扩大高度并使用等宽/换行样式，保留现有保存路径。 |
+| `0f043ae4` | 2026-06-13 | 忽略 | 2026-06-06 15:14:26 +0800 | feat(json-editor): add reusable JSON code editor | default-only JSON code editor 组件与 default 模型价格编辑器集成；本地 classic 不复用该组件，本轮不移植。 |
+| `4dd68bad` | 2026-06-13 | 忽略 | 2026-06-06 15:26:53 +0800 | perf(model-pricing): move pricing tabs into page title | default-only 系统设置/价格编辑器布局调整，本地 classic 不移植。 |
+| `f5753a2b` | 2026-06-13 | 忽略 | 2026-06-06 15:49:38 +0800 | perf(web): simplify public page hero copy | default-only public page 文案调整；本地 classic/站点文案不复用 default 页面，不移植。 |
+| `7a5348ca` | 2026-06-13 | 忽略 | 2026-06-06 18:47:10 +0800 | feat(web): add shared dialog wrapper | default-only dialog wrapper 新增，本地 classic 使用 Semi Modal/自有封装，不移植。 |
+| `2eaa943d` | 2026-06-13 | 忽略 | 2026-06-06 21:49:33 +0800 | perf(web): improve dialog sizing and footer layout | default-only 大量 dialog 尺寸和 footer 布局调整，本地 classic 不移植。 |
+| `1e6f31b2` | 2026-06-14 | merge-only | 2026-06-06 23:14:18 +0800 | perf(model-pricing): improve model pricing editor UX (#5275) | 上游 PR merge commit，不单独移植；实际内容按子提交处理。classic 已兼容吸收适合本地的搜索输入、六位小数提示和原始表达式编辑布局，未搬 default 组件拆分和 JSON code editor。 |
+| `a1c82841` | 2026-06-13 | merge-only | 2026-06-06 23:15:05 +0800 | chore(web): simplify public page hero copy (#5339) | 上游 PR merge commit，实际内容由 `f5753a2b` 处理；default-only，不单独移植。 |
+| `15ff8e02` | 2026-06-13 | merge-only | 2026-06-06 23:16:53 +0800 | chore(web): improve frontend dialog layout and sizing (#5346) | 上游 PR merge commit，实际内容由 `7a5348ca`、`2eaa943d` 处理；default-only，不单独移植。 |
+| `19153448` | 2026-06-13 | merge-only | 2026-06-06 23:18:04 +0800 | fix: respect theme for multiselect combobox popover (#5328) | 上游 PR merge commit，实际内容由 `c8d37680` 处理；default-only，不单独移植。 |
+| `16dd7237` | 2026-06-13 | merge-only | 2026-06-06 23:19:07 +0800 | fix: align mobile usage log cost badge (#5161) | 上游 PR merge commit，实际内容由 `979aeceb` 处理；default-only，不单独移植。 |
+| `4ca47ee2` | 2026-06-13 | merge-only | 2026-06-06 23:22:37 +0800 | fix: support six-decimal steps in model pricing editor (#5332) | 上游 PR merge commit，实际内容由 `e8c36762` 处理；本地 classic 语义已覆盖，不单独移植。 |
+| `d2576ddc` | 2026-06-13 | 部分合入 | 2026-06-08 18:36:17 +0800 | fix(openai): support streaming image relay and image edit for images API  (#4608) | 手工移植 OpenAI Images API 后端核心行为：`ImageRequest.Stream` 改为 `*bool` 以保留显式 `false`，multipart image edit 通过 `common.ParseMultipartFormReusable` 保持 body 可复用并解析 `stream`，OpenAI 图片响应按 stream/非 stream 分流处理，JSON 图片结果可包装为 SSE。未引入 default 前端内容。 |
+| `30d3a3a5` | 2026-06-13 | 忽略 | 2026-06-10 17:18:51 +0800 | perf(web): add debounce channel search and skip during IME composition (#5393) | default-only 渠道表格搜索防抖与 IME 组合输入处理。本地 classic 渠道表格未复用 default data-table，不移植。 |
+| `867d8acf` | 2026-06-13 | 合入 | 2026-06-10 17:19:57 +0800 | fix: normalize kimi k2.6 temperature (#5390) | 手工移植 Moonshot `kimi-k2.6` temperature 归一化。对上游模型名为 `kimi-k2.6` 且客户端显式传入非 `1.0` temperature 的请求改写为 `1.0`；未传 temperature 时保持省略，其他 Moonshot 模型不受影响，并补充单元测试。 |
+| `59a93cf5` | 2026-06-14 | 部分合入 | 2026-06-10 17:47:37 +0800 | fix(openai): align image streaming relay governance | 在本地拆出 `relay/channel/openai/relay_image.go`，补齐图片 usage 归一化、SSE error event 记录、非流 JSON 到 SSE 的 fallback、XAI 图片 handler 分流；补同步接受默认 API/Web rate limit 提升到 360/120 和默认 scanner buffer 128MB。仍保留本地 `StreamStatus` 非空不覆盖保护，不接受上游无条件重建流状态。 |
+| `6f415428` | 2026-06-13 | 忽略 | 2026-06-11 02:36:41 +0800 | perf(web): improve frontend table rendering and pinned columns/UI table (#5405) | default-only data-table 大重构、列固定、静态表格和多页面迁移。本地 `web/default` 已删除，classic 不移植。 |
+| `27b2b2c4` | 2026-06-13 | 忽略 | 2026-06-12 23:18:22 +0800 | perf(data-table): improve data table layout and badge display (#5460) | default-only data-table 布局与 badge 单元格优化，本地 classic 不移植。 |
+| `d0c4305a` | 2026-06-14 | 部分合入 | 2026-06-12 23:40:40 +0800 | feat(audit): add localized security audit logs (#5462) | 按 classic 兼容路径移植审计基础：新增 `controller/audit.go`、`middleware/audit.go`、`LogTypeLogin`、`Other.op/admin_info/audit_info`、登录日志、用户/渠道/设置/兑换码/Passkey/2FA 等高价值手动埋点，以及管理写操作兜底审计。classic 使用日志已支持登录类型、审计动作/参数、路由/结果/admin_info 展开；普通用户查询会剥离 `admin_info`/`audit_info`。本地差异：写权限仍由 `RequireAdminRole`/`RootAuth` 控制，审计管理员只读；登录 IP 遵循用户 `record_ip_log` 设置。 |
+| `1292b8b2` | 2026-06-14 | 部分合入 | 2026-06-12 23:45:15 +0800 | chore: update Codex channel (#5461) | 接受渠道命名为 `ChatGPT Subscription (Codex)`，同步后端渠道名与 classic 渠道选项/文案；不接受删除本地 Codex OAuth start/complete API、`CodexOAuthModal` 和授权按钮的行为收缩。classic 现在明确支持手填 JSON、OAuth 生成和编辑时刷新凭证三种路径。 |
+| `15072292` | 2026-06-13 | 部分合入 | 2026-06-13 00:03:28 +0800 | fix: add deleted user status filter (#5464) | 手工移植后端用户搜索过滤。`SearchUsers` 在 `status=-1` 时查询软删除用户，普通 enabled/disabled 状态显式排除 `deleted_at IS NOT NULL`；新增测试覆盖 deleted/enabled/disabled 三种状态。上游 default 用户表筛选 UI 不移植。 |
+| `51475c80` | 2026-06-13 | 忽略 | 2026-06-13 00:10:26 +0800 | fix: only fetch deployment settings on deployments page (#5466) | default-only 模型/部署页面请求优化，本地 classic 不移植。 |
+| `1ac0f580` | 2026-06-14 | 合入 | 2026-06-13 16:12:22 +0800 | feat(audit): add authentication method tracking in audit logs | 随审计体系合入。`admin_info.auth_method` 记录 `session` / `access_token`，classic 使用日志详情展示为“会话”或“访问令牌”；不引入 default 使用日志组件。 |
 
 ## 2026-06-06 Rsbuild 迁移后核对
 
@@ -173,3 +207,20 @@
 - 站点元信息：复查 `/favicon.ico` 动态处理后，将默认 favicon 选择集中到单一 helper，避免服务端 meta 注入和 favicon handler 出现重复兜底。
 - 注册入口状态：复查 `b397c58ba` 的待决策项后补齐本地语义。`/api/status` 暴露全局注册开关和密码注册别名，classic 登录页与顶栏注册按钮不再只看自用模式，避免后台关闭新用户注册后仍展示注册入口。
 - 维护文档：清理 `docs/local-overlays.md` 中前序提交留下的 `uncommitted` / `本次兼容` / `本次排序修复` 占位，并记录 Waffo Pancake 不暴露为本地在线支付通道、注册入口状态字段的同步保留点。
+
+## 2026-06-13 上游同步初审记录
+
+- 上游状态：执行 `git fetch upstream` 后，`upstream/main` 为 `1ac0f5807a8a538fa9a1ec1d86e692210243ed6a`。本轮以上次记录的 `adc390c5` 为同步基线，核对范围为 `adc390c5..1ac0f580` 共 34 个提交；继续采用选择性手工移植，不整体 merge 上游。
+- 本轮合入：移植 `867d8acf` 的 Moonshot `kimi-k2.6` temperature 归一化；移植 `d2576ddc` / `59a93cf5` 中适配本地的 OpenAI Images API streaming、image edit multipart body 复用、图片 usage 归一化和 XAI 图片响应处理；移植 `15072292` 的用户搜索 deleted 状态过滤后端语义。
+- 本轮保留本地差异：未引入 `web/default`；未接受上游 `59a93cf5` 的默认 rate limit 提升、默认 128MB stream scanner buffer、以及无条件重建 `StreamStatus` 的行为，继续保留本地既有流状态保护和默认 64MB scanner buffer。
+- 本轮跳过：大量 `web/default` only 的 model-pricing、dialog、data-table、public page、channel search、deployment settings 提交不适配本地 classic-only 前端；其中 model-pricing 相关提交已按规则复核 `pkg/billingexpr/expr.md`，确认未触碰后端表达式计费、存储、预扣或结算语义。
+- 待决策：`d0c4305a` / `1ac0f580` 是完整安全审计体系和认证方式追踪，需要先决定 classic 日志展示、本地化、日志字段兼容和审计范围；`1292b8b2` 会删除现有 Codex OAuth 授权入口，只保留手填 JSON/刷新凭证，需确认是否接受该产品行为收缩。
+- 验证结果：`go test ./relay/channel/moonshot ./relay/channel/openai ./relay/helper ./model -count=1` 通过；`git diff --check` 通过。
+
+## 2026-06-14 兼容补同步记录
+
+- 上游状态：再次执行 `git fetch upstream` 后，`upstream/main` 仍为 `1ac0f5807a8a538fa9a1ec1d86e692210243ed6a`，没有新增提交；继续不整体 merge 上游。
+- 审计日志：按当前 classic 前端兼容合入 `d0c4305a` / `1ac0f580`。后端新增审计 helpers、写操作兜底、登录日志类型、`Other.op/admin_info/audit_info` 和 `auth_method`；classic 使用日志增加登录筛选、审计动作/参数、登录方式、User-Agent、认证方式、审计路由、HTTP 状态、操作结果和路由参数展示。普通用户日志仍剥离 `admin_info` / `audit_info`；审计管理员保持只读，写操作继续由 `RequireAdminRole` / `RootAuth` 拦截；登录 IP 遵循用户 `record_ip_log` 设置。
+- Codex 渠道：按兼容路径处理 `1292b8b2`。接受渠道命名 `ChatGPT Subscription (Codex)`，同步后端、classic 渠道选项、密钥输入提示和授权弹窗标题；保留本地 OAuth start/complete API、`CodexOAuthModal` 和授权按钮，不接受上游删除 OAuth 引导的产品行为收缩。classic 现在明确支持手填 JSON、OAuth 生成和编辑时刷新凭证。
+- OpenAI 图片流治理：补同步 `59a93cf5` 此前未接受项。接受 `GLOBAL_API_RATE_LIMIT=360`、`GLOBAL_WEB_RATE_LIMIT=120` 和默认 stream scanner buffer `128MB`；仍保留本地 `StreamStatus` 非空不覆盖保护，避免上游无条件重建流状态覆盖已有流式状态信息。
+- default 前端复核：重新检查 `web/default` 相关提交。data-table、dialog wrapper、public page、deployment settings、combobox 主题等仍绑定 default 架构，classic 不直接移植；model-pricing 只吸收可落到 classic 的 UX 点：六位小数提示、价格输入 `inputMode='decimal'`、搜索 200ms 防抖与 IME 组合输入保护、原始表达式编辑区增高和等宽换行。按规则已复核 `pkg/billingexpr/expr.md`，这些改动只影响 classic 视觉编辑体验，不改后端表达式计费、存储、预扣或结算语义。

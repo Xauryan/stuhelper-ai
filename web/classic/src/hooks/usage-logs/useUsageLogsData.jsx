@@ -406,6 +406,240 @@ export const useLogsData = () => {
       }
       return operationType;
     };
+    const auditActionLabel = (action) => {
+      switch (action) {
+        case 'login':
+          return t('登录成功');
+        case 'user.create':
+          return t('创建用户');
+        case 'user.update':
+          return t('更新用户');
+        case 'user.delete':
+          return t('删除用户');
+        case 'user.manage':
+          return t('管理用户');
+        case 'user.quota_add':
+          return t('增加用户额度');
+        case 'user.quota_subtract':
+          return t('减少用户额度');
+        case 'user.quota_override':
+          return t('覆盖用户额度');
+        case 'user.binding_clear':
+          return t('清除用户绑定');
+        case 'user.2fa_disable':
+          return t('强制禁用两步验证');
+        case 'user.passkey_register':
+          return t('注册 Passkey');
+        case 'user.passkey_delete':
+          return t('删除 Passkey');
+        case 'user.reset_passkey':
+          return t('重置用户 Passkey');
+        case 'user.topup_complete':
+          return t('完成用户充值');
+        case 'user.oauth_unbind':
+          return t('解绑用户 OAuth');
+        case 'option.update':
+          return t('更新系统设置');
+        case 'option.payment_compliance':
+          return t('更新支付合规确认');
+        case 'option.reset_ratio':
+          return t('重置模型倍率');
+        case 'option.clear_affinity_cache':
+          return t('清理渠道亲和缓存');
+        case 'custom_oauth.create':
+          return t('创建自定义 OAuth');
+        case 'custom_oauth.update':
+          return t('更新自定义 OAuth');
+        case 'custom_oauth.delete':
+          return t('删除自定义 OAuth');
+        case 'performance.clear_disk_cache':
+          return t('清理磁盘缓存');
+        case 'performance.gc':
+          return t('触发垃圾回收');
+        case 'performance.clear_logs':
+          return t('清理性能日志');
+        case 'channel.create':
+          return t('创建渠道');
+        case 'channel.update':
+          return t('更新渠道');
+        case 'channel.delete':
+          return t('删除渠道');
+        case 'channel.delete_batch':
+          return t('批量删除渠道');
+        case 'channel.delete_disabled':
+          return t('删除禁用渠道');
+        case 'channel.key_view':
+          return t('查看渠道密钥');
+        case 'channel.tag_disable':
+          return t('禁用标签渠道');
+        case 'channel.tag_enable':
+          return t('启用标签渠道');
+        case 'channel.tag_edit':
+          return t('编辑标签渠道');
+        case 'channel.tag_batch_set':
+          return t('批量设置渠道标签');
+        case 'channel.copy':
+          return t('复制渠道');
+        case 'channel.multi_key_manage':
+          return t('管理多密钥渠道');
+        case 'channel.upstream_apply':
+          return t('应用渠道上游模型变更');
+        case 'channel.upstream_apply_all':
+          return t('批量应用渠道上游模型变更');
+        case 'redemption.create':
+          return t('创建兑换码');
+        case 'redemption.update':
+          return t('更新兑换码');
+        case 'redemption.delete':
+          return t('删除兑换码');
+        case 'redemption.delete_invalid':
+          return t('删除无效兑换码');
+        case 'prefill_group.create':
+          return t('创建预填分组');
+        case 'prefill_group.update':
+          return t('更新预填分组');
+        case 'prefill_group.delete':
+          return t('删除预填分组');
+        case 'vendor.create':
+          return t('创建供应商');
+        case 'vendor.update':
+          return t('更新供应商');
+        case 'vendor.delete':
+          return t('删除供应商');
+        case 'model.create':
+          return t('创建模型');
+        case 'model.update':
+          return t('更新模型');
+        case 'model.delete':
+          return t('删除模型');
+        case 'model.sync_upstream':
+          return t('同步上游模型');
+        case 'deployment.create':
+          return t('创建部署');
+        case 'deployment.update':
+          return t('更新部署');
+        case 'deployment.delete':
+          return t('删除部署');
+        case 'subscription.plan_create':
+          return t('创建订阅套餐');
+        case 'subscription.plan_update':
+          return t('更新订阅套餐');
+        case 'subscription.plan_status_update':
+          return t('更新订阅套餐状态');
+        case 'subscription.bind':
+          return t('绑定用户订阅');
+        case 'log.clear':
+          return t('清理历史日志');
+        case 'generic':
+          return t('管理操作');
+        default:
+          return action || '';
+      }
+    };
+    const auditParamKeyLabel = (key) => {
+      switch (key) {
+        case 'id':
+          return 'ID';
+        case 'name':
+          return t('名称');
+        case 'username':
+          return t('用户名称');
+        case 'role':
+          return t('角色');
+        case 'type':
+          return t('类型');
+        case 'count':
+          return t('数量');
+        case 'quota':
+          return t('额度');
+        case 'method':
+          return t('方式');
+        case 'tag':
+          return t('标签');
+        case 'bindingType':
+          return t('绑定类型');
+        case 'sourceId':
+          return t('来源 ID');
+        case 'action':
+          return t('动作');
+        case 'changed_fields':
+          return t('变更字段');
+        case 'route':
+          return t('路由');
+        default:
+          return key;
+      }
+    };
+    const formatAuditValue = (value) => {
+      if (Array.isArray(value)) {
+        return value.join(', ');
+      }
+      if (value && typeof value === 'object') {
+        return JSON.stringify(value);
+      }
+      if (value === true) {
+        return t('是');
+      }
+      if (value === false) {
+        return t('否');
+      }
+      if (value === undefined || value === null || value === '') {
+        return '-';
+      }
+      return String(value);
+    };
+    const renderAuditParams = (params) => {
+      if (!params || typeof params !== 'object') {
+        return null;
+      }
+      const entries = Object.entries(params);
+      if (entries.length === 0) {
+        return null;
+      }
+      return (
+        <div style={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
+          {entries
+            .map(
+              ([key, value]) =>
+                `${auditParamKeyLabel(key)}：${formatAuditValue(value)}`,
+            )
+            .join('\n')}
+        </div>
+      );
+    };
+    const loginMethodLabel = (method) => {
+      if (method === 'password') {
+        return t('密码');
+      }
+      if (method === '2fa') {
+        return t('两步验证');
+      }
+      if (method === 'passkey') {
+        return 'Passkey';
+      }
+      if (method === 'wechat') {
+        return t('微信登录');
+      }
+      if (method === 'telegram') {
+        return t('Telegram 登录');
+      }
+      if (typeof method === 'string' && method.startsWith('oauth:')) {
+        return `OAuth: ${method.slice('oauth:'.length)}`;
+      }
+      if (method === 'oauth') {
+        return 'OAuth';
+      }
+      return method || '-';
+    };
+    const authMethodLabel = (method) => {
+      if (method === 'access_token') {
+        return t('访问令牌');
+      }
+      if (method === 'session') {
+        return t('会话');
+      }
+      return method || '-';
+    };
 
     let expandDatesLocal = {};
     for (let i = 0; i < logs.length; i++) {
@@ -426,6 +660,44 @@ export const useLogsData = () => {
           key: t('Request ID'),
           value: logs[i].request_id,
         });
+      }
+      if (other?.op?.action) {
+        expandDataLocal.push({
+          key: t('审计操作'),
+          value: auditActionLabel(other.op.action),
+        });
+        const auditParams = renderAuditParams(other.op.params);
+        if (auditParams) {
+          expandDataLocal.push({
+            key: t('审计参数'),
+            value: auditParams,
+          });
+        }
+      }
+      if (logs[i].type === 7) {
+        if (other?.login_method) {
+          expandDataLocal.push({
+            key: t('登录方式'),
+            value: loginMethodLabel(other.login_method),
+          });
+        }
+        if (other?.user_agent) {
+          expandDataLocal.push({
+            key: t('User-Agent'),
+            value: (
+              <div
+                style={{
+                  maxWidth: 600,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  lineHeight: 1.6,
+                }}
+              >
+                {other.user_agent}
+              </div>
+            ),
+          });
+        }
       }
       if (other?.ws || other?.audio) {
         expandDataLocal.push({
@@ -767,10 +1039,53 @@ export const useLogsData = () => {
             value: operatorValue,
           });
         }
+        if (adminInfo?.auth_method) {
+          expandDataLocal.push({
+            key: t('认证方式'),
+            value: authMethodLabel(adminInfo.auth_method),
+          });
+        }
         if (quotaOperationType !== '') {
           expandDataLocal.push({
             key: t('操作类型'),
             value: adminQuotaOperationLabel(quotaOperationType),
+          });
+        }
+      }
+      if (canReadAllLogs && logs[i].type === 3 && other?.audit_info) {
+        const auditInfo = other.audit_info;
+        const routeLine = [auditInfo.method, auditInfo.route || auditInfo.path]
+          .filter(Boolean)
+          .join(' ');
+        if (routeLine) {
+          expandDataLocal.push({
+            key: t('审计路由'),
+            value: routeLine,
+          });
+        }
+        if (auditInfo.path && auditInfo.path !== auditInfo.route) {
+          expandDataLocal.push({
+            key: t('请求路径'),
+            value: auditInfo.path,
+          });
+        }
+        if (auditInfo.status !== undefined) {
+          expandDataLocal.push({
+            key: t('HTTP 状态'),
+            value: auditInfo.status,
+          });
+        }
+        if (auditInfo.success !== undefined) {
+          expandDataLocal.push({
+            key: t('操作结果'),
+            value: auditInfo.success ? t('成功') : t('失败'),
+          });
+        }
+        const routeParams = renderAuditParams(auditInfo.params);
+        if (routeParams) {
+          expandDataLocal.push({
+            key: t('路由参数'),
+            value: routeParams,
           });
         }
       }

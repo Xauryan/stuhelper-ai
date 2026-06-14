@@ -210,7 +210,14 @@ func authHelper(c *gin.Context, minRole int) {
 	c.Set("user_group", session.Get("group"))
 	c.Set("use_access_token", useAccessToken)
 
+	var auditWriter *auditResponseWriter
+	if role.(int) >= common.RoleAdminUser {
+		auditWriter = beginAdminAudit(c)
+	}
+
 	c.Next()
+
+	finishAdminAudit(c, auditWriter)
 }
 
 func abortInsufficientPrivilege(c *gin.Context) {

@@ -109,7 +109,7 @@ const CodexOAuthModal = ({ visible, onCancel, onSuccess }) => {
 
   return (
     <Modal
-      title={t('Codex 授权')}
+      title={t('ChatGPT Subscription (Codex) 授权')}
       visible={visible}
       onCancel={onCancel}
       maskClosable={false}
@@ -135,7 +135,7 @@ const CodexOAuthModal = ({ visible, onCancel, onSuccess }) => {
         <Banner
           type='info'
           description={t(
-            '1) 点击「打开授权页面」完成登录；2) 浏览器会跳转到 localhost（页面打不开也没关系）；3) 复制地址栏完整 URL 粘贴到下方；4) 点击「生成并填入」。',
+            'OAuth 生成是可选辅助方式；也可以直接手填 JSON 凭据。1) 点击「打开授权页面」完成登录；2) 浏览器会跳转到 localhost（页面打不开也没关系）；3) 复制地址栏完整 URL 粘贴到下方；4) 点击「生成并填入」。',
           )}
         />
 
@@ -161,7 +161,7 @@ const CodexOAuthModal = ({ visible, onCancel, onSuccess }) => {
 
         <Text type='tertiary' size='small'>
           {t(
-            '说明：生成结果是可直接粘贴到渠道密钥里的 JSON（包含 access_token / refresh_token / account_id）。',
+            '说明：生成结果是可直接粘贴到渠道密钥里的 JSON（包含 access_token / refresh_token / account_id）；编辑已有渠道时也可以使用刷新凭证。',
           )}
         </Text>
       </Space>

@@ -375,6 +375,7 @@ function PriceInput({ unitCost, field, index, onUpdate, placeholder }) {
       placeholder={placeholder || '0'}
       suffix={PRICE_SUFFIX}
       onChange={handleChange}
+      inputMode='decimal'
       style={{ width: '100%', marginTop: 2 }}
     />
   );
@@ -1086,8 +1087,13 @@ function RawExprEditor({ exprString, onChange, t }) {
       <TextArea
         value={exprString}
         onChange={onChange}
-        autosize={{ minRows: 3, maxRows: 12 }}
-        style={{ fontFamily: 'monospace', fontSize: 13 }}
+        autosize={{ minRows: 5, maxRows: 18 }}
+        style={{
+          fontFamily: 'monospace',
+          fontSize: 13,
+          lineHeight: 1.6,
+          wordBreak: 'break-word',
+        }}
         placeholder={t('输入计费表达式...')}
       />
     </div>

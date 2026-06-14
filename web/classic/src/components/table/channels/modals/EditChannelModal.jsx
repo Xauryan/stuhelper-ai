@@ -156,7 +156,7 @@ function type2secretPrompt(type) {
     case 51:
       return '按照如下格式输入: AccessKey|SecretAccessKey';
     case 57:
-      return '请输入 JSON 格式的 OAuth 凭据（必须包含 access_token 和 account_id）';
+      return '请输入 ChatGPT Subscription (Codex) JSON 凭据（必须包含 access_token 和 account_id）';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
@@ -2991,7 +2991,7 @@ const EditChannelModal = (props) => {
                                     : t('密钥')
                                 }
                                 placeholder={t(
-                                  '请输入 JSON 格式的 OAuth 凭据，例如：\n{\n  "access_token": "...",\n  "account_id": "..." \n}',
+                                  '请输入 ChatGPT Subscription (Codex) JSON 凭据，例如：\n{\n  "access_token": "...",\n  "account_id": "..." \n}',
                                 )}
                                 rules={
                                   isEdit
@@ -3011,7 +3011,7 @@ const EditChannelModal = (props) => {
                                   <div className='flex flex-col gap-2'>
                                     <Text type='tertiary' size='small'>
                                       {t(
-                                        '仅支持 JSON 对象，必须包含 access_token 与 account_id',
+                                        '可手填 JSON 凭据，也可使用授权生成；仅支持 JSON 对象，必须包含 access_token 与 account_id',
                                       )}
                                     </Text>
 
@@ -3024,7 +3024,7 @@ const EditChannelModal = (props) => {
                                           setCodexOAuthModalVisible(true)
                                         }
                                       >
-                                        {t('Codex 授权')}
+                                        {t('ChatGPT Subscription (Codex) 授权')}
                                       </Button>
                                       {isEdit && (
                                         <Button

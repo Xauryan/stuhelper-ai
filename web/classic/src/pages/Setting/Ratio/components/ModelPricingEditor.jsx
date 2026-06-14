@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@xauryan.com
 */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Banner,
   Button,
@@ -77,6 +77,7 @@ const PriceInput = ({
         onChange={onChange}
         suffix={suffix}
         disabled={disabled}
+        inputMode='decimal'
       />
     ) : null}
     {extraText ? (
@@ -102,6 +103,8 @@ export default function ModelPricingEditor({
   const [addVisible, setAddVisible] = useState(false);
   const [batchVisible, setBatchVisible] = useState(false);
   const [newModelName, setNewModelName] = useState('');
+  const [searchDraft, setSearchDraft] = useState('');
+  const [isComposingSearch, setIsComposingSearch] = useState(false);
 
   const {
     selectedModel,
@@ -137,6 +140,20 @@ export default function ModelPricingEditor({
     candidateModelNames,
     filterMode,
   });
+
+  useEffect(() => {
+    setSearchDraft(searchText);
+  }, [searchText]);
+
+  useEffect(() => {
+    if (isComposingSearch) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSearchText(searchDraft);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [isComposingSearch, searchDraft, setSearchText]);
 
   const getExprModeLabel = useCallback(
     (model) => {
@@ -288,8 +305,15 @@ export default function ModelPricingEditor({
           <Input
             prefix={<IconSearch />}
             placeholder={t('搜索模型名称')}
-            value={searchText}
-            onChange={(value) => setSearchText(value)}
+            value={searchDraft}
+            onChange={(value) => setSearchDraft(value)}
+            onCompositionStart={() => setIsComposingSearch(true)}
+            onCompositionEnd={(event) => {
+              setIsComposingSearch(false);
+              const value = event?.target?.value ?? searchDraft;
+              setSearchDraft(value);
+              setSearchText(value);
+            }}
             style={{ width: isMobile ? '100%' : 220 }}
             showClear
           />
@@ -456,7 +480,7 @@ export default function ModelPricingEditor({
                     onChange={(value) =>
                       handleNumericFieldChange('fixedPrice', value)
                     }
-                    extraText={t('适合 MJ / 任务类等按次收费模型。')}
+                    extraText={`${t('适合 MJ / 任务类等按次收费模型。')} ${t('支持最多 6 位小数。')}`}
                   />
                 ) : selectedModel.billingMode === 'tiered_expr' ? (
                   <TieredPricingEditor
@@ -483,6 +507,7 @@ export default function ModelPricingEditor({
                         onChange={(value) =>
                           handleNumericFieldChange('inputPrice', value)
                         }
+                        extraText={t('支持最多 6 位小数。')}
                       />
                       {selectedModel.completionRatioLocked ? (
                         <Banner

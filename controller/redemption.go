@@ -117,6 +117,11 @@ func AddRedemption(c *gin.Context) {
 		}
 		keys = append(keys, key)
 	}
+	recordManageAudit(c, "redemption.create", map[string]interface{}{
+		"name":  redemption.Name,
+		"count": redemption.Count,
+		"quota": redemption.Quota,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
