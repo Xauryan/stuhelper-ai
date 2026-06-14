@@ -871,11 +871,13 @@ func ValidateAccessToken(token string) (*User, error) {
 // GetUserQuota gets quota from Redis first, falls back to DB if needed
 func GetUserQuota(id int, fromDB bool) (quota int, err error) {
 	defer func() {
-		// Update Redis cache asynchronously on successful DB read
+		// Do not write a DB snapshot back into Redis here. Quota is updated with
+		// atomic HINCRBY/HDECRBY in the hot billing path; an async set from a
+		// fallback DB read can race and overwrite a newer in-cache delta.
 		if shouldUpdateRedis(fromDB, err) {
 			gopool.Go(func() {
-				if err := updateUserQuotaCache(id, quota); err != nil {
-					common.SysLog("failed to update user quota cache: " + err.Error())
+				if err := invalidateUserCache(id); err != nil {
+					common.SysLog("failed to invalidate user quota cache: " + err.Error())
 				}
 			})
 		}

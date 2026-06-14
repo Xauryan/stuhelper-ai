@@ -138,6 +138,39 @@ func TestRefundSubscriptionPreConsumeRefundsQuotaAndMarksRecordOnce(t *testing.T
 	assert.EqualValues(t, 0, sub.AmountUsed)
 }
 
+func TestPostConsumeUserSubscriptionDeltaRejectsOverLimit(t *testing.T) {
+	truncateTables(t)
+
+	now := time.Now().Unix()
+	insertSubscriptionPlanForModelLimitTest(t, 1006, 100, false, "")
+	insertUserSubscriptionForModelLimitTest(t, 2006, 3006, 1006, 100, 90, now+3600)
+
+	err := PostConsumeUserSubscriptionDelta(2006, 20)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "subscription used exceeds total")
+
+	var sub UserSubscription
+	require.NoError(t, DB.First(&sub, 2006).Error)
+	assert.EqualValues(t, 90, sub.AmountUsed)
+}
+
+func TestSettleUserSubscriptionDeltaAllowsOverLimit(t *testing.T) {
+	truncateTables(t)
+
+	now := time.Now().Unix()
+	insertSubscriptionPlanForModelLimitTest(t, 1007, 100, false, "")
+	insertUserSubscriptionForModelLimitTest(t, 2007, 3007, 1007, 100, 90, now+3600)
+
+	err := SettleUserSubscriptionDelta(2007, 20)
+
+	require.NoError(t, err)
+
+	var sub UserSubscription
+	require.NoError(t, DB.First(&sub, 2007).Error)
+	assert.EqualValues(t, 110, sub.AmountUsed)
+}
+
 func TestCreateUserSubscriptionFromPlanTxLocksUserBeforeMaxPurchaseCheck(t *testing.T) {
 	truncateTables(t)
 

@@ -859,7 +859,7 @@ const SubscriptionPlansCard = ({
     const total = Number(sub?.subscription?.amount_total || 0);
     const used = Number(sub?.subscription?.amount_used || 0);
     if (total <= 0) return 0;
-    return Math.round((used / total) * 100);
+    return Math.min(100, Math.round((used / total) * 100));
   };
 
   const cardContent = (

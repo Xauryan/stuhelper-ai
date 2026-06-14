@@ -56,7 +56,8 @@ type Channel struct {
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
 	// cache info
-	Keys []string `json:"-" gorm:"-"`
+	Keys         []string `json:"-" gorm:"-"`
+	BreakerState string   `json:"breaker_state,omitempty" gorm:"-"`
 }
 
 type ChannelInfo struct {
@@ -789,9 +790,8 @@ func EnableChannelByTag(tag string) ([]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = DB.Model(&Channel{}).Where("tag = ?", tag).Update("status", common.ChannelStatusEnabled).Error
-	if err != nil {
-		return nil, err
+	for _, channelID := range channelIDs {
+		UpdateChannelStatus(channelID, "", common.ChannelStatusEnabled, "")
 	}
 	err = UpdateAbilityStatusByTag(tag, true)
 	return channelIDs, err

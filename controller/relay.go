@@ -395,10 +395,11 @@ func shouldRetry(c *gin.Context, openaiErr *types.StuHelperAIError, retryTimes i
 			return false
 		}
 	}
-	if types.IsChannelError(openaiErr) {
+	classification := service.ClassifyRelayError(openaiErr)
+	if classification.ForceRetry {
 		return true
 	}
-	if types.IsSkipRetryError(openaiErr) {
+	if !classification.Retryable {
 		return false
 	}
 	if retryTimes <= 0 {
@@ -407,17 +408,7 @@ func shouldRetry(c *gin.Context, openaiErr *types.StuHelperAIError, retryTimes i
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
-	code := openaiErr.StatusCode
-	if code >= 200 && code < 300 {
-		return false
-	}
-	if code < 100 || code > 599 {
-		return true
-	}
-	if operation_setting.IsAlwaysSkipRetryCode(openaiErr.GetErrorCode()) {
-		return false
-	}
-	return operation_setting.ShouldRetryByStatusCode(code)
+	return true
 }
 
 func prepareAutoGroupRetryAfterRelayError(c *gin.Context, openaiErr *types.StuHelperAIError, retryParam *service.RetryParam) bool {
@@ -453,33 +444,19 @@ func shouldRetryAutoGroupRelayError(c *gin.Context, openaiErr *types.StuHelperAI
 			return false
 		}
 	}
-	if types.IsChannelError(openaiErr) {
+	classification := service.ClassifyRelayError(openaiErr)
+	if classification.ForceRetry {
 		return true
 	}
-	if types.IsSkipRetryError(openaiErr) {
-		return false
-	}
-	code := openaiErr.StatusCode
-	if code >= 200 && code < 300 {
-		return false
-	}
-	if code < 100 || code > 599 {
-		return true
-	}
-	if operation_setting.IsAlwaysSkipRetryCode(openaiErr.GetErrorCode()) {
-		return false
-	}
-	return operation_setting.ShouldRetryByStatusCode(code)
+	return classification.Retryable
 }
 
 func shouldFallbackChannelAffinityForError(c *gin.Context, openaiErr *types.StuHelperAIError, retryTimes int) bool {
 	if openaiErr == nil {
 		return false
 	}
-	if types.IsSkipRetryError(openaiErr) {
-		return false
-	}
-	if operation_setting.IsAlwaysSkipRetryCode(openaiErr.GetErrorCode()) {
+	classification := service.ClassifyRelayError(openaiErr)
+	if !classification.Retryable {
 		return false
 	}
 	return shouldFallbackChannelAffinityForStatus(c, openaiErr.StatusCode, retryTimes)

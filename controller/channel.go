@@ -120,6 +120,15 @@ func sanitizeAuditChannels(c *gin.Context, channels []*model.Channel) {
 	}
 }
 
+func attachChannelBreakerState(channels []*model.Channel) {
+	for _, channel := range channels {
+		if channel == nil {
+			continue
+		}
+		channel.BreakerState = service.BreakerStateName(channel.Id)
+	}
+}
+
 func GetAllChannels(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	channelData := make([]*model.Channel, 0)
@@ -190,6 +199,7 @@ func GetAllChannels(c *gin.Context) {
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
 	}
+	attachChannelBreakerState(channelData)
 	sanitizeAuditChannels(c, channelData)
 
 	countQuery := buildChannelListQuery(groupFilter, statusFilter, -1)
@@ -390,6 +400,7 @@ func SearchChannels(c *gin.Context) {
 	for _, datum := range pagedData {
 		clearChannelInfo(datum)
 	}
+	attachChannelBreakerState(pagedData)
 	sanitizeAuditChannels(c, pagedData)
 
 	c.JSON(http.StatusOK, gin.H{

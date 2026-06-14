@@ -338,6 +338,41 @@ func TestNewBillingSessionModelLimitedSubscriptionOnlyReturnsQuotaError(t *testi
 	assert.Equal(t, 1000, getTokenRemainQuota(t, tokenID))
 }
 
+func TestBillingSessionSubscriptionSettleAllowsOverLimit(t *testing.T) {
+	truncate(t)
+	gin.SetMode(gin.TestMode)
+
+	const userID, tokenID, subID = 907, 908, 909
+	seedUser(t, userID, 0)
+	seedToken(t, tokenID, userID, "sk-sub-over-limit-settle", 1000)
+	seedSubscription(t, subID, userID, 100, 20)
+
+	ctx, _ := gin.CreateTestContext(nil)
+	relayInfo := &relaycommon.RelayInfo{
+		RequestId:       "sub-over-limit-settle",
+		UserId:          userID,
+		TokenId:         tokenID,
+		TokenKey:        "sk-sub-over-limit-settle",
+		OriginModelName: "gpt-4o",
+		UserSetting: dto.UserSetting{
+			BillingPreference: "subscription_only",
+		},
+	}
+
+	apiErr := PreConsumeBilling(ctx, 80, relayInfo)
+	require.Nil(t, apiErr)
+	require.NotNil(t, relayInfo.Billing)
+	assert.Equal(t, int64(100), getSubscriptionUsed(t, subID))
+	assert.Equal(t, 920, getTokenRemainQuota(t, tokenID))
+
+	err := SettleBilling(ctx, relayInfo, 130)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(150), getSubscriptionUsed(t, subID))
+	assert.Equal(t, 870, getTokenRemainQuota(t, tokenID))
+	assert.EqualValues(t, 50, relayInfo.SubscriptionPostDelta)
+}
+
 // ===========================================================================
 // RefundTaskQuota tests
 // ===========================================================================
@@ -581,6 +616,35 @@ func TestRecalculate_Subscription_NegativeDelta(t *testing.T) {
 	log := getLastLog(t)
 	require.NotNil(t, log)
 	assert.Equal(t, model.LogTypeRefund, log.Type)
+}
+
+func TestRecalculate_Subscription_PositiveDeltaAllowsOverLimit(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID, subID = 15, 15, 15, 3
+	const preConsumed = 80
+	const actualQuota = 130
+	const subTotal, subUsed int64 = 100, 100
+	const tokenRemain = 8000
+
+	seedUser(t, userID, 0)
+	seedToken(t, tokenID, userID, "sk-sub-recalc-over-limit", tokenRemain)
+	seedChannel(t, channelID)
+	seedSubscription(t, subID, userID, subTotal, subUsed)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceSubscription, subID)
+
+	RecalculateTaskQuota(ctx, task, actualQuota, "subscription actual over pre-consume")
+
+	assert.Equal(t, subUsed+int64(actualQuota-preConsumed), getSubscriptionUsed(t, subID))
+	assert.Equal(t, tokenRemain-(actualQuota-preConsumed), getTokenRemainQuota(t, tokenID))
+	assert.Equal(t, actualQuota, task.Quota)
+
+	log := getLastLog(t)
+	require.NotNil(t, log)
+	assert.Equal(t, model.LogTypeConsume, log.Type)
+	assert.Equal(t, actualQuota-preConsumed, log.Quota)
 }
 
 // ===========================================================================

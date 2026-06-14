@@ -1910,7 +1910,7 @@ func RefundSubscriptionPreConsume(requestId string) error {
 			record.Status = "refunded"
 			return tx.Save(&record).Error
 		}
-		if err := postConsumeUserSubscriptionDeltaTx(tx, record.UserSubscriptionId, -record.PreConsumed); err != nil {
+		if err := postConsumeUserSubscriptionDeltaTx(tx, record.UserSubscriptionId, -record.PreConsumed, false); err != nil {
 			return err
 		}
 		record.Status = "refunded"
@@ -2001,6 +2001,8 @@ func GetSubscriptionPlanInfoByUserSubscriptionId(userSubscriptionId int) (*Subsc
 }
 
 // Update subscription used amount by delta (positive consume more, negative refund).
+// This is the admission-time/pre-reserve path and rejects positive deltas that
+// would exceed the subscription's total quota.
 func PostConsumeUserSubscriptionDelta(userSubscriptionId int, delta int64) error {
 	if userSubscriptionId <= 0 {
 		return errors.New("invalid userSubscriptionId")
@@ -2009,11 +2011,27 @@ func PostConsumeUserSubscriptionDelta(userSubscriptionId int, delta int64) error
 		return nil
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
-		return postConsumeUserSubscriptionDeltaTx(tx, userSubscriptionId, delta)
+		return postConsumeUserSubscriptionDeltaTx(tx, userSubscriptionId, delta, false)
 	})
 }
 
-func postConsumeUserSubscriptionDeltaTx(tx *gorm.DB, userSubscriptionId int, delta int64) error {
+// SettleUserSubscriptionDelta records the final delta for a request/task that
+// has already succeeded. Positive settlement deltas may exceed amount_total:
+// the request was admitted by pre-consume, so the final usage must be recorded
+// fully and future admission will see no remaining quota.
+func SettleUserSubscriptionDelta(userSubscriptionId int, delta int64) error {
+	if userSubscriptionId <= 0 {
+		return errors.New("invalid userSubscriptionId")
+	}
+	if delta == 0 {
+		return nil
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		return postConsumeUserSubscriptionDeltaTx(tx, userSubscriptionId, delta, true)
+	})
+}
+
+func postConsumeUserSubscriptionDeltaTx(tx *gorm.DB, userSubscriptionId int, delta int64, allowOverLimit bool) error {
 	if tx == nil {
 		return errors.New("tx is nil")
 	}
@@ -2033,7 +2051,7 @@ func postConsumeUserSubscriptionDeltaTx(tx *gorm.DB, userSubscriptionId int, del
 	if newUsed < 0 {
 		newUsed = 0
 	}
-	if sub.AmountTotal > 0 && newUsed > sub.AmountTotal {
+	if !allowOverLimit && sub.AmountTotal > 0 && newUsed > sub.AmountTotal {
 		return fmt.Errorf("subscription used exceeds total, used=%d total=%d", newUsed, sub.AmountTotal)
 	}
 	sub.AmountUsed = newUsed

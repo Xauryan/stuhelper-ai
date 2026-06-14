@@ -163,6 +163,37 @@ const renderMultiKeyStatus = (status, keySize, enabledKeySize, t) => {
   }
 };
 
+const renderBreakerState = (state, t) => {
+  switch (state) {
+    case 'open':
+      return (
+        <Tooltip content={t('该渠道当前被熔断器临时排除，冷却后会自动探测恢复')}>
+          <Tag color='orange' shape='circle'>
+            {t('熔断中')}
+          </Tag>
+        </Tooltip>
+      );
+    case 'half_open':
+      return (
+        <Tooltip content={t('该渠道正在进行熔断恢复探测')}>
+          <Tag color='blue' shape='circle'>
+            {t('探测中')}
+          </Tag>
+        </Tooltip>
+      );
+    case 'disabled':
+      return (
+        <Tooltip content={t('渠道熔断器已关闭')}>
+          <Tag color='grey' shape='circle'>
+            {t('熔断关闭')}
+          </Tag>
+        </Tooltip>
+      );
+    default:
+      return null;
+  }
+};
+
 const renderResponseTime = (responseTime, t) => {
   let time = responseTime / 1000;
   time = time.toFixed(2) + t(' 秒');
@@ -440,6 +471,17 @@ export const getChannelsColumns = ({
       title: t('状态'),
       dataIndex: 'status',
       render: (text, record, index) => {
+        const statusTag = renderStatus(text, record.channel_info, t);
+        const breakerTag =
+          record.children === undefined
+            ? renderBreakerState(record.breaker_state, t)
+            : null;
+        const renderStatusWithBreaker = (children) => (
+          <Space spacing={4} wrap>
+            {children}
+            {breakerTag}
+          </Space>
+        );
         if (text === 3) {
           if (record.other_info === '') {
             record.other_info = '{}';
@@ -454,12 +496,13 @@ export const getChannelsColumns = ({
                   t('原因：') + reason + t('，时间：') + timestamp2string(time)
                 }
               >
-                {renderStatus(text, record.channel_info, t)}
+                {statusTag}
               </Tooltip>
+              {breakerTag}
             </div>
           );
         } else {
-          return renderStatus(text, record.channel_info, t);
+          return renderStatusWithBreaker(statusTag);
         }
       },
     },

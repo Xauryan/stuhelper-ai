@@ -4270,6 +4270,12 @@
     "更新订阅套餐": "Update Subscription Plan",
     "更新订阅套餐状态": "Update Subscription Plan Status",
     "绑定用户订阅": "Bind User Subscription",
-    "清理历史日志": "Clear Historical Logs"
+    "清理历史日志": "Clear Historical Logs",
+    "该渠道当前被熔断器临时排除，冷却后会自动探测恢复": "This channel is temporarily excluded by the circuit breaker; it will probe for recovery after cooldown.",
+    "熔断中": "Circuit open",
+    "该渠道正在进行熔断恢复探测": "This channel is probing for circuit-breaker recovery.",
+    "探测中": "Probing",
+    "渠道熔断器已关闭": "Channel circuit breaker is disabled.",
+    "熔断关闭": "Breaker disabled"
   }
 }

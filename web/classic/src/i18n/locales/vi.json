@@ -4586,6 +4586,13 @@
     "创建订阅套餐": "Tạo gói đăng ký",
     "更新订阅套餐": "Cập nhật gói đăng ký",
     "更新订阅套餐状态": "Cập nhật trạng thái gói đăng ký",
-    "绑定用户订阅": "Liên kết đăng ký người dùng"
+    "绑定用户订阅": "Liên kết đăng ký người dùng",
+    "清理历史日志": "Xóa nhật ký lịch sử",
+    "该渠道当前被熔断器临时排除，冷却后会自动探测恢复": "Kênh này đang tạm thời bị bộ ngắt mạch loại trừ; sau thời gian chờ hệ thống sẽ tự thăm dò khôi phục.",
+    "熔断中": "Mạch đang mở",
+    "该渠道正在进行熔断恢复探测": "Kênh này đang được thăm dò khôi phục bộ ngắt mạch.",
+    "探测中": "Đang thăm dò",
+    "渠道熔断器已关闭": "Bộ ngắt mạch kênh đã bị tắt.",
+    "熔断关闭": "Bộ ngắt đã tắt"
   }
 }

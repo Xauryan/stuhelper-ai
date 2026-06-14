@@ -4058,6 +4058,12 @@
     "更新订阅套餐": "Mettre à jour l’offre d’abonnement",
     "更新订阅套餐状态": "Mettre à jour l’état de l’offre d’abonnement",
     "绑定用户订阅": "Lier l’abonnement utilisateur",
-    "清理历史日志": "Nettoyer les journaux historiques"
+    "清理历史日志": "Nettoyer les journaux historiques",
+    "该渠道当前被熔断器临时排除，冷却后会自动探测恢复": "Ce canal est temporairement exclu par le disjoncteur ; une sonde de récupération sera lancée après le délai de refroidissement.",
+    "熔断中": "Circuit ouvert",
+    "该渠道正在进行熔断恢复探测": "Ce canal effectue une sonde de récupération du disjoncteur.",
+    "探测中": "Sonde en cours",
+    "渠道熔断器已关闭": "Le disjoncteur de canal est désactivé.",
+    "熔断关闭": "Disjoncteur désactivé"
   }
 }

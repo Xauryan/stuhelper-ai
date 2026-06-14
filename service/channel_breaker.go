@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Xauryan/stuhelper-ai/common"
-	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 	"github.com/Xauryan/stuhelper-ai/types"
 )
 
@@ -18,11 +17,11 @@ import (
 // layer* by feeding its id into the same exclude set used for failover, and
 // automatically probes for recovery (closed -> open -> half-open -> closed).
 //
-// Failure weighting uses the existing IsChannelSideFailure predicate: fatal
-// channel-side errors (401/403, revoked key, quota) weigh 1.0 and trip fast on a
-// short consecutive streak; transient errors (429/5xx/timeout) weigh 0.3 and
-// only trip on a sustained failure rate. Client errors (400/invalid/sensitive)
-// are not counted against the channel.
+// Failure weighting uses ClassifyRelayError: fatal channel-side errors
+// (401/403, revoked key, quota) weigh 1.0 and trip fast on a short consecutive
+// streak; transient errors (429/5xx/timeout) weigh 0.3 and only trip on a
+// sustained failure rate. Client errors (400/invalid/sensitive) are not counted
+// against the channel.
 //
 // State is in-memory per process. It is intentionally NOT persisted: a breaker
 // trip is a fast, local, self-healing reaction; durable disabling remains the
@@ -271,11 +270,12 @@ func ReportRelayResult(channelID int, apiErr *types.StuHelperAIError) {
 		getBreaker(channelID).report(true, false)
 		return
 	}
-	if IsChannelSideFailure(apiErr) {
+	classification := ClassifyRelayError(apiErr)
+	if classification.ChannelSide {
 		getBreaker(channelID).report(false, true)
 		return
 	}
-	if operation_setting.ShouldRetryByStatusCode(apiErr.StatusCode) {
+	if classification.Transient {
 		getBreaker(channelID).report(false, false)
 		return
 	}

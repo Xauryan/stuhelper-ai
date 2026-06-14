@@ -81,12 +81,23 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 
 	usage := &dto.Usage{}
 	var lastStreamData []byte
+	var streamErr *types.StuHelperAIError
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		raw := common.StringToByteSlice(data)
 		lastStreamData = raw
 		if isOpenAIImageStreamErrorEvent(raw) {
-			sr.Error(fmt.Errorf("%s", extractOpenAIImageStreamErrorMessage(raw)))
+			msg := extractOpenAIImageStreamErrorMessage(raw)
+			streamErr = types.NewErrorWithStatusCode(
+				fmt.Errorf("upstream image stream error: %s", msg),
+				types.ErrorCodeStreamInterrupted,
+				http.StatusInternalServerError,
+			)
+			if c != nil && c.Writer != nil && c.Writer.Written() {
+				writeOpenAIImageStreamChunk(c, raw)
+			}
+			sr.Stop(streamErr)
+			return
 		}
 		var usageResp dto.SimpleResponse
 		if err := common.Unmarshal(raw, &usageResp); err == nil {
@@ -98,6 +109,12 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 		writeOpenAIImageStreamChunk(c, raw)
 	})
 
+	if streamErr != nil {
+		return usage, streamErr
+	}
+	if interErr := helper.StreamInterruptionError(c, info); interErr != nil {
+		return usage, interErr
+	}
 	if info != nil && info.StreamStatus != nil && info.StreamStatus.EndReason == relaycommon.StreamEndReasonDone {
 		helper.Done(c)
 	}

@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +10,27 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+type upstreamContextTestKey string
+
+func TestNewUpstreamRequestInheritsClientContext(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+
+	base := context.WithValue(context.Background(), upstreamContextTestKey("trace"), "trace-123")
+	clientCtx, cancel := context.WithCancel(base)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(clientCtx)
+
+	upstreamReq, err := newUpstreamRequest(ctx, http.MethodPost, "https://example.com/v1/chat/completions", nil)
+	require.NoError(t, err)
+	require.Equal(t, "trace-123", upstreamReq.Context().Value(upstreamContextTestKey("trace")))
+
+	cancel()
+	require.ErrorIs(t, upstreamReq.Context().Err(), context.Canceled)
+}
 
 func TestProcessHeaderOverride_ChannelTestSkipsPassthroughRules(t *testing.T) {
 	t.Parallel()

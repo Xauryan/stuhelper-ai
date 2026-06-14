@@ -2,12 +2,10 @@ package service
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/dto"
 	"github.com/Xauryan/stuhelper-ai/model"
-	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 	"github.com/Xauryan/stuhelper-ai/types"
 )
 
@@ -56,22 +54,7 @@ func ShouldDisableChannel(err *types.StuHelperAIError) bool {
 // and to drop a stale channel-affinity pin so the next request re-selects
 // instead of staying pinned to a broken channel.
 func IsChannelSideFailure(err *types.StuHelperAIError) bool {
-	if err == nil {
-		return false
-	}
-	if types.IsChannelError(err) {
-		return true
-	}
-	if types.IsSkipRetryError(err) {
-		return false
-	}
-	if operation_setting.ShouldDisableByStatusCode(err.StatusCode) {
-		return true
-	}
-
-	lowerMessage := strings.ToLower(err.InternalError())
-	search, _ := AcSearch(lowerMessage, operation_setting.AutomaticDisableKeywords, true)
-	return search
+	return ClassifyRelayError(err).ChannelSide
 }
 
 func ShouldEnableChannel(newAPIError *types.StuHelperAIError, status int) bool {
