@@ -235,6 +235,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		if newAPIError == nil {
 			relayInfo.LastError = nil
+			service.ReportRelayResult(channel.Id, nil)
 			return
 		}
 
@@ -243,8 +244,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
 
-		// Exclude the channel that just failed so the next retry selects a
-		// different channel instead of possibly re-rolling the same bad one.
+		// Feed the outcome to the circuit breaker and exclude the channel that
+		// just failed so the next retry selects a different channel instead of
+		// possibly re-rolling the same bad one.
+		service.ReportRelayResult(channel.Id, newAPIError)
 		retryParam.ExcludeChannel(channel.Id)
 
 		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) &&

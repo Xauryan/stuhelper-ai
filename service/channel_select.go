@@ -181,6 +181,10 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	selectGroup := param.TokenGroup
 	userGroup := common.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
 	excludeChannelIDs := mergeExcludeChannelIDs(param.ExcludeChannelIDs, RelayLoopExcludeChannelIDs(param.Ctx))
+	// Shield channels whose breaker is Open (cooling down) by folding them into
+	// the same exclude set used for per-request failover. Half-open channels are
+	// not in this set, so a probe request can flow through and test recovery.
+	excludeChannelIDs = mergeExcludeChannelIDs(excludeChannelIDs, BreakerOpenChannelIDs())
 
 	if param.TokenGroup == "auto" {
 		autoGroups := GetContextAutoGroups(param.Ctx, userGroup)
