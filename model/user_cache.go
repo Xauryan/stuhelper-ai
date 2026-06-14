@@ -136,11 +136,19 @@ func cacheIncrUserQuota(userId int, delta int64) error {
 	if !common.RedisEnabled {
 		return nil
 	}
+	return cacheIncrUserQuotaEnabled(userId, delta)
+}
+
+func cacheIncrUserQuotaEnabled(userId int, delta int64) error {
 	return common.RedisHIncrBy(getUserCacheKey(userId), "Quota", delta)
 }
 
 func cacheDecrUserQuota(userId int, delta int64) error {
 	return cacheIncrUserQuota(userId, -delta)
+}
+
+func cacheDecrUserQuotaEnabled(userId int, delta int64) error {
+	return cacheIncrUserQuotaEnabled(userId, -delta)
 }
 
 // Helper functions to get individual fields if needed

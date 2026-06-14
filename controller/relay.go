@@ -687,14 +687,17 @@ func RelayTask(c *gin.Context) {
 
 		result, taskErr = relay.RelayTaskSubmit(c, relayInfo)
 		if taskErr == nil {
+			service.ReportRelayResult(channel.Id, nil)
 			break
 		}
 
-		if !taskErr.LocalError {
+		if accountingErr := taskRelayErrorForAccounting(taskErr); accountingErr != nil {
 			processChannelError(c,
 				*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey,
 					common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()),
-				types.NewOpenAIError(taskErr.Error, types.ErrorCodeBadResponseStatusCode, taskErr.StatusCode))
+				accountingErr)
+			service.ReportRelayResult(channel.Id, accountingErr)
+			retryParam.ExcludeChannel(channel.Id)
 		}
 
 		if !shouldRetryTaskRelay(c, channel.Id, taskErr, common.RetryTimes-retryParam.GetRetry()) &&
@@ -748,6 +751,17 @@ func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
 		taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
+}
+
+func taskRelayErrorForAccounting(taskErr *dto.TaskError) *types.StuHelperAIError {
+	if taskErr == nil || taskErr.LocalError {
+		return nil
+	}
+	err := taskErr.Error
+	if err == nil {
+		err = errors.New(taskErr.Message)
+	}
+	return types.NewOpenAIError(err, types.ErrorCodeBadResponseStatusCode, taskErr.StatusCode)
 }
 
 func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError, retryTimes int) bool {

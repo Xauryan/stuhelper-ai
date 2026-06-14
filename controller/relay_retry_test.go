@@ -127,6 +127,33 @@ func TestShouldRetryTaskRelayAllowsChannelAffinityFallbackForTemporaryStatus(t *
 	require.True(t, shouldRetryTaskRelay(buildChannelAffinityRetryContextForTest(), 1, taskErr, 1))
 }
 
+func TestTaskRelayErrorForAccountingClassifiesUpstreamFailures(t *testing.T) {
+	transient := taskRelayErrorForAccounting(&dto.TaskError{
+		StatusCode: http.StatusServiceUnavailable,
+		Message:    "service unavailable",
+	})
+	require.NotNil(t, transient)
+	transientClass := service.ClassifyRelayError(transient)
+	require.Equal(t, service.RetryClassTransient, transientClass.Class)
+	require.True(t, transientClass.Transient)
+
+	channelSide := taskRelayErrorForAccounting(&dto.TaskError{
+		StatusCode: http.StatusUnauthorized,
+		Message:    "invalid api key",
+	})
+	require.NotNil(t, channelSide)
+	channelClass := service.ClassifyRelayError(channelSide)
+	require.Equal(t, service.RetryClassChannel, channelClass.Class)
+	require.True(t, channelClass.ChannelSide)
+
+	local := taskRelayErrorForAccounting(&dto.TaskError{
+		StatusCode: http.StatusBadRequest,
+		Message:    "bad local request",
+		LocalError: true,
+	})
+	require.Nil(t, local)
+}
+
 func TestPrepareAutoGroupRetryAllowsCrossGroupWhenGlobalRetryExhausted(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx := buildAutoGroupRetryContextForTest(t, true)
