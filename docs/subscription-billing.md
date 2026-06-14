@@ -36,7 +36,7 @@
 
 DB fallback 成功后只允许异步失效用户缓存，让下一次读取重新加载；不要恢复旧的 `updateUserQuotaCache(id, quota)` 回写逻辑。
 
-Redis 未启用时，`IncreaseUserQuota` / `DecreaseUserQuota` 不应派发异步 quota cache 增减任务；Redis 启用状态必须在同步路径判断，避免后台 goroutine 在测试清理或运行时配置恢复阶段再读取全局开关。
+Redis 未启用时，`IncreaseUserQuota` / `DecreaseUserQuota`、签到后的缓存回填等路径都不应派发异步 quota cache 增减任务；Redis 启用状态必须在同步路径判断，避免后台 goroutine 在测试清理或运行时配置恢复阶段再读取全局开关。
 
 ## 同步注意事项
 
