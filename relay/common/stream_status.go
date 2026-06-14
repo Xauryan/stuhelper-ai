@@ -28,10 +28,17 @@ type StreamErrorEntry struct {
 	Timestamp time.Time
 }
 
-type StreamStatus struct {
+type StreamStatusSnapshot struct {
 	EndReason  StreamEndReason
 	EndError   error
-	endOnce    sync.Once
+	Errors     []StreamErrorEntry
+	ErrorCount int
+}
+
+type StreamStatus struct {
+	EndReason StreamEndReason
+	EndError  error
+	endOnce   sync.Once
 
 	mu         sync.Mutex
 	Errors     []StreamErrorEntry
@@ -47,9 +54,42 @@ func (s *StreamStatus) SetEndReason(reason StreamEndReason, err error) {
 		return
 	}
 	s.endOnce.Do(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		s.EndReason = reason
 		s.EndError = err
 	})
+}
+
+func (s *StreamStatus) End() (StreamEndReason, error) {
+	if s == nil {
+		return StreamEndReasonNone, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.EndReason, s.EndError
+}
+
+func (s *StreamStatus) EndReasonIs(reason StreamEndReason) bool {
+	endReason, _ := s.End()
+	return endReason == reason
+}
+
+func (s *StreamStatus) Snapshot() StreamStatusSnapshot {
+	if s == nil {
+		return StreamStatusSnapshot{}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	snapshot := StreamStatusSnapshot{
+		EndReason:  s.EndReason,
+		EndError:   s.EndError,
+		ErrorCount: s.ErrorCount,
+	}
+	if len(s.Errors) > 0 {
+		snapshot.Errors = append([]StreamErrorEntry(nil), s.Errors...)
+	}
+	return snapshot
 }
 
 func (s *StreamStatus) RecordError(msg string) {
@@ -89,9 +129,10 @@ func (s *StreamStatus) IsNormalEnd() bool {
 	if s == nil {
 		return true
 	}
-	return s.EndReason == StreamEndReasonDone ||
-		s.EndReason == StreamEndReasonEOF ||
-		s.EndReason == StreamEndReasonHandlerStop
+	reason, _ := s.End()
+	return reason == StreamEndReasonDone ||
+		reason == StreamEndReasonEOF ||
+		reason == StreamEndReasonHandlerStop
 }
 
 func (s *StreamStatus) Summary() string {
@@ -99,14 +140,13 @@ func (s *StreamStatus) Summary() string {
 		return "StreamStatus<nil>"
 	}
 	b := &strings.Builder{}
-	fmt.Fprintf(b, "reason=%s", s.EndReason)
-	if s.EndError != nil {
-		fmt.Fprintf(b, " end_error=%q", s.EndError.Error())
+	snapshot := s.Snapshot()
+	fmt.Fprintf(b, "reason=%s", snapshot.EndReason)
+	if snapshot.EndError != nil {
+		fmt.Fprintf(b, " end_error=%q", snapshot.EndError.Error())
 	}
-	s.mu.Lock()
-	if s.ErrorCount > 0 {
-		fmt.Fprintf(b, " soft_errors=%d", s.ErrorCount)
+	if snapshot.ErrorCount > 0 {
+		fmt.Fprintf(b, " soft_errors=%d", snapshot.ErrorCount)
 	}
-	s.mu.Unlock()
 	return b.String()
 }

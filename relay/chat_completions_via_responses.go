@@ -3,7 +3,6 @@ package relay
 import (
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/constant"
@@ -133,7 +132,6 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 	info.UpstreamRequestBodySize = size
 	var requestBody io.Reader = body
 
-	var httpResp *http.Response
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
@@ -142,29 +140,14 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 		return nil, types.NewOpenAIError(nil, types.ErrorCodeBadResponse, http.StatusInternalServerError)
 	}
 
-	statusCodeMappingStr := c.GetString("status_code_mapping")
-
-	httpResp = resp.(*http.Response)
-	info.IsStream = info.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
-	if httpResp.StatusCode != http.StatusOK {
-		newApiErr := service.RelayErrorHandler(c.Request.Context(), httpResp, false)
-		service.ResetStatusCode(newApiErr, statusCodeMappingStr)
-		return nil, newApiErr
-	}
-
-	if info.IsStream {
-		usage, newApiErr := openaichannel.OaiResponsesToChatStreamHandler(c, info, httpResp)
-		if newApiErr != nil {
-			service.ResetStatusCode(newApiErr, statusCodeMappingStr)
-			return nil, newApiErr
+	usageAny, newApiErr := runResponsePipeline(c, info, resp, func(httpResp *http.Response) (any, *types.StuHelperAIError) {
+		if info.IsStream {
+			return openaichannel.OaiResponsesToChatStreamHandler(c, info, httpResp)
 		}
-		return usage, nil
-	}
-
-	usage, newApiErr := openaichannel.OaiResponsesToChatHandler(c, info, httpResp)
+		return openaichannel.OaiResponsesToChatHandler(c, info, httpResp)
+	}, responsePipelineOptions{})
 	if newApiErr != nil {
-		service.ResetStatusCode(newApiErr, statusCodeMappingStr)
 		return nil, newApiErr
 	}
-	return usage, nil
+	return usageAny.(*dto.Usage), nil
 }

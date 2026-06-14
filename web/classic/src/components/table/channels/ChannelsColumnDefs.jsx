@@ -194,6 +194,66 @@ const renderBreakerState = (state, t) => {
   }
 };
 
+const renderAvailability = (availability, t) => {
+  if (!availability) {
+    return null;
+  }
+
+  const total = Number(availability.total || 0);
+  const success = Number(availability.success || 0);
+  const channelFailures = Number(availability.channel_failures || 0);
+  const transientFailures = Number(availability.transient_failures || 0);
+  const ignored = Number(availability.ignored || 0);
+  const successRate = Number(availability.success_rate || 0);
+
+  if (total <= 0) {
+    return (
+      <Tooltip content={t('近窗口暂无可用性样本')}>
+        <Tag color='grey' shape='circle'>
+          {t('可用率')} --
+        </Tag>
+      </Tooltip>
+    );
+  }
+
+  let color = 'green';
+  if (successRate < 0.8) {
+    color = 'red';
+  } else if (successRate < 0.95) {
+    color = 'yellow';
+  }
+
+  const rateText = `${(successRate * 100).toFixed(1)}%`;
+  const detail = t(
+    '成功 {{success}} / 渠道失败 {{channelFailures}} / 临时失败 {{transientFailures}} / 忽略 {{ignored}}',
+    {
+      success,
+      channelFailures,
+      transientFailures,
+      ignored,
+    },
+  );
+  const lastError = availability.last_error
+    ? t('最近错误：{{error}}', {
+        error: availability.last_error,
+      })
+    : t('最近无错误');
+  return (
+    <Tooltip
+      content={
+        <div className='flex flex-col gap-1 max-w-xs'>
+          <div>{detail}</div>
+          <div>{lastError}</div>
+        </div>
+      }
+    >
+      <Tag color={color} shape='circle'>
+        {t('可用率')} {rateText}
+      </Tag>
+    </Tooltip>
+  );
+};
+
 const renderResponseTime = (responseTime, t) => {
   let time = responseTime / 1000;
   time = time.toFixed(2) + t(' 秒');
@@ -476,10 +536,15 @@ export const getChannelsColumns = ({
           record.children === undefined
             ? renderBreakerState(record.breaker_state, t)
             : null;
+        const availabilityTag =
+          record.children === undefined
+            ? renderAvailability(record.availability, t)
+            : null;
         const renderStatusWithBreaker = (children) => (
           <Space spacing={4} wrap>
             {children}
             {breakerTag}
+            {availabilityTag}
           </Space>
         );
         if (text === 3) {
@@ -490,7 +555,7 @@ export const getChannelsColumns = ({
           let reason = otherInfo['status_reason'];
           let time = otherInfo['status_time'];
           return (
-            <div>
+            <Space spacing={4} wrap>
               <Tooltip
                 content={
                   t('原因：') + reason + t('，时间：') + timestamp2string(time)
@@ -499,7 +564,8 @@ export const getChannelsColumns = ({
                 {statusTag}
               </Tooltip>
               {breakerTag}
-            </div>
+              {availabilityTag}
+            </Space>
           );
         } else {
           return renderStatusWithBreaker(statusTag);

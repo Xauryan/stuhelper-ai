@@ -115,7 +115,7 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 	if interErr := helper.StreamInterruptionError(c, info); interErr != nil {
 		return usage, interErr
 	}
-	if info != nil && info.StreamStatus != nil && info.StreamStatus.EndReason == relaycommon.StreamEndReasonDone {
+	if info != nil && info.StreamStatus != nil && info.StreamStatus.EndReasonIs(relaycommon.StreamEndReasonDone) {
 		helper.Done(c)
 	}
 

@@ -21,6 +21,22 @@ var (
 	proxyClients    = make(map[string]*http.Client)
 )
 
+func relayTimeoutDuration() time.Duration {
+	if common.RelayTimeout <= 0 {
+		return 0
+	}
+	return time.Duration(common.RelayTimeout) * time.Second
+}
+
+func cloneClientWithoutTotalTimeout(client *http.Client) *http.Client {
+	if client == nil || client.Timeout <= 0 {
+		return client
+	}
+	clone := *client
+	clone.Timeout = 0
+	return &clone
+}
+
 func checkRedirect(req *http.Request, via []*http.Request) error {
 	fetchSetting := system_setting.GetFetchSetting()
 	urlStr := req.URL.String()
@@ -35,11 +51,12 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 
 func InitHttpClient() {
 	transport := &http.Transport{
-		MaxIdleConns:        common.RelayMaxIdleConns,
-		MaxIdleConnsPerHost: common.RelayMaxIdleConnsPerHost,
-		IdleConnTimeout:     time.Duration(common.RelayIdleConnTimeout) * time.Second,
-		ForceAttemptHTTP2:   true,
-		Proxy:               http.ProxyFromEnvironment, // Support HTTP_PROXY, HTTPS_PROXY, NO_PROXY env vars
+		MaxIdleConns:          common.RelayMaxIdleConns,
+		MaxIdleConnsPerHost:   common.RelayMaxIdleConnsPerHost,
+		IdleConnTimeout:       time.Duration(common.RelayIdleConnTimeout) * time.Second,
+		ResponseHeaderTimeout: relayTimeoutDuration(),
+		ForceAttemptHTTP2:     true,
+		Proxy:                 http.ProxyFromEnvironment, // Support HTTP_PROXY, HTTPS_PROXY, NO_PROXY env vars
 	}
 	if common.TLSInsecureSkipVerify {
 		transport.TLSClientConfig = common.InsecureTLSConfig
@@ -61,6 +78,21 @@ func InitHttpClient() {
 
 func GetHttpClient() *http.Client {
 	return httpClient
+}
+
+// GetRelayHttpClient returns a relay client for the request phase. Streaming
+// relay uses transport/header and stream-idle timeouts instead of
+// http.Client.Timeout, because Client.Timeout also covers response body reads
+// and can abort otherwise healthy long streams.
+func GetRelayHttpClient(proxyURL string, isStream bool) (*http.Client, error) {
+	client, err := GetHttpClientWithProxy(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	if isStream {
+		client = cloneClientWithoutTotalTimeout(client)
+	}
+	return client, nil
 }
 
 // GetHttpClientWithProxy returns the default client or a proxy-enabled one when proxyURL is provided.
@@ -107,11 +139,12 @@ func NewProxyHttpClient(proxyURL string) (*http.Client, error) {
 	switch parsedURL.Scheme {
 	case "http", "https":
 		transport := &http.Transport{
-			MaxIdleConns:        common.RelayMaxIdleConns,
-			MaxIdleConnsPerHost: common.RelayMaxIdleConnsPerHost,
-			IdleConnTimeout:     time.Duration(common.RelayIdleConnTimeout) * time.Second,
-			ForceAttemptHTTP2:   true,
-			Proxy:               http.ProxyURL(parsedURL),
+			MaxIdleConns:          common.RelayMaxIdleConns,
+			MaxIdleConnsPerHost:   common.RelayMaxIdleConnsPerHost,
+			IdleConnTimeout:       time.Duration(common.RelayIdleConnTimeout) * time.Second,
+			ResponseHeaderTimeout: relayTimeoutDuration(),
+			ForceAttemptHTTP2:     true,
+			Proxy:                 http.ProxyURL(parsedURL),
 		}
 		if common.TLSInsecureSkipVerify {
 			transport.TLSClientConfig = common.InsecureTLSConfig
@@ -147,10 +180,11 @@ func NewProxyHttpClient(proxyURL string) (*http.Client, error) {
 		}
 
 		transport := &http.Transport{
-			MaxIdleConns:        common.RelayMaxIdleConns,
-			MaxIdleConnsPerHost: common.RelayMaxIdleConnsPerHost,
-			IdleConnTimeout:     time.Duration(common.RelayIdleConnTimeout) * time.Second,
-			ForceAttemptHTTP2:   true,
+			MaxIdleConns:          common.RelayMaxIdleConns,
+			MaxIdleConnsPerHost:   common.RelayMaxIdleConnsPerHost,
+			IdleConnTimeout:       time.Duration(common.RelayIdleConnTimeout) * time.Second,
+			ResponseHeaderTimeout: relayTimeoutDuration(),
+			ForceAttemptHTTP2:     true,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return dialer.Dial(network, addr)
 			},

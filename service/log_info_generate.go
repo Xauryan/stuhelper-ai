@@ -94,21 +94,22 @@ func appendStreamStatus(relayInfo *relaycommon.RelayInfo, other map[string]inter
 		return
 	}
 	ss := relayInfo.StreamStatus
+	snapshot := ss.Snapshot()
 	status := "ok"
-	if !ss.IsNormalEnd() || ss.HasErrors() {
+	if !ss.IsNormalEnd() || snapshot.ErrorCount > 0 {
 		status = "error"
 	}
 	streamInfo := map[string]interface{}{
 		"status":     status,
-		"end_reason": string(ss.EndReason),
+		"end_reason": string(snapshot.EndReason),
 	}
-	if ss.EndError != nil {
-		streamInfo["end_error"] = ss.EndError.Error()
+	if snapshot.EndError != nil {
+		streamInfo["end_error"] = snapshot.EndError.Error()
 	}
-	if ss.ErrorCount > 0 {
-		streamInfo["error_count"] = ss.ErrorCount
-		messages := make([]string, 0, len(ss.Errors))
-		for _, e := range ss.Errors {
+	if snapshot.ErrorCount > 0 {
+		streamInfo["error_count"] = snapshot.ErrorCount
+		messages := make([]string, 0, len(snapshot.Errors))
+		for _, e := range snapshot.Errors {
 			messages = append(messages, e.Message)
 		}
 		streamInfo["errors"] = messages

@@ -115,6 +115,31 @@ func processCompletionsStreamResponse(streamResponse dto.CompletionsStreamRespon
 	}
 }
 
+func openAIStreamError(data string) *types.OpenAIError {
+	if strings.TrimSpace(data) == "" {
+		return nil
+	}
+	var payload struct {
+		Type  string `json:"type"`
+		Error any    `json:"error"`
+	}
+	if err := common.UnmarshalJsonStr(data, &payload); err != nil {
+		return nil
+	}
+	if payload.Error != nil {
+		return dto.GetOpenAIError(payload.Error)
+	}
+	payloadType := strings.ToLower(strings.TrimSpace(payload.Type))
+	if payloadType == "error" || payloadType == "upstream_error" {
+		return &types.OpenAIError{
+			Type:    payloadType,
+			Message: "upstream stream returned error event",
+			Code:    payloadType,
+		}
+	}
+	return nil
+}
+
 func handleLastResponse(lastStreamData string, responseId *string, createAt *int64,
 	systemFingerprint *string, model *string, usage **dto.Usage,
 	containStreamUsage *bool, info *relaycommon.RelayInfo,

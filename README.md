@@ -52,9 +52,11 @@ The following runtime variables are commonly adjusted in production:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `RELAY_TIMEOUT` | `0` | Overall upstream request timeout in seconds. `0` means no timeout. |
+| `RELAY_TIMEOUT` | `0` | Upstream timeout in seconds. For non-streaming relay it caps the full request; for streaming relay it only caps connect/response-header wait while stream body idle time is governed by `STREAMING_TIMEOUT`. `0` means no timeout. |
 | `RELAY_IDLE_CONN_TIMEOUT` | `90` | Upstream HTTP idle connection timeout in seconds. |
 | `STREAMING_TIMEOUT` | `300` | No-response timeout for streaming relay requests in seconds. |
+| `STREAM_SCANNER_MAX_BUFFER_MB` | `128` | Maximum scanner buffer for a single streaming SSE line, in MB. |
+| `CHANNEL_AVAILABILITY_WINDOW_SECONDS` | `600` | Sliding window in seconds used for channel availability telemetry in the admin list. |
 | `ANONYMOUS_REQUEST_BODY_LIMIT_KB` | `512` | Request body limit for unauthenticated public endpoints, in KB. Negative values fall back to the default. |
 
 ## Release

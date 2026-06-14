@@ -4593,6 +4593,11 @@
     "该渠道正在进行熔断恢复探测": "Kênh này đang được thăm dò khôi phục bộ ngắt mạch.",
     "探测中": "Đang thăm dò",
     "渠道熔断器已关闭": "Bộ ngắt mạch kênh đã bị tắt.",
-    "熔断关闭": "Bộ ngắt đã tắt"
+    "熔断关闭": "Bộ ngắt đã tắt",
+    "近窗口暂无可用性样本": "Chưa có mẫu khả dụng trong cửa sổ gần đây",
+    "可用率": "Tỷ lệ khả dụng",
+    "成功 {{success}} / 渠道失败 {{channelFailures}} / 临时失败 {{transientFailures}} / 忽略 {{ignored}}": "Thành công {{success}} / lỗi kênh {{channelFailures}} / lỗi tạm thời {{transientFailures}} / bỏ qua {{ignored}}",
+    "最近错误：{{error}}": "Lỗi gần nhất: {{error}}",
+    "最近无错误": "Không có lỗi gần đây"
   }
 }

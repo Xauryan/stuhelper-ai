@@ -4276,6 +4276,11 @@
     "该渠道正在进行熔断恢复探测": "This channel is probing for circuit-breaker recovery.",
     "探测中": "Probing",
     "渠道熔断器已关闭": "Channel circuit breaker is disabled.",
-    "熔断关闭": "Breaker disabled"
+    "熔断关闭": "Breaker disabled",
+    "近窗口暂无可用性样本": "No availability samples in the recent window",
+    "可用率": "Availability",
+    "成功 {{success}} / 渠道失败 {{channelFailures}} / 临时失败 {{transientFailures}} / 忽略 {{ignored}}": "Success {{success}} / channel failures {{channelFailures}} / transient failures {{transientFailures}} / ignored {{ignored}}",
+    "最近错误：{{error}}": "Latest error: {{error}}",
+    "最近无错误": "No recent errors"
   }
 }

@@ -56,8 +56,9 @@ type Channel struct {
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
 	// cache info
-	Keys         []string `json:"-" gorm:"-"`
-	BreakerState string   `json:"breaker_state,omitempty" gorm:"-"`
+	Keys         []string                           `json:"-" gorm:"-"`
+	BreakerState string                             `json:"breaker_state,omitempty" gorm:"-"`
+	Availability *types.ChannelAvailabilitySnapshot `json:"availability,omitempty" gorm:"-"`
 }
 
 type ChannelInfo struct {

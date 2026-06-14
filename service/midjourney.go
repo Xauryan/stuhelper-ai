@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
@@ -164,13 +163,12 @@ func ConvertSimpleChangeParams(content string) *dto.MidjourneyRequest {
 
 func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestURL string) (*dto.MidjourneyResponseWithStatusCode, []byte, error) {
 	var nullBytes []byte
-	//var requestBody io.Reader
-	//requestBody = c.Request.Body
 	// read request body to json, delete accountFilter and notifyHook
 	var mapResult map[string]interface{}
+	var requestBody io.Reader
 	// if get request, no need to read request body
 	if c.Request.Method != "GET" {
-		err := json.NewDecoder(c.Request.Body).Decode(&mapResult)
+		err := common.DecodeJson(c.Request.Body, &mapResult)
 		if err != nil {
 			return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "read_request_body_failed", http.StatusInternalServerError), nullBytes, err
 		}
@@ -180,29 +178,31 @@ func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestU
 		if !setting.MjNotifyEnabled {
 			delete(mapResult, "notifyHook")
 		}
-		//req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
-		// make new request with mapResult
-	}
-	if setting.MjModeClearEnabled {
-		if prompt, ok := mapResult["prompt"].(string); ok {
-			prompt = strings.Replace(prompt, "--fast", "", -1)
-			prompt = strings.Replace(prompt, "--relax", "", -1)
-			prompt = strings.Replace(prompt, "--turbo", "", -1)
+		if setting.MjModeClearEnabled {
+			if prompt, ok := mapResult["prompt"].(string); ok {
+				prompt = strings.Replace(prompt, "--fast", "", -1)
+				prompt = strings.Replace(prompt, "--relax", "", -1)
+				prompt = strings.Replace(prompt, "--turbo", "", -1)
 
-			mapResult["prompt"] = prompt
+				mapResult["prompt"] = prompt
+			}
 		}
+		reqBody, err := common.Marshal(mapResult)
+		if err != nil {
+			return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "marshal_request_body_failed", http.StatusInternalServerError), nullBytes, err
+		}
+		requestBody = strings.NewReader(string(reqBody))
 	}
-	reqBody, err := json.Marshal(mapResult)
-	if err != nil {
-		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "marshal_request_body_failed", http.StatusInternalServerError), nullBytes, err
+	ctx := c.Request.Context()
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	req, err := http.NewRequest(c.Request.Method, fullRequestURL, strings.NewReader(string(reqBody)))
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
 		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "create_request_failed", http.StatusInternalServerError), nullBytes, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	// 使用带有超时的 context 创建新的请求
-	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 	req.Header.Set("Accept", c.Request.Header.Get("Accept"))
 	auth := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
@@ -210,7 +210,6 @@ func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestU
 		auth = strings.TrimPrefix(auth, "Bearer ")
 		req.Header.Set("mj-api-secret", auth)
 	}
-	defer cancel()
 	resp, err := GetHttpClient().Do(req)
 	if err != nil {
 		common.SysLog("do request failed: " + err.Error())
@@ -220,13 +219,17 @@ func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestU
 	//if statusCode != 200  {
 	//	return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "bad_response_status_code", statusCode), nullBytes, nil
 	//}
-	err = req.Body.Close()
-	if err != nil {
-		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "close_request_body_failed", statusCode), nullBytes, err
+	if req.Body != nil {
+		err = req.Body.Close()
+		if err != nil {
+			return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "close_request_body_failed", statusCode), nullBytes, err
+		}
 	}
-	err = c.Request.Body.Close()
-	if err != nil {
-		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "close_request_body_failed", statusCode), nullBytes, err
+	if c.Request.Body != nil {
+		err = c.Request.Body.Close()
+		if err != nil {
+			return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "close_request_body_failed", statusCode), nullBytes, err
+		}
 	}
 	var midjResponse dto.MidjourneyResponse
 	var midjourneyUploadsResponse dto.MidjourneyUploadResponse
@@ -239,9 +242,9 @@ func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestU
 	if len(responseBody) == 0 {
 		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "empty_response_body", statusCode), responseBody, nil
 	} else {
-		err = json.Unmarshal(responseBody, &midjResponse)
+		err = common.Unmarshal(responseBody, &midjResponse)
 		if err != nil {
-			err2 := json.Unmarshal(responseBody, &midjourneyUploadsResponse)
+			err2 := common.Unmarshal(responseBody, &midjourneyUploadsResponse)
 			if err2 != nil {
 				return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "unmarshal_response_body_failed", statusCode), responseBody, err
 			}

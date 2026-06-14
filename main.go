@@ -261,6 +261,7 @@ func InitResources() error {
 	// 加载环境变量
 	common.InitEnv()
 	service.InitChannelBreakerConfig()
+	service.InitChannelAvailabilityConfig()
 
 	logger.SetupLogger()
 

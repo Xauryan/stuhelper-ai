@@ -263,6 +263,7 @@ func (b *channelBreaker) evalLocked(now time.Time) breakerState {
 // and client errors (400/invalid/sensitive) are ignored so they do not penalize
 // the channel.
 func ReportRelayResult(channelID int, apiErr *types.StuHelperAIError) {
+	ReportChannelAvailability(channelID, apiErr)
 	if !breakerEnabled || channelID <= 0 {
 		return
 	}
@@ -339,6 +340,7 @@ func ResetChannelBreaker(channelID int) {
 	breakersMu.Lock()
 	delete(breakers, channelID)
 	breakersMu.Unlock()
+	ResetChannelAvailability(channelID)
 	if breakerEnabled {
 		common.SysLog("channel breaker reset for channel " + strconv.Itoa(channelID))
 	}
