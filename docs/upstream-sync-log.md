@@ -212,7 +212,7 @@
 
 - 上游状态：执行 `git fetch upstream` 后，`upstream/main` 为 `1ac0f5807a8a538fa9a1ec1d86e692210243ed6a`。本轮以上次记录的 `adc390c5` 为同步基线，核对范围为 `adc390c5..1ac0f580` 共 34 个提交；继续采用选择性手工移植，不整体 merge 上游。
 - 本轮合入：移植 `867d8acf` 的 Moonshot `kimi-k2.6` temperature 归一化；移植 `d2576ddc` / `59a93cf5` 中适配本地的 OpenAI Images API streaming、image edit multipart body 复用、图片 usage 归一化和 XAI 图片响应处理；移植 `15072292` 的用户搜索 deleted 状态过滤后端语义。
-- 本轮保留本地差异：未引入 `web/default`；未接受上游 `59a93cf5` 的默认 rate limit 提升、默认 128MB stream scanner buffer、以及无条件重建 `StreamStatus` 的行为，继续保留本地既有流状态保护和默认 64MB scanner buffer。
+- 本轮保留本地差异：未引入 `web/default`；初审阶段暂未接受上游 `59a93cf5` 的默认 rate limit 提升、默认 128MB stream scanner buffer、以及无条件重建 `StreamStatus` 的行为。后续 2026-06-14 兼容补同步已统一接受 128MB 默认 stream scanner buffer 和 rate limit 提升，但仍保留本地既有 `StreamStatus` 非空不覆盖保护。
 - 本轮跳过：大量 `web/default` only 的 model-pricing、dialog、data-table、public page、channel search、deployment settings 提交不适配本地 classic-only 前端；其中 model-pricing 相关提交已按规则复核 `pkg/billingexpr/expr.md`，确认未触碰后端表达式计费、存储、预扣或结算语义。
 - 待决策：`d0c4305a` / `1ac0f580` 是完整安全审计体系和认证方式追踪，需要先决定 classic 日志展示、本地化、日志字段兼容和审计范围；`1292b8b2` 会删除现有 Codex OAuth 授权入口，只保留手填 JSON/刷新凭证，需确认是否接受该产品行为收缩。
 - 验证结果：`go test ./relay/channel/moonshot ./relay/channel/openai ./relay/helper ./model -count=1` 通过；`git diff --check` 通过。
