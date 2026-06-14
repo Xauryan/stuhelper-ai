@@ -94,14 +94,22 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			case types.RelayFormatOpenAIRealtime:
 				helper.WssError(c, ws, newAPIError.ToOpenAIError())
 			case types.RelayFormatClaude:
-				c.JSON(newAPIError.StatusCode, gin.H{
-					"type":  "error",
-					"error": newAPIError.ToClaudeError(),
-				})
+				if responseAlreadyCommitted(c) {
+					writeCommittedStreamError(c, relayFormat, newAPIError)
+				} else {
+					c.JSON(newAPIError.StatusCode, gin.H{
+						"type":  "error",
+						"error": newAPIError.ToClaudeError(),
+					})
+				}
 			default:
-				c.JSON(newAPIError.StatusCode, gin.H{
-					"error": newAPIError.ToOpenAIError(),
-				})
+				if responseAlreadyCommitted(c) {
+					writeCommittedStreamError(c, relayFormat, newAPIError)
+				} else {
+					c.JSON(newAPIError.StatusCode, gin.H{
+						"error": newAPIError.ToOpenAIError(),
+					})
+				}
 			}
 		}
 	}()
@@ -227,6 +235,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		if newAPIError == nil {
 			relayInfo.LastError = nil
+			service.ReportRelayResult(channel.Id, nil)
 			return
 		}
 
@@ -234,6 +243,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.LastError = newAPIError
 
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
+
+		// Feed the outcome to the circuit breaker and exclude the channel that
+		// just failed so the next retry selects a different channel instead of
+		// possibly re-rolling the same bad one.
+		service.ReportRelayResult(channel.Id, newAPIError)
+		retryParam.ExcludeChannel(channel.Id)
 
 		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) &&
 			!prepareAutoGroupRetryAfterRelayError(c, newAPIError, retryParam) {
@@ -330,8 +345,49 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	return channel, nil
 }
 
+// responseAlreadyCommitted reports whether any byte (status line or body) has
+// already been written to the client. Once true, the request must not be
+// retried on another channel and the deferred error writer must not inject a
+// JSON body, since either would corrupt an already-committed response/stream.
+func responseAlreadyCommitted(c *gin.Context) bool {
+	return c != nil && c.Writer != nil && c.Writer.Written()
+}
+
+// writeCommittedStreamError emits a protocol-appropriate SSE error event for a
+// stream that has already sent bytes to the client. The HTTP status code can no
+// longer be changed at this point, so the error is delivered in-band as an event
+// rather than via c.JSON (which would inject a JSON body into the event stream).
+func writeCommittedStreamError(c *gin.Context, relayFormat types.RelayFormat, apiErr *types.StuHelperAIError) {
+	if c == nil || apiErr == nil {
+		return
+	}
+	switch relayFormat {
+	case types.RelayFormatClaude:
+		payload, err := common.Marshal(gin.H{"type": "error", "error": apiErr.ToClaudeError()})
+		if err != nil {
+			return
+		}
+		c.Render(-1, common.CustomEvent{Data: "event: error\n"})
+		c.Render(-1, common.CustomEvent{Data: "data: " + string(payload)})
+		_ = helper.FlushWriter(c)
+	default:
+		payload, err := common.Marshal(gin.H{"error": apiErr.ToOpenAIError()})
+		if err != nil {
+			return
+		}
+		_ = helper.StringData(c, string(payload))
+		_ = helper.StringData(c, "[DONE]")
+	}
+}
+
 func shouldRetry(c *gin.Context, openaiErr *types.StuHelperAIError, retryTimes int) bool {
 	if openaiErr == nil {
+		return false
+	}
+	// Never retry once any byte has been written to the client: switching channels
+	// would replay a second response onto, or append a JSON error body to, an
+	// already-committed (200) stream, corrupting what the client sees.
+	if responseAlreadyCommitted(c) {
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
@@ -384,6 +440,9 @@ func prepareAutoGroupRetryAfterRelayError(c *gin.Context, openaiErr *types.StuHe
 
 func shouldRetryAutoGroupRelayError(c *gin.Context, openaiErr *types.StuHelperAIError) bool {
 	if openaiErr == nil {
+		return false
+	}
+	if responseAlreadyCommitted(c) {
 		return false
 	}
 	if _, ok := c.Get("specific_channel_id"); ok {
@@ -451,6 +510,14 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gopool.Go(func() {
 			service.DisableChannel(channelError, err.ErrorWithStatusCode())
 		})
+	}
+
+	// Drop a stale channel-affinity pin when the channel itself failed (e.g. a
+	// revoked upstream key returning 401), so the next request re-selects instead
+	// of staying pinned to the broken channel for the full pin TTL. This does not
+	// change the current request's retry decision.
+	if service.IsChannelSideFailure(err) {
+		service.DropChannelAffinityPin(c)
 	}
 
 	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {

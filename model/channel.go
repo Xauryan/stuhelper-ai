@@ -783,13 +783,18 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 	return true
 }
 
-func EnableChannelByTag(tag string) error {
-	err := DB.Model(&Channel{}).Where("tag = ?", tag).Update("status", common.ChannelStatusEnabled).Error
+func EnableChannelByTag(tag string) ([]int, error) {
+	var channelIDs []int
+	err := DB.Model(&Channel{}).Where("tag = ?", tag).Pluck("id", &channelIDs).Error
 	if err != nil {
-		return err
+		return nil, err
+	}
+	err = DB.Model(&Channel{}).Where("tag = ?", tag).Update("status", common.ChannelStatusEnabled).Error
+	if err != nil {
+		return nil, err
 	}
 	err = UpdateAbilityStatusByTag(tag, true)
-	return err
+	return channelIDs, err
 }
 
 func DisableChannelByTag(tag string) error {
@@ -1072,6 +1077,13 @@ func BatchSetChannelTag(ids []int, tag *string) error {
 func CountAllChannels() (int64, error) {
 	var total int64
 	err := DB.Model(&Channel{}).Count(&total).Error
+	return total, err
+}
+
+// CountEnabledChannels returns the number of channels currently enabled.
+func CountEnabledChannels() (int64, error) {
+	var total int64
+	err := DB.Model(&Channel{}).Where("status = ?", common.ChannelStatusEnabled).Count(&total).Error
 	return total, err
 }
 

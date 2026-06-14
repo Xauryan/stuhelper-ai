@@ -806,10 +806,13 @@ func EnableTagChannels(c *gin.Context) {
 		})
 		return
 	}
-	err = model.EnableChannelByTag(channelTag.Tag)
+	channelIDs, err := model.EnableChannelByTag(channelTag.Tag)
 	if err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	for _, channelID := range channelIDs {
+		service.ResetChannelBreaker(channelID)
 	}
 	model.InitChannelCache()
 	recordManageAudit(c, "channel.tag_enable", map[string]interface{}{

@@ -36,6 +36,7 @@ func DisableChannel(channelError types.ChannelError, reason string) {
 func EnableChannel(channelId int, usingKey string, channelName string) {
 	success := model.UpdateChannelStatus(channelId, usingKey, common.ChannelStatusEnabled, "")
 	if success {
+		ResetChannelBreaker(channelId)
 		subject := fmt.Sprintf("通道「%s」（#%d）已被启用", channelName, channelId)
 		content := fmt.Sprintf("通道「%s」（#%d）已被启用", channelName, channelId)
 		NotifyRootUser(formatNotifyType(channelId, common.ChannelStatusEnabled), subject, content)
@@ -46,6 +47,15 @@ func ShouldDisableChannel(err *types.StuHelperAIError) bool {
 	if !common.AutomaticDisableChannelEnabled {
 		return false
 	}
+	return IsChannelSideFailure(err)
+}
+
+// IsChannelSideFailure reports whether err indicates the channel itself is at
+// fault (channel error, revoked/invalid upstream key, permission/balance issue)
+// independent of the AutomaticDisableChannel toggle. Used both by auto-disable
+// and to drop a stale channel-affinity pin so the next request re-selects
+// instead of staying pinned to a broken channel.
+func IsChannelSideFailure(err *types.StuHelperAIError) bool {
 	if err == nil {
 		return false
 	}
@@ -59,7 +69,7 @@ func ShouldDisableChannel(err *types.StuHelperAIError) bool {
 		return true
 	}
 
-	lowerMessage := strings.ToLower(err.Error())
+	lowerMessage := strings.ToLower(err.InternalError())
 	search, _ := AcSearch(lowerMessage, operation_setting.AutomaticDisableKeywords, true)
 	return search
 }

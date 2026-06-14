@@ -49,6 +49,38 @@ func (p *RetryParam) ResetRetryNextTry() {
 	p.resetNextTry = true
 }
 
+// ExcludeChannel marks a channel as failed for the remainder of this request so
+// later retries (including auto-group cross-group retries) do not reselect it.
+func (p *RetryParam) ExcludeChannel(channelID int) {
+	if channelID <= 0 {
+		return
+	}
+	if p.ExcludeChannelIDs == nil {
+		p.ExcludeChannelIDs = make(map[int]struct{})
+	}
+	p.ExcludeChannelIDs[channelID] = struct{}{}
+}
+
+// mergeExcludeChannelIDs returns the union of two exclude sets without mutating
+// either input. Used so per-request failed channels and the cross-instance
+// relay-loop guard set are both honored during selection.
+func mergeExcludeChannelIDs(a, b map[int]struct{}) map[int]struct{} {
+	if len(a) == 0 {
+		return b
+	}
+	if len(b) == 0 {
+		return a
+	}
+	merged := make(map[int]struct{}, len(a)+len(b))
+	for id := range a {
+		merged[id] = struct{}{}
+	}
+	for id := range b {
+		merged[id] = struct{}{}
+	}
+	return merged
+}
+
 func nextAutoGroupRetryIndex(c *gin.Context) (int, []string, bool) {
 	if c == nil {
 		return 0, nil, false
@@ -148,10 +180,11 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	var err error
 	selectGroup := param.TokenGroup
 	userGroup := common.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
-	excludeChannelIDs := param.ExcludeChannelIDs
-	if len(excludeChannelIDs) == 0 {
-		excludeChannelIDs = RelayLoopExcludeChannelIDs(param.Ctx)
-	}
+	excludeChannelIDs := mergeExcludeChannelIDs(param.ExcludeChannelIDs, RelayLoopExcludeChannelIDs(param.Ctx))
+	// Shield channels whose breaker is Open (cooling down) by folding them into
+	// the same exclude set used for per-request failover. Half-open channels are
+	// not in this set, so a probe request can flow through and test recovery.
+	excludeChannelIDs = mergeExcludeChannelIDs(excludeChannelIDs, BreakerOpenChannelIDs())
 
 	if param.TokenGroup == "auto" {
 		autoGroups := GetContextAutoGroups(param.Ctx, userGroup)

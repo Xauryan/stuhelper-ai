@@ -260,6 +260,7 @@ func InitResources() error {
 
 	// 加载环境变量
 	common.InitEnv()
+	service.InitChannelBreakerConfig()
 
 	logger.SetupLogger()
 
@@ -281,6 +282,15 @@ func InitResources() error {
 
 	// Initialize options, should after model.InitDB()
 	model.InitOptionMap()
+
+	// Warn when retry/failover is disabled while multiple channels are configured,
+	// since RetryTimes=0 means a channel error is returned to the client without
+	// ever trying another available channel.
+	if common.RetryTimes <= 0 {
+		if enabledChannels, err := model.CountEnabledChannels(); err == nil && enabledChannels > 1 {
+			common.SysLog(fmt.Sprintf("warning: RetryTimes=0 disables automatic failover, but %d channels are enabled; set a non-zero retry count so channel errors fall back to another channel", enabledChannels))
+		}
+	}
 
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()

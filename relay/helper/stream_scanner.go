@@ -3,6 +3,7 @@ package helper
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/Xauryan/stuhelper-ai/logger"
 	relaycommon "github.com/Xauryan/stuhelper-ai/relay/common"
 	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
+	"github.com/Xauryan/stuhelper-ai/types"
 
 	"github.com/bytedance/gopkg/util/gopool"
 
@@ -52,13 +54,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	if info.StreamStatus == nil {
 		info.StreamStatus = relaycommon.NewStreamStatus()
 	}
-
-	// 确保响应体总是被关闭
-	defer func() {
-		if resp.Body != nil {
-			resp.Body.Close()
-		}
-	}()
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
 	if streamingTimeout <= 0 {
@@ -99,6 +94,14 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		ticker.Stop()
 		if pingTicker != nil {
 			pingTicker.Stop()
+		}
+
+		// Close the response body BEFORE waiting on the goroutines. The scanner
+		// goroutine blocks in scanner.Scan() reading resp.Body and does not select
+		// on stopChan while blocked; closing the body is what unblocks it. Waiting
+		// first would force the 5s timeout below on every abnormally-ended stream.
+		if resp.Body != nil {
+			resp.Body.Close()
 		}
 
 		// 等待所有 goroutine 退出，最多等待5秒
@@ -295,4 +298,32 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	} else {
 		logger.LogError(c, fmt.Sprintf("stream ended: %s, received=%d", info.StreamStatus.Summary(), info.ReceivedResponseCount))
 	}
+}
+
+// StreamInterruptionError converts an abnormal stream end recorded in
+// info.StreamStatus into a channel error so the caller can surface a real
+// failure (retry / auto-disable / refund) instead of returning a silently
+// truncated success with a fake [DONE]. It returns nil when:
+//   - the stream ended normally (done / eof / handler stop), or
+//   - the client disconnected (client_gone) — that is not a channel fault.
+//
+// The "response already committed" guard in the retry path prevents an actual
+// retry once bytes have been flushed to the client; this error still ensures the
+// failure is observable and the channel is charged a failure.
+func StreamInterruptionError(c *gin.Context, info *relaycommon.RelayInfo) *types.StuHelperAIError {
+	if info == nil || info.StreamStatus == nil {
+		return nil
+	}
+	status := info.StreamStatus
+	if status.IsNormalEnd() {
+		return nil
+	}
+	if status.EndReason == relaycommon.StreamEndReasonClientGone {
+		return nil
+	}
+	msg := fmt.Sprintf("upstream stream interrupted: %s", status.Summary())
+	if c != nil {
+		logger.LogError(c, msg)
+	}
+	return types.NewError(errors.New(msg), types.ErrorCodeStreamInterrupted)
 }

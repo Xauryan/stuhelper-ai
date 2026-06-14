@@ -57,6 +57,13 @@ func runCodexCredentialAutoRefreshOnce() {
 		return
 	}
 	defer codexCredentialRefreshRunning.Store(false)
+	// Recover so a panic in one refresh cycle does not kill the ticker loop and
+	// stop all future credential refreshes.
+	defer func() {
+		if r := recover(); r != nil {
+			common.SysLog(fmt.Sprintf("codex credential auto-refresh panic recovered, skipping this cycle: %v", r))
+		}
+	}()
 
 	ctx := context.Background()
 	now := time.Now()

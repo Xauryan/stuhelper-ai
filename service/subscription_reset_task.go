@@ -49,6 +49,13 @@ func runSubscriptionQuotaResetOnce() {
 		return
 	}
 	defer subscriptionResetRunning.Store(false)
+	// Recover so a panic in one reset cycle does not kill the ticker loop and
+	// freeze all future subscription resets.
+	defer func() {
+		if r := recover(); r != nil {
+			common.SysLog(fmt.Sprintf("subscription quota reset panic recovered, skipping this cycle: %v", r))
+		}
+	}()
 
 	ctx := context.Background()
 	totalReset := 0
