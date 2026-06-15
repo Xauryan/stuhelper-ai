@@ -444,11 +444,23 @@ func shouldRetryAutoGroupRelayError(c *gin.Context, openaiErr *types.StuHelperAI
 			return false
 		}
 	}
+	if types.IsSkipRetryError(openaiErr) || operation_setting.IsAlwaysSkipRetryCode(openaiErr.GetErrorCode()) {
+		return false
+	}
 	classification := service.ClassifyRelayError(openaiErr)
 	if classification.ForceRetry {
 		return true
 	}
-	return classification.Retryable
+	return classification.Retryable || shouldAutoGroupRetryGatewayStatus(openaiErr.StatusCode)
+}
+
+func shouldAutoGroupRetryGatewayStatus(statusCode int) bool {
+	switch statusCode {
+	case http.StatusBadGateway, http.StatusServiceUnavailable, 524:
+		return true
+	default:
+		return false
+	}
 }
 
 func shouldFallbackChannelAffinityForError(c *gin.Context, openaiErr *types.StuHelperAIError, retryTimes int) bool {
@@ -845,7 +857,8 @@ func shouldRetryAutoGroupTaskError(c *gin.Context, taskErr *dto.TaskError) bool 
 		return true
 	}
 	if taskErr.StatusCode/100 == 5 {
-		return !operation_setting.IsAlwaysSkipRetryStatusCode(taskErr.StatusCode)
+		return !operation_setting.IsAlwaysSkipRetryStatusCode(taskErr.StatusCode) ||
+			shouldAutoGroupRetryGatewayStatus(taskErr.StatusCode)
 	}
 	if taskErr.StatusCode == http.StatusBadRequest {
 		return false

@@ -155,8 +155,13 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		info.UpstreamRequestBodySize = storage.Size()
-		requestBody = common.ReaderOnly(storage)
+		body, size, closer, err := relaycommon.BuildRelayFilterWorkerRequestBody(storage, info)
+		if err != nil {
+			return newAPIErrorFromRelayFilterWorker(err)
+		}
+		defer closer.Close()
+		info.UpstreamRequestBodySize = size
+		requestBody = body
 	} else {
 		convertedRequest, err := adaptor.ConvertClaudeRequest(c, info, request)
 		if err != nil {
@@ -180,6 +185,11 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			if err != nil {
 				return newAPIErrorFromParamOverride(err)
 			}
+		}
+		if filtered, filterErr := applyRelayRequestFilterWorker(jsonData, info); filterErr != nil {
+			return filterErr
+		} else {
+			jsonData = filtered
 		}
 
 		logger.LogDebug(c, "requestBody: %s", jsonData)

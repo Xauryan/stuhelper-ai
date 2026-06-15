@@ -122,6 +122,11 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	}
+	if filtered, filterErr := applyRelayRequestFilterWorker(jsonData, info); filterErr != nil {
+		return nil, filterErr
+	} else {
+		jsonData = filtered
+	}
 
 	body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 	if err != nil {

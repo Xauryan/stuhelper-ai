@@ -74,7 +74,7 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 	return rootUser.Id, nil
 }
 
-func testChannel(channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) testResult {
+func testChannel(channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) (result testResult) {
 	tik := time.Now()
 	var unsupportedTestChannelTypes = []int{
 		constant.ChannelTypeMidjourney,
@@ -93,6 +93,8 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 	}
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	requestStarted := false
+	var info *relaycommon.RelayInfo
 
 	testModel = strings.TrimSpace(testModel)
 	if testModel == "" {
@@ -153,6 +155,17 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 		testModel = ratio_setting.WithCompactModelSuffix(testModel)
 	}
 
+	defer func() {
+		if result.localErr == nil && result.newAPIError == nil {
+			return
+		}
+		probeStatus := "local_error"
+		if requestStarted {
+			probeStatus = "failed"
+		}
+		recordChannelProbeFailureLog(c, channel, testUserID, testModel, endpointType, requestPath, isStream, info, tik, result, probeStatus)
+	}()
+
 	c.Request = &http.Request{
 		Method: "POST",
 		URL:    &url.URL{Path: requestPath}, // 使用动态路径
@@ -163,8 +176,7 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 	cache, err := model.GetUserCache(testUserID)
 	if err != nil {
 		return testResult{
-			localErr:    err,
-			newAPIError: nil,
+			localErr: err,
 		}
 	}
 	cache.WriteContext(c)
@@ -238,7 +250,7 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 
 	request := buildTestRequest(testModel, endpointType, channel, isStream)
 
-	info, err := relaycommon.GenRelayInfo(c, relayFormat, request, nil)
+	info, err = relaycommon.GenRelayInfo(c, relayFormat, request, nil)
 
 	if err != nil {
 		return testResult{
@@ -432,6 +444,7 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 
 	requestBody := bytes.NewBuffer(jsonData)
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
+	requestStarted = true
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return testResult{
@@ -478,8 +491,8 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 			newAPIError: types.NewOpenAIError(usageErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
 		}
 	}
-	result := w.Result()
-	respBody, err := readTestResponseBody(result.Body, isStream)
+	httpResult := w.Result()
+	respBody, err := readTestResponseBody(httpResult.Body, isStream)
 	if err != nil {
 		return testResult{
 			context:     c,
@@ -516,9 +529,7 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 	})
 	common.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
 	return testResult{
-		context:     c,
-		localErr:    nil,
-		newAPIError: nil,
+		context: c,
 	}
 }
 
@@ -563,7 +574,111 @@ func buildTestLogOther(c *gin.Context, info *relaycommon.RelayInfo, priceData ty
 	if tieredResult != nil {
 		service.InjectTieredBillingInfo(other, info, tieredResult)
 	}
+	injectChannelProbeLogOther(other, c, info, nil, "success", "", "")
 	return other
+}
+
+func recordChannelProbeFailureLog(c *gin.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, requestPath string, isStream bool, info *relaycommon.RelayInfo, startedAt time.Time, result testResult, probeStatus string) {
+	if c == nil || channel == nil {
+		return
+	}
+
+	content := ""
+	errorCode := "local_error"
+	errorType := "local_error"
+	statusCode := 0
+	if result.newAPIError != nil {
+		content = result.newAPIError.MaskSensitiveErrorWithStatusCode()
+		errorCode = string(result.newAPIError.GetErrorCode())
+		errorType = string(result.newAPIError.GetErrorType())
+		statusCode = result.newAPIError.StatusCode
+	} else if result.localErr != nil {
+		content = result.localErr.Error()
+	}
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return
+	}
+
+	modelName := strings.TrimSpace(testModel)
+	if info != nil && strings.TrimSpace(info.OriginModelName) != "" {
+		modelName = strings.TrimSpace(info.OriginModelName)
+	}
+	if modelName == "" {
+		modelName = fallbackChannelTestModelName(channel)
+	}
+
+	group := c.GetString("group")
+	if info != nil && strings.TrimSpace(info.UsingGroup) != "" {
+		group = info.UsingGroup
+	}
+
+	other := make(map[string]interface{})
+	injectChannelProbeLogOther(other, c, info, channel, probeStatus, endpointType, requestPath)
+	other["error_code"] = errorCode
+	other["error_type"] = errorType
+	other["status_code"] = statusCode
+	other["error_message"] = content
+	other["channel_id"] = channel.Id
+	other["channel_name"] = channel.Name
+	other["channel_type"] = channel.Type
+
+	model.RecordErrorLog(c, testUserID, channel.Id, modelName, "模型测试", content, 0, int(time.Since(startedAt).Seconds()), isStream, group, other)
+}
+
+func injectChannelProbeLogOther(other map[string]interface{}, c *gin.Context, info *relaycommon.RelayInfo, channel *model.Channel, probeStatus string, endpointType string, requestPath string) {
+	if other == nil {
+		return
+	}
+	other["monitor_source"] = "probe"
+	other["probe"] = true
+	other["probe_status"] = probeStatus
+	other["stream"] = false
+	if info != nil {
+		other["relay_mode"] = info.RelayMode
+		other["stream"] = info.IsStream
+		if strings.TrimSpace(info.OriginModelName) != "" {
+			other["origin_model_name"] = info.OriginModelName
+		}
+		if strings.TrimSpace(info.UpstreamModelName) != "" {
+			other["upstream_model_name"] = info.UpstreamModelName
+		}
+		if strings.TrimSpace(info.RequestURLPath) != "" {
+			other["request_path"] = info.RequestURLPath
+		}
+		if info.ChannelMeta != nil {
+			other["channel_id"] = info.ChannelId
+			other["channel_type"] = info.ChannelType
+		}
+	}
+	if channel != nil {
+		other["channel_id"] = channel.Id
+		other["channel_name"] = channel.Name
+		other["channel_type"] = channel.Type
+	}
+	if c != nil && c.Request != nil && c.Request.URL != nil && c.Request.URL.Path != "" {
+		other["request_path"] = c.Request.URL.Path
+	}
+	if strings.TrimSpace(requestPath) != "" {
+		other["request_path"] = requestPath
+	}
+	if strings.TrimSpace(endpointType) != "" {
+		other["endpoint_type"] = endpointType
+	}
+}
+
+func fallbackChannelTestModelName(channel *model.Channel) string {
+	if channel == nil {
+		return ""
+	}
+	if channel.TestModel != nil && strings.TrimSpace(*channel.TestModel) != "" {
+		return strings.TrimSpace(*channel.TestModel)
+	}
+	models := channel.GetModels()
+	if len(models) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(models[0])
 }
 
 func coerceTestUsage(usageAny any, isStream bool, estimatePromptTokens int) (*dto.Usage, error) {

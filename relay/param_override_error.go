@@ -11,3 +11,15 @@ func newAPIErrorFromParamOverride(err error) *types.StuHelperAIError {
 	}
 	return types.NewError(err, types.ErrorCodeChannelParamOverrideInvalid, types.ErrOptionWithSkipRetry())
 }
+
+func applyRelayRequestFilterWorker(jsonData []byte, info *relaycommon.RelayInfo) ([]byte, *types.StuHelperAIError) {
+	filtered, err := relaycommon.ApplyRelayFilterWorkerRequest(jsonData, info)
+	if err != nil {
+		return nil, newAPIErrorFromParamOverride(err)
+	}
+	return filtered, nil
+}
+
+func newAPIErrorFromRelayFilterWorker(err error) *types.StuHelperAIError {
+	return relaycommon.StuHelperAIErrorFromRelayFilterWorker(err)
+}

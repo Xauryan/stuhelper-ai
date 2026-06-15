@@ -141,7 +141,13 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = common.ReaderOnly(storage)
+		body, size, closer, err := relaycommon.BuildRelayFilterWorkerRequestBody(storage, info)
+		if err != nil {
+			return newAPIErrorFromRelayFilterWorker(err)
+		}
+		defer closer.Close()
+		info.UpstreamRequestBodySize = size
+		requestBody = body
 	} else {
 		// 使用 ConvertGeminiRequest 转换请求格式
 		convertedRequest, err := adaptor.ConvertGeminiRequest(c, info, request)
@@ -160,6 +166,11 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			if err != nil {
 				return newAPIErrorFromParamOverride(err)
 			}
+		}
+		if filtered, filterErr := applyRelayRequestFilterWorker(jsonData, info); filterErr != nil {
+			return filterErr
+		} else {
+			jsonData = filtered
 		}
 
 		logger.LogDebug(c, "Gemini request body: %s", jsonData)
@@ -254,6 +265,11 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo) (newAPI
 		if err != nil {
 			return newAPIErrorFromParamOverride(err)
 		}
+	}
+	if filtered, filterErr := applyRelayRequestFilterWorker(jsonData, info); filterErr != nil {
+		return filterErr
+	} else {
+		jsonData = filtered
 	}
 	logger.LogDebug(c, "Gemini embedding request body: %s", jsonData)
 	body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)

@@ -167,7 +167,9 @@ const renderBreakerState = (state, t) => {
   switch (state) {
     case 'open':
       return (
-        <Tooltip content={t('该渠道当前被熔断器临时排除，冷却后会自动探测恢复')}>
+        <Tooltip
+          content={t('该渠道当前被熔断器临时排除，冷却后会自动探测恢复')}
+        >
           <Tag color='orange' shape='circle'>
             {t('熔断中')}
           </Tag>

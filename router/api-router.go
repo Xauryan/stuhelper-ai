@@ -254,6 +254,7 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/models_enabled", controller.EnabledListModels)
 			channelRoute.GET("/test", middleware.RequireAdminRole(), controller.TestAllChannels)
 			channelRoute.GET("/test/:id", middleware.RequireAdminRole(), controller.TestChannel)
+			channelRoute.GET("/monitor/summary", controller.GetChannelMonitorSummary)
 			channelRoute.GET("/update_balance", middleware.RequireAdminRole(), controller.UpdateAllChannelsBalance)
 			channelRoute.GET("/update_balance/:id", middleware.RequireAdminRole(), controller.UpdateChannelBalance)
 			channelRoute.POST("/", middleware.RequireAdminRole(), controller.AddChannel)

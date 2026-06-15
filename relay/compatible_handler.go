@@ -103,7 +103,13 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 				logger.LogDebug(c, "requestBody: %s", debugBytes)
 			}
 		}
-		requestBody = common.ReaderOnly(storage)
+		body, size, closer, err := relaycommon.BuildRelayFilterWorkerRequestBody(storage, info)
+		if err != nil {
+			return newAPIErrorFromRelayFilterWorker(err)
+		}
+		defer closer.Close()
+		info.UpstreamRequestBodySize = size
+		requestBody = body
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIRequest(c, info, request)
 		if err != nil {
@@ -170,6 +176,11 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 			if err != nil {
 				return newAPIErrorFromParamOverride(err)
 			}
+		}
+		if filtered, filterErr := applyRelayRequestFilterWorker(jsonData, info); filterErr != nil {
+			return filterErr
+		} else {
+			jsonData = filtered
 		}
 
 		logger.LogDebug(c, "text request body: %s", jsonData)

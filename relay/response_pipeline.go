@@ -41,6 +41,17 @@ func runResponsePipeline(c *gin.Context, info *relaycommon.RelayInfo, resp any, 
 		}
 	}
 
+	if err := relaycommon.ApplyRelayFilterWorkerResponse(info, httpResp); err != nil {
+		if fixedErr, ok := relaycommon.AsParamOverrideReturnError(err); ok {
+			apiErr := relaycommon.StuHelperAIErrorFromParamOverride(fixedErr)
+			service.ResetStatusCode(apiErr, statusCodeMappingStr)
+			return nil, apiErr
+		}
+		apiErr := types.NewError(err, types.ErrorCodeBadResponseBody)
+		service.ResetStatusCode(apiErr, statusCodeMappingStr)
+		return nil, apiErr
+	}
+
 	usage, apiErr := handle(httpResp)
 	if apiErr != nil {
 		service.ResetStatusCode(apiErr, statusCodeMappingStr)

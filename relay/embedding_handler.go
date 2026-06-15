@@ -56,6 +56,11 @@ func EmbeddingHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			return newAPIErrorFromParamOverride(err)
 		}
 	}
+	if filtered, filterErr := applyRelayRequestFilterWorker(jsonData, info); filterErr != nil {
+		return filterErr
+	} else {
+		jsonData = filtered
+	}
 
 	logger.LogDebug(c, "converted embedding request body: %s", jsonData)
 	body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)

@@ -101,6 +101,19 @@ func TestShouldRetryKeepsAlwaysSkipStatus(t *testing.T) {
 	require.False(t, shouldRetry(buildChannelAffinityRetryContextForTest(), err, 1))
 }
 
+func TestShouldRetryKeepsCloudflareGatewayTimeoutAlwaysSkip(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	withChannelAffinityTemporaryFallbackForTest(t, true, "429,500,502-503,524")
+
+	err := types.NewErrorWithStatusCode(
+		errors.New("bad response status code 524"),
+		types.ErrorCodeBadResponseStatusCode,
+		524,
+	)
+
+	require.False(t, shouldRetry(buildChannelAffinityRetryContextForTest(), err, 1))
+}
+
 func TestShouldRetryDoesNotBypassExplicitSkipRetry(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	withChannelAffinityTemporaryFallbackForTest(t, true, "429,500,502-503")
@@ -212,4 +225,101 @@ func TestPrepareAutoGroupRetryKeepsAlwaysSkipStatus(t *testing.T) {
 	require.False(t, prepareAutoGroupRetryAfterRelayError(ctx, err, retryParam))
 	_, exists := common.GetContextKey(ctx, constant.ContextKeyAutoGroupIndex)
 	require.False(t, exists)
+}
+
+func TestPrepareAutoGroupRetryAllowsCloudflareGatewayTimeout(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := buildAutoGroupRetryContextForTest(t, true)
+	retryParam := &service.RetryParam{
+		Ctx:        ctx,
+		TokenGroup: "auto",
+		ModelName:  "gpt-5",
+		Retry:      common.GetPointer(0),
+	}
+	err := types.NewErrorWithStatusCode(
+		errors.New("bad response status code 524"),
+		types.ErrorCodeBadResponseStatusCode,
+		524,
+	)
+
+	require.True(t, prepareAutoGroupRetryAfterRelayError(ctx, err, retryParam))
+	require.Equal(t, 1, common.GetContextKeyInt(ctx, constant.ContextKeyAutoGroupIndex))
+}
+
+func TestPrepareAutoGroupRetryDoesNotBypassExplicitSkipRetry(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := buildAutoGroupRetryContextForTest(t, true)
+	retryParam := &service.RetryParam{
+		Ctx:        ctx,
+		TokenGroup: "auto",
+		ModelName:  "gpt-5",
+		Retry:      common.GetPointer(0),
+	}
+	err := types.NewErrorWithStatusCode(
+		errors.New("bad response status code 524"),
+		types.ErrorCodeBadResponseStatusCode,
+		524,
+		types.ErrOptionWithSkipRetry(),
+	)
+
+	require.False(t, prepareAutoGroupRetryAfterRelayError(ctx, err, retryParam))
+}
+
+func TestPrepareAutoGroupRetryAllowsStructuredCloudflareGatewayTimeout(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := buildAutoGroupRetryContextForTest(t, true)
+	retryParam := &service.RetryParam{
+		Ctx:        ctx,
+		TokenGroup: "auto",
+		ModelName:  "gpt-5",
+		Retry:      common.GetPointer(0),
+	}
+	err := types.NewErrorWithStatusCode(
+		errors.New("upstream timeout"),
+		types.ErrorCode("server_error"),
+		524,
+	)
+
+	require.True(t, prepareAutoGroupRetryAfterRelayError(ctx, err, retryParam))
+	require.Equal(t, 1, common.GetContextKeyInt(ctx, constant.ContextKeyAutoGroupIndex))
+}
+
+func TestPrepareAutoGroupRetryDoesNotBypassChannelAffinityForCloudflareGatewayTimeout(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	withChannelAffinityTemporaryFallbackForTest(t, true, "429,500,502-503,524")
+	ctx := buildAutoGroupRetryContextForTest(t, true)
+	ctx.Set("channel_affinity_skip_retry_on_failure", true)
+	retryParam := &service.RetryParam{
+		Ctx:        ctx,
+		TokenGroup: "auto",
+		ModelName:  "gpt-5",
+		Retry:      common.GetPointer(0),
+	}
+	err := types.NewErrorWithStatusCode(
+		errors.New("bad response status code 524"),
+		types.ErrorCodeBadResponseStatusCode,
+		524,
+	)
+
+	require.False(t, prepareAutoGroupRetryAfterRelayError(ctx, err, retryParam))
+	_, exists := common.GetContextKey(ctx, constant.ContextKeyAutoGroupIndex)
+	require.False(t, exists)
+}
+
+func TestPrepareAutoGroupRetryAllowsTaskCloudflareGatewayTimeout(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := buildAutoGroupRetryContextForTest(t, true)
+	retryParam := &service.RetryParam{
+		Ctx:        ctx,
+		TokenGroup: "auto",
+		ModelName:  "gpt-5",
+		Retry:      common.GetPointer(0),
+	}
+	taskErr := &dto.TaskError{
+		StatusCode: 524,
+		Message:    "bad response status code 524",
+	}
+
+	require.True(t, prepareAutoGroupRetryAfterTaskError(ctx, taskErr, retryParam))
+	require.Equal(t, 1, common.GetContextKeyInt(ctx, constant.ContextKeyAutoGroupIndex))
 }

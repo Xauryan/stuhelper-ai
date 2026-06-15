@@ -27,9 +27,10 @@ import ModelsFilters from './ModelsFilters';
 import ModelsTabs from './ModelsTabs';
 import EditModelModal from './modals/EditModelModal';
 import EditVendorModal from './modals/EditVendorModal';
+import ChannelMonitorPanel from '../../common/ChannelMonitorPanel';
 import { useModelsData } from '../../../hooks/models/useModelsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
-import { createCardProPagination } from '../../../helpers/utils';
+import { createCardProPagination, isAuditAdmin } from '../../../helpers/utils';
 
 const MARKETPLACE_DISPLAY_NOTICE_STORAGE_KEY =
   'models_marketplace_display_notice_dismissed';
@@ -37,6 +38,7 @@ const MARKETPLACE_DISPLAY_NOTICE_STORAGE_KEY =
 const ModelsPage = () => {
   const modelsData = useModelsData();
   const isMobile = useIsMobile();
+  const canViewChannelMonitor = isAuditAdmin();
 
   const {
     // Edit state
@@ -157,6 +159,7 @@ const ModelsPage = () => {
           />
         </div>
       ) : null}
+      {canViewChannelMonitor ? <ChannelMonitorPanel className='mb-3' /> : null}
       <CardPro
         type='type3'
         tabsArea={<ModelsTabs {...modelsData} />}
