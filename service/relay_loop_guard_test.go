@@ -90,6 +90,13 @@ func seedRelayLoopGuardChannel(t *testing.T, db *gorm.DB, id int, group string, 
 	}).Error)
 }
 
+func seedRelayLoopGuardChannelWithAbilities(t *testing.T, db *gorm.DB, channel model.Channel) {
+	t.Helper()
+
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, channel.AddAbilities(nil))
+}
+
 func newRelayLoopGuardContext() (*gin.Context, *httptest.ResponseRecorder) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -166,6 +173,38 @@ func TestAutoSelectionUsesTokenPriorityBeforeSystemDefault(t *testing.T) {
 	require.NotNil(t, channel)
 	require.Equal(t, 22, channel.Id)
 	require.Equal(t, "backup", selectGroup)
+}
+
+func TestAutoSelectionUsesModelMappingSourceAlias(t *testing.T) {
+	db := setupRelayLoopGuardTestDB(t)
+	modelMapping := `{"claude-sonnet-4-6":"anthropic.claude-sonnet-4-6"}`
+	seedRelayLoopGuardChannelWithAbilities(t, db, model.Channel{
+		Id:           33,
+		Type:         constant.ChannelTypeOpenAI,
+		Key:          "key-33",
+		Status:       common.ChannelStatusEnabled,
+		Name:         "mapped-channel",
+		Models:       "anthropic.claude-sonnet-4-6",
+		Group:        "default",
+		ModelMapping: &modelMapping,
+		Priority:     common.GetPointer(int64(0)),
+		Weight:       common.GetPointer(uint(100)),
+	})
+
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+
+	channel, selectGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        c,
+		TokenGroup: "auto",
+		ModelName:  "claude-sonnet-4-6",
+		Retry:      common.GetPointer(0),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 33, channel.Id)
+	require.Equal(t, "default", selectGroup)
 }
 
 func TestPrepareAutoGroupRetrySelectsNextConcreteGroup(t *testing.T) {

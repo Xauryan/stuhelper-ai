@@ -506,7 +506,7 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		}
 
 		// 检查模型名称长度是否超过 255
-		for _, m := range channel.GetModels() {
+		for _, m := range channel.GetRoutableModels() {
 			if len(m) > 255 {
 				return fmt.Errorf("模型名称过长: %s", m)
 			}

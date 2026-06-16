@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 
@@ -290,6 +291,54 @@ func (channel *Channel) GetModels() []string {
 	return strings.Split(strings.Trim(channel.Models, ","), ",")
 }
 
+func appendUniqueModelName(models []string, seen map[string]struct{}, model string) []string {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return models
+	}
+	if _, ok := seen[model]; ok {
+		return models
+	}
+	seen[model] = struct{}{}
+	return append(models, model)
+}
+
+func (channel *Channel) GetModelMappingSourceModels() []string {
+	if channel.ModelMapping == nil {
+		return []string{}
+	}
+	rawMapping := strings.TrimSpace(*channel.ModelMapping)
+	if rawMapping == "" || rawMapping == "{}" {
+		return []string{}
+	}
+	modelMap := make(map[string]string)
+	if err := common.UnmarshalJsonStr(rawMapping, &modelMap); err != nil {
+		return []string{}
+	}
+	sourceModels := make([]string, 0, len(modelMap))
+	seen := make(map[string]struct{}, len(modelMap))
+	for sourceModel, targetModel := range modelMap {
+		if strings.TrimSpace(targetModel) == "" {
+			continue
+		}
+		sourceModels = appendUniqueModelName(sourceModels, seen, sourceModel)
+	}
+	sort.Strings(sourceModels)
+	return sourceModels
+}
+
+func (channel *Channel) GetRoutableModels() []string {
+	seen := make(map[string]struct{})
+	models := make([]string, 0)
+	for _, model := range channel.GetModels() {
+		models = appendUniqueModelName(models, seen, model)
+	}
+	for _, model := range channel.GetModelMappingSourceModels() {
+		models = appendUniqueModelName(models, seen, model)
+	}
+	return models
+}
+
 func (channel *Channel) GetGroups() []string {
 	if channel.Group == "" {
 		return []string{}
@@ -313,7 +362,7 @@ func (channel *Channel) GetOtherInfo() map[string]interface{} {
 }
 
 func (channel *Channel) SetOtherInfo(otherInfo map[string]interface{}) {
-	otherInfoBytes, err := json.Marshal(otherInfo)
+	otherInfoBytes, err := common.Marshal(otherInfo)
 	if err != nil {
 		common.SysLog(fmt.Sprintf("failed to marshal other info: channel_id=%d, tag=%s, name=%s, error=%v", channel.Id, channel.GetTag(), channel.Name, err))
 		return
@@ -817,6 +866,7 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 		updatedTag = *newTag
 	}
 	if modelMapping != nil {
+		shouldReCreateAbilities = true
 		updateData.ModelMapping = modelMapping
 	}
 	if models != nil && *models != "" {
