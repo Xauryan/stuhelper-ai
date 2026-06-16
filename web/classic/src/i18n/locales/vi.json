@@ -4612,6 +4612,18 @@
     "可用率": "Tỷ lệ khả dụng",
     "成功 {{success}} / 渠道失败 {{channelFailures}} / 临时失败 {{transientFailures}} / 忽略 {{ignored}}": "Thành công {{success}} / lỗi kênh {{channelFailures}} / lỗi tạm thời {{transientFailures}} / bỏ qua {{ignored}}",
     "最近错误：{{error}}": "Lỗi gần nhất: {{error}}",
-    "最近无错误": "Không có lỗi gần đây"
+    "最近无错误": "Không có lỗi gần đây",
+    "访问限制会在服务端拦截请求。启用用户或管理员限制前，请确认仍有可用的管理入口。": "Giới hạn truy cập được chặn ở phía máy chủ. Trước khi chặn người dùng hoặc quản trị viên, hãy đảm bảo vẫn còn lối vào quản trị khả dụng.",
+    "国家和地区识别优先使用 CF-IPCountry、CloudFront-Viewer-Country、X-Vercel-IP-Country 等代理头；未提供代理头时，可配置本地 MaxMind 兼容 MMDB 数据库路径。": "Nhận diện quốc gia và khu vực ưu tiên dùng các header proxy như CF-IPCountry, CloudFront-Viewer-Country và X-Vercel-IP-Country. Nếu không có header proxy, có thể cấu hình đường dẫn cơ sở dữ liệu MMDB cục bộ tương thích MaxMind.",
+    "对官网 Web 启用访问限制策略": "Bật giới hạn truy cập cho trang web",
+    "对 API 启用访问限制策略": "Bật giới hạn truy cập cho API",
+    "禁止中国大陆 IP 访问": "Chặn truy cập IP từ Trung Quốc đại lục",
+    "禁止欧盟国家 IP 访问": "Chặn truy cập IP từ các quốc gia EU",
+    "禁止游客访问": "Chặn truy cập của khách",
+    "禁止普通用户访问": "Chặn truy cập của người dùng thường",
+    "禁止管理员访问": "Chặn truy cập của quản trị viên",
+    "GeoIP 数据库路径": "Đường dẫn cơ sở dữ liệu GeoIP",
+    "留空时仅使用可信代理写入的国家代码请求头；填写后会在服务端用该 MMDB 文件按客户端 IP 查询国家代码。": "Để trống để chỉ dùng header mã quốc gia do proxy tin cậy ghi vào. Khi điền, máy chủ dùng tệp MMDB này để tra cứu mã quốc gia theo IP máy khách.",
+    "保存访问限制设置": "Lưu cài đặt giới hạn truy cập"
   }
 }

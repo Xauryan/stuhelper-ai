@@ -28,6 +28,10 @@ func SetRouter(router *gin.Engine, assets ThemeAssets) {
 		frontendBaseUrl = strings.TrimSuffix(frontendBaseUrl, "/")
 		router.NoRoute(func(c *gin.Context) {
 			c.Set(middleware.RouteTagKey, "web")
+			middleware.AccessControl(middleware.AccessPolicyScopeWeb)(c)
+			if c.IsAborted() {
+				return
+			}
 			c.Redirect(http.StatusMovedPermanently, fmt.Sprintf("%s%s", frontendBaseUrl, c.Request.RequestURI))
 		})
 	}

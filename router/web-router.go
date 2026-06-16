@@ -190,6 +190,7 @@ func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GlobalWebRateLimit())
+	router.Use(middleware.AccessControl(middleware.AccessPolicyScopeWeb))
 	router.Use(middleware.Cache())
 	router.GET("/favicon.ico", serveConfiguredFavicon)
 	router.Use(static.Serve("/", classicFS))

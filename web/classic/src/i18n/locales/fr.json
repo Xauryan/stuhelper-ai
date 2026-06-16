@@ -4083,6 +4083,18 @@
     "可用率": "Disponibilité",
     "成功 {{success}} / 渠道失败 {{channelFailures}} / 临时失败 {{transientFailures}} / 忽略 {{ignored}}": "Succès {{success}} / échecs canal {{channelFailures}} / échecs temporaires {{transientFailures}} / ignorés {{ignored}}",
     "最近错误：{{error}}": "Dernière erreur : {{error}}",
-    "最近无错误": "Aucune erreur récente"
+    "最近无错误": "Aucune erreur récente",
+    "访问限制会在服务端拦截请求。启用用户或管理员限制前，请确认仍有可用的管理入口。": "Les restrictions d’accès sont appliquées côté serveur. Avant de bloquer les utilisateurs ou les administrateurs, vérifiez qu’un accès de gestion reste disponible.",
+    "国家和地区识别优先使用 CF-IPCountry、CloudFront-Viewer-Country、X-Vercel-IP-Country 等代理头；未提供代理头时，可配置本地 MaxMind 兼容 MMDB 数据库路径。": "La détection du pays et de la région utilise d’abord les en-têtes de proxy comme CF-IPCountry, CloudFront-Viewer-Country et X-Vercel-IP-Country. Sans en-tête proxy, configurez le chemin d’une base MMDB locale compatible MaxMind.",
+    "对官网 Web 启用访问限制策略": "Activer les restrictions d’accès pour le site Web",
+    "对 API 启用访问限制策略": "Activer les restrictions d’accès pour l’API",
+    "禁止中国大陆 IP 访问": "Bloquer les IP de Chine continentale",
+    "禁止欧盟国家 IP 访问": "Bloquer les IP des pays de l’Union européenne",
+    "禁止游客访问": "Bloquer l’accès invité",
+    "禁止普通用户访问": "Bloquer l’accès des utilisateurs standard",
+    "禁止管理员访问": "Bloquer l’accès administrateur",
+    "GeoIP 数据库路径": "Chemin de la base GeoIP",
+    "留空时仅使用可信代理写入的国家代码请求头；填写后会在服务端用该 MMDB 文件按客户端 IP 查询国家代码。": "Laissez vide pour utiliser uniquement les en-têtes de code pays écrits par des proxys de confiance. Si renseigné, le serveur utilise ce fichier MMDB pour rechercher le code pays à partir de l’IP du client.",
+    "保存访问限制设置": "Enregistrer les restrictions d’accès"
   }
 }

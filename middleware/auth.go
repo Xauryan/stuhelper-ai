@@ -210,6 +210,10 @@ func authHelper(c *gin.Context, minRole int) {
 	c.Set("user_group", session.Get("group"))
 	c.Set("use_access_token", useAccessToken)
 
+	if !enforceAccessPolicy(c, AccessPolicyScopeAPI) {
+		return
+	}
+
 	var auditWriter *auditResponseWriter
 	if role.(int) >= common.RoleAdminUser {
 		auditWriter = beginAdminAudit(c)
@@ -340,6 +344,13 @@ func TokenOrUserAuth() func(c *gin.Context) {
 					syncSessionUser(session, currentUser)
 					if currentUser.Status == common.UserStatusEnabled {
 						c.Set("id", id)
+						c.Set("username", currentUser.Username)
+						c.Set("role", currentUser.Role)
+						c.Set("group", currentUser.Group)
+						c.Set("user_group", currentUser.Group)
+						if !enforceAccessPolicy(c, AccessPolicyScopeAPI) {
+							return
+						}
 						c.Next()
 						return
 					}
@@ -413,6 +424,10 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 		c.Set("id", token.UserId)
 		c.Set("token_id", token.Id)
 		c.Set("token_key", token.Key)
+		userCache.WriteContext(c)
+		if !enforceAccessPolicy(c, AccessPolicyScopeAPI) {
+			return
+		}
 		c.Next()
 	}
 }
@@ -523,6 +538,9 @@ func TokenAuth() func(c *gin.Context) {
 		}
 
 		userCache.WriteContext(c)
+		if !enforceAccessPolicy(c, AccessPolicyScopeAPI) {
+			return
+		}
 
 		userGroup := userCache.Group
 		tokenGroup := token.Group

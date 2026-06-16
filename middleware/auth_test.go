@@ -12,6 +12,7 @@ import (
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/constant"
 	"github.com/Xauryan/stuhelper-ai/model"
+	"github.com/Xauryan/stuhelper-ai/setting/access_setting"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -263,6 +264,38 @@ func TestTokenOrUserAuthRejectsStaleEnabledSessionForDisabledUser(t *testing.T) 
 	router.ServeHTTP(recorder, req)
 
 	require.Equal(t, http.StatusUnauthorized, recorder.Code, recorder.Body.String())
+	require.NotEqual(t, "ok", recorder.Body.String())
+}
+
+func TestTokenOrUserAuthAppliesAccessPolicyToSessionUser(t *testing.T) {
+	db := setupSessionAuthTestDB(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:          123,
+		Username:    "blocked-user",
+		Password:    "password",
+		DisplayName: "Blocked User",
+		Role:        common.RoleCommonUser,
+		Status:      common.UserStatusEnabled,
+		Group:       "default",
+	}).Error)
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.APIPolicyEnabled = true
+		setting.BlockUsers = true
+	})
+
+	router := gin.New()
+	router.Use(sessions.Sessions("session", cookie.NewStore([]byte("test-secret"))))
+	router.Use(setStaleTestSessionUser(common.RoleCommonUser, common.UserStatusEnabled))
+	router.GET("/", TokenOrUserAuth(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code, recorder.Body.String())
+	require.Contains(t, recorder.Body.String(), "访问受限")
 	require.NotEqual(t, "ok", recorder.Body.String())
 }
 

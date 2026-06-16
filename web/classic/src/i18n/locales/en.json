@@ -4301,6 +4301,18 @@
     "可用率": "Availability",
     "成功 {{success}} / 渠道失败 {{channelFailures}} / 临时失败 {{transientFailures}} / 忽略 {{ignored}}": "Success {{success}} / channel failures {{channelFailures}} / transient failures {{transientFailures}} / ignored {{ignored}}",
     "最近错误：{{error}}": "Latest error: {{error}}",
-    "最近无错误": "No recent errors"
+    "最近无错误": "No recent errors",
+    "访问限制会在服务端拦截请求。启用用户或管理员限制前，请确认仍有可用的管理入口。": "Access restrictions are enforced on the server. Before blocking users or administrators, make sure a management entry point remains available.",
+    "国家和地区识别优先使用 CF-IPCountry、CloudFront-Viewer-Country、X-Vercel-IP-Country 等代理头；未提供代理头时，可配置本地 MaxMind 兼容 MMDB 数据库路径。": "Country and region detection first uses proxy headers such as CF-IPCountry, CloudFront-Viewer-Country, and X-Vercel-IP-Country. If no proxy header is provided, configure a local MaxMind-compatible MMDB database path.",
+    "对官网 Web 启用访问限制策略": "Enable access restrictions for the website",
+    "对 API 启用访问限制策略": "Enable access restrictions for the API",
+    "禁止中国大陆 IP 访问": "Block IP access from mainland China",
+    "禁止欧盟国家 IP 访问": "Block IP access from EU countries",
+    "禁止游客访问": "Block guest access",
+    "禁止普通用户访问": "Block regular user access",
+    "禁止管理员访问": "Block administrator access",
+    "GeoIP 数据库路径": "GeoIP database path",
+    "留空时仅使用可信代理写入的国家代码请求头；填写后会在服务端用该 MMDB 文件按客户端 IP 查询国家代码。": "Leave empty to use only country-code headers written by trusted proxies. When filled, the server uses this MMDB file to query the country code by client IP.",
+    "保存访问限制设置": "Save access restriction settings"
   }
 }

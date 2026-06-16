@@ -110,6 +110,14 @@ const SystemSetting = () => {
     'fetch_setting.ip_list': [],
     'fetch_setting.allowed_ports': [],
     'fetch_setting.apply_ip_filter_for_domain': true,
+    'access_control.web_policy_enabled': '',
+    'access_control.api_policy_enabled': '',
+    'access_control.block_china_mainland': '',
+    'access_control.block_european_union': '',
+    'access_control.block_guests': '',
+    'access_control.block_users': '',
+    'access_control.block_admins': '',
+    'access_control.geoip_database_path': '',
   });
 
   const [originInputs, setOriginInputs] = useState({});
@@ -146,6 +154,13 @@ const SystemSetting = () => {
           case 'fetch_setting.domain_filter_mode':
           case 'fetch_setting.ip_filter_mode':
           case 'fetch_setting.apply_ip_filter_for_domain':
+          case 'access_control.web_policy_enabled':
+          case 'access_control.api_policy_enabled':
+          case 'access_control.block_china_mainland':
+          case 'access_control.block_european_union':
+          case 'access_control.block_guests':
+          case 'access_control.block_users':
+          case 'access_control.block_admins':
             item.value = toBoolean(item.value);
             break;
           case 'fetch_setting.domain_list':
@@ -400,6 +415,44 @@ const SystemSetting = () => {
     if (options.length > 0) {
       await updateOptions(options);
     }
+  };
+
+  const submitAccessControl = async () => {
+    const options = [
+      {
+        key: 'access_control.web_policy_enabled',
+        value: !!inputs['access_control.web_policy_enabled'],
+      },
+      {
+        key: 'access_control.api_policy_enabled',
+        value: !!inputs['access_control.api_policy_enabled'],
+      },
+      {
+        key: 'access_control.block_china_mainland',
+        value: !!inputs['access_control.block_china_mainland'],
+      },
+      {
+        key: 'access_control.block_european_union',
+        value: !!inputs['access_control.block_european_union'],
+      },
+      {
+        key: 'access_control.block_guests',
+        value: !!inputs['access_control.block_guests'],
+      },
+      {
+        key: 'access_control.block_users',
+        value: !!inputs['access_control.block_users'],
+      },
+      {
+        key: 'access_control.block_admins',
+        value: !!inputs['access_control.block_admins'],
+      },
+      {
+        key: 'access_control.geoip_database_path',
+        value: inputs['access_control.geoip_database_path'] || '',
+      },
+    ];
+    await updateOptions(options);
   };
 
   const handleAddEmail = () => {
@@ -970,6 +1023,116 @@ const SystemSetting = () => {
 
                   <Button onClick={submitSSRF} style={{ marginTop: 16 }}>
                     {t('更新SSRF防护设置')}
+                  </Button>
+                </Form.Section>
+              </Card>
+
+              <Card>
+                <Form.Section text={t('访问限制')}>
+                  <Banner
+                    type='warning'
+                    description={t(
+                      '访问限制会在服务端拦截请求。启用用户或管理员限制前，请确认仍有可用的管理入口。',
+                    )}
+                    style={{ marginBottom: 20, marginTop: 16 }}
+                  />
+                  <Text type='secondary' style={{ display: 'block' }}>
+                    {t(
+                      '国家和地区识别优先使用 CF-IPCountry、CloudFront-Viewer-Country、X-Vercel-IP-Country 等代理头；未提供代理头时，可配置本地 MaxMind 兼容 MMDB 数据库路径。',
+                    )}
+                  </Text>
+                  <Row
+                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                    style={{ marginTop: 16 }}
+                  >
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.Checkbox
+                        field='access_control.web_policy_enabled'
+                        noLabel
+                      >
+                        {t('对官网 Web 启用访问限制策略')}
+                      </Form.Checkbox>
+                    </Col>
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.Checkbox
+                        field='access_control.api_policy_enabled'
+                        noLabel
+                      >
+                        {t('对 API 启用访问限制策略')}
+                      </Form.Checkbox>
+                    </Col>
+                  </Row>
+
+                  <Row
+                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                    style={{ marginTop: 16 }}
+                  >
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.Checkbox
+                        field='access_control.block_china_mainland'
+                        noLabel
+                      >
+                        {t('禁止中国大陆 IP 访问')}
+                      </Form.Checkbox>
+                    </Col>
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.Checkbox
+                        field='access_control.block_european_union'
+                        noLabel
+                      >
+                        {t('禁止欧盟国家 IP 访问')}
+                      </Form.Checkbox>
+                    </Col>
+                  </Row>
+
+                  <Row
+                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                    style={{ marginTop: 16 }}
+                  >
+                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                      <Form.Checkbox
+                        field='access_control.block_guests'
+                        noLabel
+                      >
+                        {t('禁止游客访问')}
+                      </Form.Checkbox>
+                    </Col>
+                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                      <Form.Checkbox field='access_control.block_users' noLabel>
+                        {t('禁止普通用户访问')}
+                      </Form.Checkbox>
+                    </Col>
+                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                      <Form.Checkbox
+                        field='access_control.block_admins'
+                        noLabel
+                      >
+                        {t('禁止管理员访问')}
+                      </Form.Checkbox>
+                    </Col>
+                  </Row>
+
+                  <Row
+                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                    style={{ marginTop: 16 }}
+                  >
+                    <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                      <Form.Input
+                        field='access_control.geoip_database_path'
+                        label={t('GeoIP 数据库路径')}
+                        placeholder='/data/GeoLite2-Country.mmdb'
+                        extraText={t(
+                          '留空时仅使用可信代理写入的国家代码请求头；填写后会在服务端用该 MMDB 文件按客户端 IP 查询国家代码。',
+                        )}
+                      />
+                    </Col>
+                  </Row>
+
+                  <Button
+                    onClick={submitAccessControl}
+                    style={{ marginTop: 16 }}
+                  >
+                    {t('保存访问限制设置')}
                   </Button>
                 </Form.Section>
               </Card>
