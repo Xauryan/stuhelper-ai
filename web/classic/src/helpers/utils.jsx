@@ -76,7 +76,30 @@ const CHINA_MAINLAND_SENSITIVE_WEB_PATHS = new Set([
   '/console/billing',
 ]);
 
-function normalizeRoutePath(pathname) {
+export const ACCESS_RESOURCES = {
+  WEB: 'web',
+  HOME: 'home',
+  MODEL_API: 'model_api',
+  TOKEN: 'token',
+  WALLET: 'wallet',
+  BILLING: 'billing',
+  USAGE_LOG: 'usage_log',
+  DASHBOARD: 'dashboard',
+  PLAYGROUND: 'playground',
+  CHAT: 'chat',
+  PERSONAL: 'personal',
+  DRAWING_LOG: 'drawing_log',
+  TASK_LOG: 'task_log',
+  ADMIN_CHANNEL: 'admin_channel',
+  ADMIN_SUBSCRIPTION: 'admin_subscription',
+  ADMIN_MODEL: 'admin_model',
+  ADMIN_REDEMPTION: 'admin_redemption',
+  ADMIN_USER: 'admin_user',
+  ADMIN_REFERRAL: 'admin_referral',
+  ADMIN_SETTING: 'admin_setting',
+};
+
+export function normalizeRoutePath(pathname) {
   if (!pathname) return '/';
   if (pathname.length > 1 && pathname.endsWith('/')) {
     return pathname.replace(/\/+$/, '') || '/';
@@ -84,8 +107,144 @@ function normalizeRoutePath(pathname) {
   return pathname;
 }
 
+function appendResourceKey(keys, key) {
+  if (key && !keys.includes(key)) {
+    keys.push(key);
+  }
+}
+
+export function getRouteResourceKeys(pathname) {
+  const path = normalizeRoutePath(pathname);
+  const keys = [];
+
+  switch (path) {
+    case '/':
+      appendResourceKey(keys, ACCESS_RESOURCES.WEB);
+      appendResourceKey(keys, ACCESS_RESOURCES.HOME);
+      break;
+    case '/pricing':
+    case '/rankings':
+    case '/about':
+    case '/user-agreement':
+    case '/privacy-policy':
+      appendResourceKey(keys, ACCESS_RESOURCES.WEB);
+      break;
+    case '/console':
+      appendResourceKey(keys, ACCESS_RESOURCES.DASHBOARD);
+      break;
+    case '/console/token':
+      appendResourceKey(keys, ACCESS_RESOURCES.TOKEN);
+      break;
+    case '/console/topup':
+      appendResourceKey(keys, ACCESS_RESOURCES.WALLET);
+      break;
+    case '/console/billing':
+      appendResourceKey(keys, ACCESS_RESOURCES.BILLING);
+      break;
+    case '/console/log':
+      appendResourceKey(keys, ACCESS_RESOURCES.USAGE_LOG);
+      break;
+    case '/console/playground':
+      appendResourceKey(keys, ACCESS_RESOURCES.PLAYGROUND);
+      break;
+    case '/console/personal':
+      appendResourceKey(keys, ACCESS_RESOURCES.PERSONAL);
+      break;
+    case '/console/midjourney':
+      appendResourceKey(keys, ACCESS_RESOURCES.DRAWING_LOG);
+      break;
+    case '/console/task':
+      appendResourceKey(keys, ACCESS_RESOURCES.TASK_LOG);
+      break;
+    case '/console/channel':
+      appendResourceKey(keys, ACCESS_RESOURCES.ADMIN_CHANNEL);
+      break;
+    case '/console/subscription':
+      appendResourceKey(keys, ACCESS_RESOURCES.ADMIN_SUBSCRIPTION);
+      break;
+    case '/console/models':
+      appendResourceKey(keys, ACCESS_RESOURCES.ADMIN_MODEL);
+      break;
+    case '/console/redemption':
+      appendResourceKey(keys, ACCESS_RESOURCES.ADMIN_REDEMPTION);
+      break;
+    case '/console/user':
+      appendResourceKey(keys, ACCESS_RESOURCES.ADMIN_USER);
+      break;
+    case '/console/referral':
+      appendResourceKey(keys, ACCESS_RESOURCES.ADMIN_REFERRAL);
+      break;
+    case '/console/setting':
+      appendResourceKey(keys, ACCESS_RESOURCES.ADMIN_SETTING);
+      break;
+    default:
+      if (path.startsWith('/console/chat') || path === '/chat2link') {
+        appendResourceKey(keys, ACCESS_RESOURCES.CHAT);
+      }
+      break;
+  }
+
+  return keys;
+}
+
+export function getCurrentUserRole() {
+  try {
+    const rawUser = localStorage.getItem('user');
+    if (!rawUser) return USER_ROLES.GUEST;
+    const user = JSON.parse(rawUser);
+    return Number(user?.role ?? USER_ROLES.GUEST);
+  } catch (e) {
+    return USER_ROLES.GUEST;
+  }
+}
+
+export function getRoleAccessLevel(role = getCurrentUserRole()) {
+  if (role >= USER_ROLES.ROOT) return 'root';
+  if (role >= USER_ROLES.ADMIN) return 'admin';
+  if (role >= USER_ROLES.AUDIT_ADMIN) return 'audit_admin';
+  if (role >= USER_ROLES.COMMON) return 'user';
+  return 'guest';
+}
+
+export function isResourceAllowed(status, resourceKey, role) {
+  if (!resourceKey) return true;
+
+  const accessControl = status?.access_control;
+  const rules = accessControl?.resource_rules;
+  const level = getRoleAccessLevel(role ?? getCurrentUserRole());
+  const rule = rules?.[resourceKey];
+
+  if (rule && Object.prototype.hasOwnProperty.call(rule, level)) {
+    return rule[level] !== false;
+  }
+
+  const resourceAccess = accessControl?.resource_access;
+  if (
+    resourceAccess &&
+    Object.prototype.hasOwnProperty.call(resourceAccess, resourceKey)
+  ) {
+    return resourceAccess[resourceKey] !== false;
+  }
+
+  return true;
+}
+
+export function isRouteResourceRestricted(status, pathname, role) {
+  const accessControl = status?.access_control;
+  if (accessControl?.web_policy_enabled === false) {
+    return false;
+  }
+
+  const keys = getRouteResourceKeys(pathname);
+  if (keys.length === 0) return false;
+  return keys.some((key) => !isResourceAllowed(status, key, role));
+}
+
 export function isChinaMainlandRouteRestricted(status, pathname) {
   const accessControl = status?.access_control;
+  if (accessControl?.web_policy_enabled === false) {
+    return false;
+  }
   if (!accessControl?.request_from_china_mainland || isAuditAdmin()) {
     return false;
   }
@@ -98,6 +257,13 @@ export function isChinaMainlandRouteRestricted(status, pathname) {
   return (
     accessControl.block_china_mainland_user_sensitive_pages &&
     CHINA_MAINLAND_SENSITIVE_WEB_PATHS.has(path)
+  );
+}
+
+export function isRouteAccessRestricted(status, pathname, role) {
+  return (
+    isRouteResourceRestricted(status, pathname, role) ||
+    isChinaMainlandRouteRestricted(status, pathname)
   );
 }
 

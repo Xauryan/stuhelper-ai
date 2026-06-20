@@ -34,7 +34,7 @@ import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime'
 import {
   isAdmin,
   isAuditAdmin,
-  isChinaMainlandRouteRestricted,
+  isRouteAccessRestricted,
   isRoot,
   showError,
 } from '../../helpers';
@@ -63,6 +63,7 @@ const routerMap = {
   models: '/console/models',
   playground: '/console/playground',
   personal: '/console/personal',
+  chat: '/console/chat',
 };
 
 const SiderBar = ({ onNavigate = () => {} }) => {
@@ -85,10 +86,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
 
   const isRestrictedItem = useCallback(
     (item) => {
-      const fullPath = routerMap[item.itemKey];
-      return isChinaMainlandRouteRestricted(statusState?.status, fullPath);
+      const fullPath = routerMapState[item.itemKey] || routerMap[item.itemKey];
+      if (!fullPath) return false;
+      return isRouteAccessRestricted(statusState?.status, fullPath);
     },
-    [statusState?.status],
+    [routerMapState, statusState?.status],
   );
 
   const workspaceItems = useMemo(() => {
@@ -224,11 +226,18 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     // 根据配置过滤项目
     const filteredItems = items.filter((item) => {
       const configVisible = isModuleVisible('admin', item.itemKey);
-      return configVisible;
+      return configVisible && !isRestrictedItem(item);
     });
 
     return filteredItems;
-  }, [isAuditAdmin(), isAdmin(), isRoot(), t, isModuleVisible]);
+  }, [
+    isAuditAdmin(),
+    isAdmin(),
+    isRoot(),
+    t,
+    isModuleVisible,
+    isRestrictedItem,
+  ]);
 
   const chatMenuItems = useMemo(() => {
     const items = [
@@ -247,11 +256,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     // 根据配置过滤项目
     const filteredItems = items.filter((item) => {
       const configVisible = isModuleVisible('chat', item.itemKey);
-      return configVisible;
+      return configVisible && !isRestrictedItem(item);
     });
 
     return filteredItems;
-  }, [chatItems, t, isModuleVisible]);
+  }, [chatItems, t, isModuleVisible, isRestrictedItem]);
 
   // 更新路由映射，添加聊天路由
   const updateRouterMapWithChats = (chats) => {
@@ -429,6 +438,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
   const hasAdminItems = adminItems.some(
     (item) => item.className !== 'tableHiddle',
   );
+  const hasChatItems = chatMenuItems.some(
+    (item) =>
+      item.className !== 'tableHiddle' &&
+      (!item.items || item.items.length > 0),
+  );
 
   return (
     <div
@@ -484,7 +498,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
           }}
         >
           {/* 聊天区域 */}
-          {hasSectionVisibleModules('chat') && (
+          {hasSectionVisibleModules('chat') && hasChatItems && (
             <div className='sidebar-section'>
               {!collapsed && (
                 <div className='sidebar-group-label'>{t('聊天')}</div>

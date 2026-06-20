@@ -59,6 +59,10 @@ func performAccessControlRequestWithRoleAtPath(scope AccessPolicyScope, header m
 	return recorder
 }
 
+func boolPtr(value bool) *bool {
+	return &value
+}
+
 func TestAccessControlAllowsWhenPolicyDisabled(t *testing.T) {
 	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
 		setting.WebPolicyEnabled = false
@@ -299,4 +303,83 @@ func TestAccessControlBlocksChinaMainlandSensitiveAPIAfterAuth(t *testing.T) {
 	adminRole := common.RoleAdminUser
 	adminRecorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeAPI, header, "api", &adminRole, "/api/token")
 	require.Equal(t, http.StatusOK, adminRecorder.Code)
+}
+
+func TestAccessControlResourceRuleBlocksGuestHomepage(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.ResourceRules = map[string]access_setting.ResourceAccessRule{
+			AccessResourceHome: {
+				Guest: boolPtr(false),
+			},
+		}
+	})
+
+	homepageRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, nil, "web", "/")
+	require.Equal(t, http.StatusForbidden, homepageRecorder.Code)
+
+	loginRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, nil, "web", "/login")
+	require.Equal(t, http.StatusOK, loginRecorder.Code)
+}
+
+func TestAccessControlResourceRuleBlocksTokenForUserAndAdminButAllowsRoot(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.APIPolicyEnabled = true
+		setting.ResourceRules = map[string]access_setting.ResourceAccessRule{
+			AccessResourceToken: {
+				User:  boolPtr(false),
+				Admin: boolPtr(false),
+				Root:  boolPtr(true),
+			},
+		}
+	})
+
+	userRole := common.RoleCommonUser
+	userWebRecorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeWeb, nil, "web", &userRole, "/console/token")
+	require.Equal(t, http.StatusForbidden, userWebRecorder.Code)
+
+	adminRole := common.RoleAdminUser
+	adminAPIRecorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeAPI, nil, "api", &adminRole, "/api/token")
+	require.Equal(t, http.StatusForbidden, adminAPIRecorder.Code)
+
+	rootRole := common.RoleRootUser
+	rootAPIRecorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeAPI, nil, "api", &rootRole, "/api/token")
+	require.Equal(t, http.StatusOK, rootAPIRecorder.Code)
+}
+
+func TestAccessControlModelAPIRuleDoesNotBlockOrdinaryManagementAPI(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.APIPolicyEnabled = true
+		setting.ResourceRules = map[string]access_setting.ResourceAccessRule{
+			AccessResourceModelAPI: {
+				Guest: boolPtr(false),
+				User:  boolPtr(false),
+				Admin: boolPtr(false),
+				Root:  boolPtr(false),
+			},
+		}
+	})
+
+	statusRecorder := performAccessControlRequestAtPath(AccessPolicyScopeAPI, nil, "api", "/api/status")
+	require.Equal(t, http.StatusOK, statusRecorder.Code)
+
+	relayRecorder := performAccessControlRequestAtPath(AccessPolicyScopeAPI, nil, "relay", "/v1/chat/completions")
+	require.Equal(t, http.StatusForbidden, relayRecorder.Code)
+	require.Contains(t, relayRecorder.Body.String(), `"error":`)
+}
+
+func TestAccessControlModelAPIRuleDoesNotBlockOldDashboardBillingAPI(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.APIPolicyEnabled = true
+		setting.ResourceRules = map[string]access_setting.ResourceAccessRule{
+			AccessResourceModelAPI: {
+				User: boolPtr(false),
+			},
+		}
+	})
+
+	userRole := common.RoleCommonUser
+	recorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeAPI, nil, "old_api", &userRole, "/v1/dashboard/billing/usage")
+	require.Equal(t, http.StatusOK, recorder.Code)
 }

@@ -23,6 +23,52 @@ const (
 	AccessPolicyScopeAPI AccessPolicyScope = "api"
 )
 
+const (
+	AccessResourceWeb               = "web"
+	AccessResourceHome              = "home"
+	AccessResourceModelAPI          = "model_api"
+	AccessResourceToken             = "token"
+	AccessResourceWallet            = "wallet"
+	AccessResourceBilling           = "billing"
+	AccessResourceUsageLog          = "usage_log"
+	AccessResourceDashboard         = "dashboard"
+	AccessResourcePlayground        = "playground"
+	AccessResourceChat              = "chat"
+	AccessResourcePersonal          = "personal"
+	AccessResourceDrawingLog        = "drawing_log"
+	AccessResourceTaskLog           = "task_log"
+	AccessResourceAdminChannel      = "admin_channel"
+	AccessResourceAdminSubscription = "admin_subscription"
+	AccessResourceAdminModel        = "admin_model"
+	AccessResourceAdminRedemption   = "admin_redemption"
+	AccessResourceAdminUser         = "admin_user"
+	AccessResourceAdminReferral     = "admin_referral"
+	AccessResourceAdminSetting      = "admin_setting"
+)
+
+var accessResourceKeys = []string{
+	AccessResourceWeb,
+	AccessResourceHome,
+	AccessResourceModelAPI,
+	AccessResourceToken,
+	AccessResourceWallet,
+	AccessResourceBilling,
+	AccessResourceUsageLog,
+	AccessResourceDashboard,
+	AccessResourcePlayground,
+	AccessResourceChat,
+	AccessResourcePersonal,
+	AccessResourceDrawingLog,
+	AccessResourceTaskLog,
+	AccessResourceAdminChannel,
+	AccessResourceAdminSubscription,
+	AccessResourceAdminModel,
+	AccessResourceAdminRedemption,
+	AccessResourceAdminUser,
+	AccessResourceAdminReferral,
+	AccessResourceAdminSetting,
+}
+
 var countryHeaderCandidates = []string{
 	"EO-Client-IPCountry",
 	"CF-IPCountry",
@@ -52,6 +98,11 @@ func enforceAccessPolicy(c *gin.Context, scope AccessPolicyScope) bool {
 	}
 
 	if reason, ok := blockedByScopedChinaMainlandPolicy(c, setting, scope); ok {
+		abortAccessDenied(c, scope, reason)
+		return false
+	}
+
+	if reason, ok := blockedByResourceRule(c, setting, scope); ok {
 		abortAccessDenied(c, scope, reason)
 		return false
 	}
@@ -205,6 +256,378 @@ func isChinaMainlandSensitiveAPIPath(path string) bool {
 	}
 }
 
+func blockedByResourceRule(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {
+	keys := resourceKeysForRequest(scope, c.Request.Method, normalizedRequestPath(c), c.GetString(RouteTagKey))
+	if len(keys) == 0 {
+		return "", false
+	}
+
+	role, ok := currentRequestRole(c)
+	if !ok {
+		if scope == AccessPolicyScopeAPI && hasAPIAuthCredential(c) {
+			return "", false
+		}
+		role = common.RoleGuestUser
+	}
+
+	for _, key := range keys {
+		if !resourceAllowedForRole(setting, key, role) {
+			return fmt.Sprintf("resource %s access is blocked for %s", key, roleAccessLevel(role)), true
+		}
+	}
+	return "", false
+}
+
+func resourceKeysForRequest(scope AccessPolicyScope, method string, path string, routeTag string) []string {
+	switch scope {
+	case AccessPolicyScopeWeb:
+		return webResourceKeys(path)
+	case AccessPolicyScopeAPI:
+		return apiResourceKeys(method, path, routeTag)
+	default:
+		return nil
+	}
+}
+
+func webResourceKeys(path string) []string {
+	var keys []string
+	switch path {
+	case "/":
+		keys = appendResourceKey(keys, AccessResourceWeb)
+		keys = appendResourceKey(keys, AccessResourceHome)
+	case "/pricing", "/rankings", "/about", "/user-agreement", "/privacy-policy":
+		keys = appendResourceKey(keys, AccessResourceWeb)
+	case "/console":
+		keys = appendResourceKey(keys, AccessResourceDashboard)
+	case "/console/token":
+		keys = appendResourceKey(keys, AccessResourceToken)
+	case "/console/topup":
+		keys = appendResourceKey(keys, AccessResourceWallet)
+	case "/console/billing":
+		keys = appendResourceKey(keys, AccessResourceBilling)
+	case "/console/log":
+		keys = appendResourceKey(keys, AccessResourceUsageLog)
+	case "/console/playground":
+		keys = appendResourceKey(keys, AccessResourcePlayground)
+	case "/console/personal":
+		keys = appendResourceKey(keys, AccessResourcePersonal)
+	case "/console/midjourney":
+		keys = appendResourceKey(keys, AccessResourceDrawingLog)
+	case "/console/task":
+		keys = appendResourceKey(keys, AccessResourceTaskLog)
+	case "/console/channel":
+		keys = appendResourceKey(keys, AccessResourceAdminChannel)
+	case "/console/subscription":
+		keys = appendResourceKey(keys, AccessResourceAdminSubscription)
+	case "/console/models":
+		keys = appendResourceKey(keys, AccessResourceAdminModel)
+	case "/console/redemption":
+		keys = appendResourceKey(keys, AccessResourceAdminRedemption)
+	case "/console/user":
+		keys = appendResourceKey(keys, AccessResourceAdminUser)
+	case "/console/referral":
+		keys = appendResourceKey(keys, AccessResourceAdminReferral)
+	case "/console/setting":
+		keys = appendResourceKey(keys, AccessResourceAdminSetting)
+	default:
+		if strings.HasPrefix(path, "/console/chat") || path == "/chat2link" {
+			keys = appendResourceKey(keys, AccessResourceChat)
+		}
+	}
+	return keys
+}
+
+func apiResourceKeys(method string, path string, routeTag string) []string {
+	var keys []string
+
+	if isTokenAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourceToken)
+	}
+	if isWalletAPIPath(method, path) {
+		keys = appendResourceKey(keys, AccessResourceWallet)
+	}
+	if isBillingAPIPath(method, path, routeTag) {
+		keys = appendResourceKey(keys, AccessResourceBilling)
+	}
+	if isUsageLogAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourceUsageLog)
+	}
+	if isPlaygroundAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourcePlayground)
+	}
+	if isPersonalAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourcePersonal)
+	}
+	if isDrawingLogAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourceDrawingLog)
+	}
+	if isTaskLogAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourceTaskLog)
+	}
+	if isAdminChannelAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourceAdminChannel)
+	}
+	if isAdminSubscriptionAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourceAdminSubscription)
+	}
+	if isAdminModelAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourceAdminModel)
+	}
+	if isAdminRedemptionAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourceAdminRedemption)
+	}
+	if isAdminReferralAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourceAdminReferral)
+	}
+	if isAdminUserAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourceAdminUser)
+	}
+	if isAdminSettingAPIPath(path) {
+		keys = appendResourceKey(keys, AccessResourceAdminSetting)
+	}
+	if isModelAPIPath(path, routeTag) {
+		keys = appendResourceKey(keys, AccessResourceModelAPI)
+	}
+
+	return keys
+}
+
+func appendResourceKey(keys []string, key string) []string {
+	for _, existing := range keys {
+		if existing == key {
+			return keys
+		}
+	}
+	return append(keys, key)
+}
+
+func resourceAllowedForRole(setting *access_setting.AccessControlSetting, resource string, role int) bool {
+	if setting == nil || setting.ResourceRules == nil {
+		return true
+	}
+	rule, ok := setting.ResourceRules[resource]
+	if !ok {
+		return true
+	}
+
+	var value *bool
+	switch roleAccessLevel(role) {
+	case "root":
+		value = rule.Root
+	case "admin":
+		value = rule.Admin
+	case "audit_admin":
+		value = rule.AuditAdmin
+	case "user":
+		value = rule.User
+	default:
+		value = rule.Guest
+	}
+	if value == nil {
+		return true
+	}
+	return *value
+}
+
+func roleAccessLevel(role int) string {
+	switch {
+	case role >= common.RoleRootUser:
+		return "root"
+	case role >= common.RoleAdminUser:
+		return "admin"
+	case role >= common.RoleAuditAdminUser:
+		return "audit_admin"
+	case role >= common.RoleCommonUser:
+		return "user"
+	default:
+		return "guest"
+	}
+}
+
+func isExactOrChildPath(path string, base string) bool {
+	return path == base || strings.HasPrefix(path, base+"/")
+}
+
+func isTokenAPIPath(path string) bool {
+	return isExactOrChildPath(path, "/api/token")
+}
+
+func isWalletAPIPath(method string, path string) bool {
+	if path == "/api/user/topup" {
+		return method != http.MethodGet
+	}
+	if path == "/api/user/topup/info" {
+		return true
+	}
+	if strings.HasPrefix(path, "/api/user/stripe/") ||
+		strings.HasPrefix(path, "/api/user/creem/") ||
+		strings.HasPrefix(path, "/api/user/waffo/") ||
+		strings.HasPrefix(path, "/api/user/alipay/official/") ||
+		strings.HasPrefix(path, "/api/user/wechat-pay/official/") ||
+		strings.HasPrefix(path, "/api/user/self-serve/") {
+		return true
+	}
+	if strings.HasPrefix(path, "/api/subscription/") {
+		if strings.HasPrefix(path, "/api/subscription/admin") {
+			return false
+		}
+		if path == "/api/subscription/plans" ||
+			path == "/api/subscription/self" ||
+			strings.HasPrefix(path, "/api/subscription/self/") ||
+			strings.HasSuffix(path, "/pay") {
+			return true
+		}
+	}
+	switch path {
+	case "/api/user/pay",
+		"/api/user/amount",
+		"/api/user/aff",
+		"/api/user/aff/commissions",
+		"/api/user/aff_transfer":
+		return true
+	default:
+		return false
+	}
+}
+
+func isBillingAPIPath(method string, path string, routeTag string) bool {
+	if routeTag == "old_api" {
+		return true
+	}
+	if path == "/api/user/topup" {
+		return method == http.MethodGet
+	}
+	if strings.HasPrefix(path, "/api/user/topup/") {
+		if path == "/api/user/topup/info" {
+			return false
+		}
+		return true
+	}
+	if isExactOrChildPath(path, "/dashboard/billing") ||
+		isExactOrChildPath(path, "/v1/dashboard/billing") {
+		return true
+	}
+	return false
+}
+
+func isUsageLogAPIPath(path string) bool {
+	return isExactOrChildPath(path, "/api/log") ||
+		isExactOrChildPath(path, "/api/data") ||
+		isExactOrChildPath(path, "/api/usage")
+}
+
+func isPlaygroundAPIPath(path string) bool {
+	return isExactOrChildPath(path, "/pg")
+}
+
+func isPersonalAPIPath(path string) bool {
+	if strings.HasPrefix(path, "/api/user/passkey") ||
+		strings.HasPrefix(path, "/api/user/2fa") ||
+		strings.HasPrefix(path, "/api/user/oauth/bindings") ||
+		strings.HasPrefix(path, "/api/user/checkin") {
+		return true
+	}
+	switch path {
+	case "/api/user/setting":
+		return true
+	default:
+		return false
+	}
+}
+
+func isDrawingLogAPIPath(path string) bool {
+	return isExactOrChildPath(path, "/api/mj")
+}
+
+func isTaskLogAPIPath(path string) bool {
+	return isExactOrChildPath(path, "/api/task")
+}
+
+func isAdminChannelAPIPath(path string) bool {
+	return isExactOrChildPath(path, "/api/channel") ||
+		isExactOrChildPath(path, "/api/group") ||
+		isExactOrChildPath(path, "/api/prefill_group") ||
+		isExactOrChildPath(path, "/api/vendors")
+}
+
+func isAdminSubscriptionAPIPath(path string) bool {
+	return isExactOrChildPath(path, "/api/subscription/admin")
+}
+
+func isAdminModelAPIPath(path string) bool {
+	if path == "/api/models" {
+		return false
+	}
+	return isExactOrChildPath(path, "/api/models")
+}
+
+func isAdminRedemptionAPIPath(path string) bool {
+	return isExactOrChildPath(path, "/api/redemption")
+}
+
+func isAdminReferralAPIPath(path string) bool {
+	return isExactOrChildPath(path, "/api/user/referrals")
+}
+
+func isAdminUserAPIPath(path string) bool {
+	if path == "/api/user" || path == "/api/user/" {
+		return true
+	}
+	if isAdminReferralAPIPath(path) {
+		return false
+	}
+	if strings.HasPrefix(path, "/api/user/topup") ||
+		strings.HasPrefix(path, "/api/user/stripe") ||
+		strings.HasPrefix(path, "/api/user/creem") ||
+		strings.HasPrefix(path, "/api/user/waffo") ||
+		strings.HasPrefix(path, "/api/user/alipay") ||
+		strings.HasPrefix(path, "/api/user/wechat-pay") ||
+		strings.HasPrefix(path, "/api/user/self-serve") ||
+		strings.HasPrefix(path, "/api/user/passkey") ||
+		strings.HasPrefix(path, "/api/user/2fa") ||
+		strings.HasPrefix(path, "/api/user/oauth") ||
+		strings.HasPrefix(path, "/api/user/checkin") {
+		return false
+	}
+	if path == "/api/user/search" {
+		return true
+	}
+	trimmed := strings.TrimPrefix(path, "/api/user/")
+	if trimmed == path || trimmed == "" {
+		return false
+	}
+	firstSegment := strings.Split(trimmed, "/")[0]
+	_, err := strconv.Atoi(firstSegment)
+	return err == nil
+}
+
+func isAdminSettingAPIPath(path string) bool {
+	return isExactOrChildPath(path, "/api/option") ||
+		isExactOrChildPath(path, "/api/custom-oauth-provider") ||
+		isExactOrChildPath(path, "/api/performance") ||
+		isExactOrChildPath(path, "/api/ratio_sync")
+}
+
+func isModelAPIPath(path string, routeTag string) bool {
+	if routeTag == "relay" {
+		return true
+	}
+	if routeTag == "old_api" {
+		return false
+	}
+	if isExactOrChildPath(path, "/v1") ||
+		isExactOrChildPath(path, "/v1beta") ||
+		isExactOrChildPath(path, "/mj") ||
+		isExactOrChildPath(path, "/suno") ||
+		isExactOrChildPath(path, "/kling/v1") ||
+		isExactOrChildPath(path, "/jimeng") ||
+		isExactOrChildPath(path, "/pg") {
+		return true
+	}
+	segments := strings.Split(strings.Trim(path, "/"), "/")
+	return len(segments) >= 2 && segments[1] == "mj"
+}
+
 func requestCountry(c *gin.Context) access_setting.CountryLookupResult {
 	for _, header := range countryHeaderCandidates {
 		code := access_setting.NormalizeCountryCode(c.GetHeader(header))
@@ -240,6 +663,25 @@ func RequestCountry(c *gin.Context) access_setting.CountryLookupResult {
 
 func IsChinaMainlandRequest(c *gin.Context) bool {
 	return requestFromChinaMainland(c)
+}
+
+func CurrentRequestRole(c *gin.Context) (int, bool) {
+	return currentRequestRole(c)
+}
+
+func ResourceAccessForRole(role int) map[string]bool {
+	setting := access_setting.GetAccessControlSetting()
+	access := make(map[string]bool, len(accessResourceKeys))
+	for _, key := range accessResourceKeys {
+		access[key] = resourceAllowedForRole(setting, key, role)
+	}
+	return access
+}
+
+func AccessResourceKeys() []string {
+	keys := make([]string, len(accessResourceKeys))
+	copy(keys, accessResourceKeys)
+	return keys
 }
 
 func blockedByIdentity(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {

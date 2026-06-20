@@ -17,6 +17,16 @@ type AccessControlSetting struct {
 	BlockAdmins bool `json:"block_admins"`
 
 	GeoIPDatabasePath string `json:"geoip_database_path"`
+
+	ResourceRules map[string]ResourceAccessRule `json:"resource_rules"`
+}
+
+type ResourceAccessRule struct {
+	Guest      *bool `json:"guest,omitempty"`
+	User       *bool `json:"user,omitempty"`
+	AuditAdmin *bool `json:"audit_admin,omitempty"`
+	Admin      *bool `json:"admin,omitempty"`
+	Root       *bool `json:"root,omitempty"`
 }
 
 var accessControlSetting = AccessControlSetting{
@@ -30,6 +40,7 @@ var accessControlSetting = AccessControlSetting{
 	BlockUsers:                           false,
 	BlockAdmins:                          false,
 	GeoIPDatabasePath:                    "",
+	ResourceRules:                        map[string]ResourceAccessRule{},
 }
 
 func init() {

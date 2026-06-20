@@ -50,6 +50,10 @@ func GetStatus(c *gin.Context) {
 	accessControlSetting := access_setting.GetAccessControlSetting()
 	requestCountry := middleware.RequestCountry(c)
 	requestFromChinaMainland := requestCountry.Known && access_setting.IsChinaMainlandCountryCode(requestCountry.CountryCode)
+	currentRole, ok := middleware.CurrentRequestRole(c)
+	if !ok {
+		currentRole = common.RoleGuestUser
+	}
 
 	data := gin.H{
 		"version":                                common.Version,
@@ -136,8 +140,14 @@ func GetStatus(c *gin.Context) {
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
 		"access_control": gin.H{
+			"web_policy_enabled":                        accessControlSetting.WebPolicyEnabled,
+			"api_policy_enabled":                        accessControlSetting.APIPolicyEnabled,
 			"block_china_mainland_homepage":             accessControlSetting.BlockChinaMainlandHomepage,
 			"block_china_mainland_user_sensitive_pages": accessControlSetting.BlockChinaMainlandUserSensitivePages,
+			"resource_rules":                            accessControlSetting.ResourceRules,
+			"resource_access":                           middleware.ResourceAccessForRole(currentRole),
+			"resource_keys":                             middleware.AccessResourceKeys(),
+			"current_role":                              currentRole,
 			"request_country_code":                      requestCountry.CountryCode,
 			"request_country_known":                     requestCountry.Known,
 			"request_country_source":                    requestCountry.Source,

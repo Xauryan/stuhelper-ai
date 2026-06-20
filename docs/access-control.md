@@ -1,6 +1,6 @@
 # 访问限制策略
 
-StuHelper AI 支持在服务端按请求来源国家/地区和访问身份拦截官网 Web 与 API。
+StuHelper AI 支持在服务端按请求来源国家/地区、访问身份和资源层级拦截官网 Web 与 API。
 所有策略默认关闭，必须由超级管理员在 classic 后台
 `系统设置 -> 访问限制` 中显式启用。
 
@@ -9,7 +9,7 @@ StuHelper AI 支持在服务端按请求来源国家/地区和访问身份拦截
 | Option Key | 用途 | 默认值 |
 | --- | --- | --- |
 | `access_control.web_policy_enabled` | 是否对官网 Web 路由启用访问限制。包含内置 classic 前端资源、首页兜底和 `FRONTEND_BASE_URL` 重定向。 | `false` |
-| `access_control.api_policy_enabled` | 是否对 API 路由启用访问限制。包含管理后台 `/api/*`、relay `/v1`/`/v1beta`/`/mj`/`/suno` 等 token API，以及旧 dashboard API。 | `false` |
+| `access_control.api_policy_enabled` | 是否对 API 路由启用访问限制中间件。该总开关会覆盖管理后台 `/api/*`、relay `/v1`/`/v1beta`/`/mj`/`/suno` 等 token API，以及旧 dashboard API；资源级 `model_api` 只匹配大模型 relay 服务，不等于全部 `/api/*`。 | `false` |
 | `access_control.block_china_mainland` | 禁止识别为中国大陆的 IP 访问，国家代码为 `CN`。这是全局地域封禁，会影响游客、普通用户和管理员。 | `false` |
 | `access_control.block_european_union` | 禁止识别为欧盟成员国的 IP 访问。 | `false` |
 | `access_control.block_china_mainland_homepage` | 仅禁止中国大陆 IP 访问官网主页 `/`，审计管理员、管理员和超级管理员放行。 | `false` |
@@ -18,6 +18,102 @@ StuHelper AI 支持在服务端按请求来源国家/地区和访问身份拦截
 | `access_control.block_users` | 禁止普通用户访问。API token 请求按 token 所属用户角色判断。 | `false` |
 | `access_control.block_admins` | 禁止管理员访问。包含审计管理员、管理员和超级管理员。 | `false` |
 | `access_control.geoip_database_path` | 本地 MaxMind 兼容 MMDB 国家库路径。留空时只使用代理注入的国家代码请求头。 | 空 |
+| `access_control.resource_rules` | 资源级访问矩阵。按资源 key 配置 `guest`、`user`、`audit_admin`、`admin`、`root` 五类身份是否允许访问；字段缺失表示默认允许。 | `{}` |
+
+## 身份层级
+
+资源级规则使用五类身份字段：
+
+| 字段 | 角色 | 后端角色值 |
+| --- | --- | --- |
+| `guest` | 游客，未登录且无已认证 API token 的请求。 | `0` |
+| `user` | 普通用户。 | `1` |
+| `audit_admin` | 审计管理员，只读管理角色。 | `5` |
+| `admin` | 管理员。 | `10` |
+| `root` | 超级管理员。 | `100` |
+
+字段没有继承关系，必须按身份单独配置。例如只写 `"admin": false` 只会禁止管理员，
+不会自动禁止超级管理员；如需超级管理员也禁止，必须同时写 `"root": false`。
+
+## 资源级规则
+
+`access_control.resource_rules` 是 JSON 对象，第一层 key 是资源，第二层 key 是身份字段。
+语义如下：
+
+- 没有配置某个资源：默认允许。
+- 配置了资源但缺少某个身份字段：该身份默认允许。
+- 某身份字段为 `false`：拒绝该身份访问该资源。
+- 某身份字段为 `true`：允许该身份访问该资源。
+
+示例：游客不能访问官网首页，普通用户、审计管理员和管理员不能访问令牌、钱包和账单，
+只有超级管理员可以访问这些敏感资源：
+
+```json
+{
+  "home": {
+    "guest": false,
+    "user": true,
+    "audit_admin": true,
+    "admin": true,
+    "root": true
+  },
+  "token": {
+    "guest": false,
+    "user": false,
+    "audit_admin": false,
+    "admin": false,
+    "root": true
+  },
+  "wallet": {
+    "guest": false,
+    "user": false,
+    "audit_admin": false,
+    "admin": false,
+    "root": true
+  },
+  "billing": {
+    "guest": false,
+    "user": false,
+    "audit_admin": false,
+    "admin": false,
+    "root": true
+  }
+}
+```
+
+要让这组规则完整生效，需要同时开启：
+
+- `access_control.web_policy_enabled`：拦截 Web 页面并让 classic 前端隐藏菜单。
+- `access_control.api_policy_enabled`：拦截相关后端接口和模型 API 服务。
+
+### 资源 key
+
+| 资源 key | 覆盖范围 |
+| --- | --- |
+| `web` | 官网普通 Web 页面，例如 `/`、`/pricing`、`/rankings`、`/about`、协议和隐私页。登录、注册、重置密码、OAuth 回调和 setup 页面不映射到 `web`，避免锁死入口。 |
+| `home` | 官网首页 `/`。 |
+| `model_api` | 大模型 API / relay 服务，例如 `/v1`、`/v1beta`、`/mj`、`/:mode/mj`、`/suno`、`/kling/v1`、`/jimeng`、`/pg`，以及带 `relay` 路由标签的模型服务。它不是所有后端 `/api/*` 管理接口。 |
+| `token` | 令牌管理页面 `/console/token` 和 `/api/token/*`。 |
+| `wallet` | 钱包/充值/订阅购买页面 `/console/topup`，以及充值、支付、余额订阅购买、支付方式询价、返佣转余额等接口。 |
+| `billing` | 账单页面 `/console/billing`、用户账单列表、管理员账单列表和旧 dashboard billing API。 |
+| `usage_log` | 使用日志页面 `/console/log`，日志、用量和数据统计接口。 |
+| `dashboard` | 数据看板 `/console`。 |
+| `playground` | 操练场 `/console/playground` 和 `/pg/*`。 |
+| `chat` | 聊天页 `/console/chat/*` 和 `/chat2link`。 |
+| `personal` | 个人设置 `/console/personal`，以及 2FA、Passkey、OAuth 绑定、签到和用户设置接口。 |
+| `drawing_log` | 绘图日志 `/console/midjourney` 和 `/api/mj/*`。 |
+| `task_log` | 任务日志 `/console/task` 和 `/api/task/*`。 |
+| `admin_channel` | 渠道、分组、预填分组和厂商管理。 |
+| `admin_subscription` | 订阅管理。 |
+| `admin_model` | 模型管理。 |
+| `admin_redemption` | 兑换码管理。 |
+| `admin_user` | 用户管理。 |
+| `admin_referral` | 邀请管理。 |
+| `admin_setting` | 系统设置、性能、同步比例和自定义 OAuth Provider 管理。 |
+
+classic 前端会从 `/api/status` 读取 `access_control.resource_rules` 和
+`access_control.resource_access`，并按同一资源 key 隐藏侧边栏菜单项；例如 `token.user=false`
+时普通用户看不到“令牌管理”。菜单隐藏只是体验层，直接访问 URL 或接口仍由服务端中间件拦截。
 
 ## 国家/地区识别
 

@@ -44,6 +44,37 @@ import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import CustomOAuthSetting from './CustomOAuthSetting';
 
+const DEFAULT_ACCESS_RESOURCE_RULES = {
+  home: {
+    guest: false,
+    user: true,
+    audit_admin: true,
+    admin: true,
+    root: true,
+  },
+  token: {
+    guest: false,
+    user: false,
+    audit_admin: false,
+    admin: false,
+    root: true,
+  },
+  wallet: {
+    guest: false,
+    user: false,
+    audit_admin: false,
+    admin: false,
+    root: true,
+  },
+  billing: {
+    guest: false,
+    user: false,
+    audit_admin: false,
+    admin: false,
+    root: true,
+  },
+};
+
 const SystemSetting = () => {
   const { t } = useTranslation();
   let [inputs, setInputs] = useState({
@@ -120,6 +151,7 @@ const SystemSetting = () => {
     'access_control.block_users': '',
     'access_control.block_admins': '',
     'access_control.geoip_database_path': '',
+    'access_control.resource_rules': '',
   });
 
   const [originInputs, setOriginInputs] = useState({});
@@ -147,6 +179,15 @@ const SystemSetting = () => {
         switch (item.key) {
           case 'TopupGroupRatio':
             item.value = JSON.stringify(JSON.parse(item.value), null, 2);
+            break;
+          case 'access_control.resource_rules':
+            try {
+              item.value = item.value
+                ? JSON.stringify(JSON.parse(item.value), null, 2)
+                : '{}';
+            } catch (e) {
+              item.value = item.value || '{}';
+            }
             break;
           case 'EmailDomainWhitelist':
             setEmailDomainWhitelist(item.value ? item.value.split(',') : []);
@@ -422,6 +463,24 @@ const SystemSetting = () => {
   };
 
   const submitAccessControl = async () => {
+    let resourceRules = {};
+    try {
+      const rawResourceRules =
+        inputs['access_control.resource_rules']?.trim() || '{}';
+      resourceRules = JSON.parse(rawResourceRules);
+      if (
+        !resourceRules ||
+        Array.isArray(resourceRules) ||
+        typeof resourceRules !== 'object'
+      ) {
+        showError(t('资源访问规则必须是 JSON 对象'));
+        return;
+      }
+    } catch (error) {
+      showError(t('资源访问规则 JSON 格式不正确'));
+      return;
+    }
+
     const options = [
       {
         key: 'access_control.web_policy_enabled',
@@ -463,6 +522,10 @@ const SystemSetting = () => {
       {
         key: 'access_control.geoip_database_path',
         value: inputs['access_control.geoip_database_path'] || '',
+      },
+      {
+        key: 'access_control.resource_rules',
+        value: JSON.stringify(resourceRules),
       },
     ];
     await updateOptions(options);
@@ -1135,6 +1198,25 @@ const SystemSetting = () => {
                       '中国大陆细粒度策略会放行审计管理员、管理员和超级管理员；使用日志等其他控制台页面不受影响。',
                     )}
                   </Text>
+
+                  <Form.TextArea
+                    field='access_control.resource_rules'
+                    label={t('资源访问规则 JSON')}
+                    placeholder={JSON.stringify(
+                      DEFAULT_ACCESS_RESOURCE_RULES,
+                      null,
+                      2,
+                    )}
+                    autosize={{ minRows: 12, maxRows: 24 }}
+                    style={{
+                      fontFamily:
+                        'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    }}
+                    extraText={t(
+                      '按资源 key 配置五类身份的可见性：guest、user、audit_admin、admin、root。字段缺失表示默认允许，显式 false 表示拒绝。常用资源 key：web、home、model_api、token、wallet、billing、usage_log、dashboard、playground、chat、personal、drawing_log、task_log、admin_channel、admin_subscription、admin_model、admin_redemption、admin_user、admin_referral、admin_setting。前端菜单会按同一规则隐藏，后端仍会拦截直达路径和接口。',
+                    )}
+                    initValue='{}'
+                  />
 
                   <Row
                     gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
