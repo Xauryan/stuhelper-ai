@@ -12,6 +12,7 @@ import (
 	"github.com/Xauryan/stuhelper-ai/model"
 	"github.com/Xauryan/stuhelper-ai/oauth"
 	"github.com/Xauryan/stuhelper-ai/setting"
+	"github.com/Xauryan/stuhelper-ai/setting/access_setting"
 	"github.com/Xauryan/stuhelper-ai/setting/console_setting"
 	"github.com/Xauryan/stuhelper-ai/setting/operation_setting"
 	"github.com/Xauryan/stuhelper-ai/setting/system_setting"
@@ -46,6 +47,9 @@ func GetStatus(c *gin.Context) {
 
 	passkeySetting := system_setting.GetPasskeySettings()
 	legalSetting := system_setting.GetLegalSettings()
+	accessControlSetting := access_setting.GetAccessControlSetting()
+	requestCountry := middleware.RequestCountry(c)
+	requestFromChinaMainland := requestCountry.Known && access_setting.IsChinaMainlandCountryCode(requestCountry.CountryCode)
 
 	data := gin.H{
 		"version":                                common.Version,
@@ -131,6 +135,14 @@ func GetStatus(c *gin.Context) {
 		"user_agreement_enabled":      legalSetting.UserAgreement != "",
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
+		"access_control": gin.H{
+			"block_china_mainland_homepage":             accessControlSetting.BlockChinaMainlandHomepage,
+			"block_china_mainland_user_sensitive_pages": accessControlSetting.BlockChinaMainlandUserSensitivePages,
+			"request_country_code":                      requestCountry.CountryCode,
+			"request_country_known":                     requestCountry.Known,
+			"request_country_source":                    requestCountry.Source,
+			"request_from_china_mainland":               requestFromChinaMainland,
+		},
 	}
 
 	// 根据启用状态注入可选内容

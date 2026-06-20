@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@xauryan.com
 */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getLucideIcon } from '../../helpers/render';
@@ -25,8 +31,15 @@ import { ChevronLeft } from 'lucide-react';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useSidebar } from '../../hooks/common/useSidebar';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { isAdmin, isAuditAdmin, isRoot, showError } from '../../helpers';
+import {
+  isAdmin,
+  isAuditAdmin,
+  isChinaMainlandRouteRestricted,
+  isRoot,
+  showError,
+} from '../../helpers';
 import SkeletonWrapper from './components/SkeletonWrapper';
+import { StatusContext } from '../../context/Status';
 
 import { Nav, Divider, Button } from '@douyinfe/semi-ui';
 
@@ -54,6 +67,7 @@ const routerMap = {
 
 const SiderBar = ({ onNavigate = () => {} }) => {
   const { t } = useTranslation();
+  const [statusState] = useContext(StatusContext);
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const {
     isModuleVisible,
@@ -68,6 +82,14 @@ const SiderBar = ({ onNavigate = () => {} }) => {
   const [openedKeys, setOpenedKeys] = useState([]);
   const location = useLocation();
   const [routerMapState, setRouterMapState] = useState(routerMap);
+
+  const isRestrictedItem = useCallback(
+    (item) => {
+      const fullPath = routerMap[item.itemKey];
+      return isChinaMainlandRouteRestricted(statusState?.status, fullPath);
+    },
+    [statusState?.status],
+  );
 
   const workspaceItems = useMemo(() => {
     const items = [
@@ -111,7 +133,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     // 根据配置过滤项目
     const filteredItems = items.filter((item) => {
       const configVisible = isModuleVisible('console', item.itemKey);
-      return configVisible;
+      return configVisible && !isRestrictedItem(item);
     });
 
     return filteredItems;
@@ -121,6 +143,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     localStorage.getItem('enable_task'),
     t,
     isModuleVisible,
+    isRestrictedItem,
   ]);
 
   const financeItems = useMemo(() => {
@@ -146,11 +169,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     // 根据配置过滤项目
     const filteredItems = items.filter((item) => {
       const configVisible = isModuleVisible('personal', item.itemKey);
-      return configVisible;
+      return configVisible && !isRestrictedItem(item);
     });
 
     return filteredItems;
-  }, [t, isModuleVisible]);
+  }, [t, isModuleVisible, isRestrictedItem]);
 
   const adminItems = useMemo(() => {
     const items = [
@@ -397,6 +420,16 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     }
   };
 
+  const hasWorkspaceItems = workspaceItems.some(
+    (item) => item.className !== 'tableHiddle',
+  );
+  const hasFinanceItems = financeItems.some(
+    (item) => item.className !== 'tableHiddle',
+  );
+  const hasAdminItems = adminItems.some(
+    (item) => item.className !== 'tableHiddle',
+  );
+
   return (
     <div
       className='sidebar-container'
@@ -461,7 +494,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
           )}
 
           {/* 控制台区域 */}
-          {hasSectionVisibleModules('console') && (
+          {hasSectionVisibleModules('console') && hasWorkspaceItems && (
             <>
               <Divider className='sidebar-divider' />
               <div>
@@ -474,7 +507,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
           )}
 
           {/* 个人中心区域 */}
-          {hasSectionVisibleModules('personal') && (
+          {hasSectionVisibleModules('personal') && hasFinanceItems && (
             <>
               <Divider className='sidebar-divider' />
               <div>
@@ -487,17 +520,19 @@ const SiderBar = ({ onNavigate = () => {} }) => {
           )}
 
           {/* 管理员区域 - 只在管理员时显示且配置允许时显示 */}
-          {isAuditAdmin() && hasSectionVisibleModules('admin') && (
-            <>
-              <Divider className='sidebar-divider' />
-              <div>
-                {!collapsed && (
-                  <div className='sidebar-group-label'>{t('管理员')}</div>
-                )}
-                {adminItems.map((item) => renderNavItem(item))}
-              </div>
-            </>
-          )}
+          {isAuditAdmin() &&
+            hasSectionVisibleModules('admin') &&
+            hasAdminItems && (
+              <>
+                <Divider className='sidebar-divider' />
+                <div>
+                  {!collapsed && (
+                    <div className='sidebar-group-label'>{t('管理员')}</div>
+                  )}
+                  {adminItems.map((item) => renderNavItem(item))}
+                </div>
+              </>
+            )}
         </Nav>
       </SkeletonWrapper>
 

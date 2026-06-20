@@ -26,6 +26,7 @@ import {
   PrivateRoute,
   AdminRoute,
   AuditAdminRoute,
+  isChinaMainlandRouteRestricted,
 } from './helpers';
 import RegisterForm from './components/auth/RegisterForm';
 import LoginForm from './components/auth/LoginForm';
@@ -110,6 +111,10 @@ function App() {
     }
     return false;
   }, [statusState?.status?.HeaderNavModules]);
+
+  if (isChinaMainlandRouteRestricted(statusState?.status, location.pathname)) {
+    return <Forbidden />;
+  }
 
   return (
     <SetupCheck>

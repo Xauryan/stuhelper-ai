@@ -19,6 +19,7 @@ import (
 	"github.com/Xauryan/stuhelper-ai/service"
 	"github.com/Xauryan/stuhelper-ai/setting/ratio_setting"
 	"github.com/Xauryan/stuhelper-ai/types"
+	"github.com/bytedance/gopkg/util/gopool"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -112,7 +113,7 @@ func Distribute() func(c *gin.Context) {
 							for _, g := range autoGroups {
 								if model.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) {
 									selectGroup = g
-									common.SetContextKey(c, constant.ContextKeyAutoGroup, g)
+									service.SetSelectedAutoGroup(c, g)
 									channel = preferred
 									affinityUsable = true
 									service.MarkChannelAffinityUsed(c, g, preferred.Id)
@@ -165,15 +166,80 @@ func Distribute() func(c *gin.Context) {
 		}
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 		if channel != nil {
-			if setupErr := SetupContextForSelectedChannel(c, channel, modelRequest.Model); setupErr != nil {
+			selectedChannel, setupErr := setupSelectedChannelWithFallback(c, channel, modelRequest.Model)
+			if setupErr != nil {
 				abortWithOpenAiMessage(c, setupErr.StatusCode, setupErr.Error(), setupErr.GetErrorCode())
 				return
 			}
+			channel = selectedChannel
 		}
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
 			service.RecordChannelAffinity(c, channel.Id)
 		}
+	}
+}
+
+func setupSelectedChannelWithFallback(c *gin.Context, channel *model.Channel, modelName string) (*model.Channel, *types.StuHelperAIError) {
+	setupErr := SetupContextForSelectedChannel(c, channel, modelName)
+	if setupErr == nil {
+		return channel, nil
+	}
+	if channel == nil || channel.Id <= 0 || !service.ShouldRetryChannelSetupError(setupErr) {
+		return channel, setupErr
+	}
+	if _, ok := c.Get(string(constant.ContextKeyTokenSpecificChannelId)); ok {
+		return channel, setupErr
+	}
+	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+		return channel, setupErr
+	}
+
+	tokenGroup := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+	if tokenGroup == "" {
+		tokenGroup = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+	}
+	retryParam := &service.RetryParam{
+		Ctx:        c,
+		ModelName:  modelName,
+		TokenGroup: tokenGroup,
+		Retry:      common.GetPointer(0),
+	}
+
+	for setupErr != nil && service.ShouldRetryChannelSetupError(setupErr) && channel != nil && channel.Id > 0 {
+		if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+			return channel, setupErr
+		}
+		retryParam.ExcludeChannel(channel.Id)
+		reportChannelSetupError(c, channel, setupErr)
+
+		nextChannel, _, err := service.CacheGetRandomSatisfiedChannel(retryParam)
+		if err != nil || nextChannel == nil {
+			return channel, setupErr
+		}
+		channel = nextChannel
+		setupErr = SetupContextForSelectedChannel(c, channel, modelName)
+	}
+	return channel, setupErr
+}
+
+func reportChannelSetupError(c *gin.Context, channel *model.Channel, setupErr *types.StuHelperAIError) {
+	if channel == nil || setupErr == nil {
+		return
+	}
+	service.ReportRelayResult(channel.Id, setupErr)
+	if service.ShouldDisableChannel(setupErr) && channel.GetAutoBan() {
+		channelError := types.NewChannelError(
+			channel.Id,
+			channel.Type,
+			channel.Name,
+			channel.ChannelInfo.IsMultiKey,
+			common.GetContextKeyString(c, constant.ContextKeyChannelKey),
+			channel.GetAutoBan(),
+		)
+		gopool.Go(func() {
+			service.DisableChannel(*channelError, setupErr.ErrorWithStatusCode())
+		})
 	}
 }
 

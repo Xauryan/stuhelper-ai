@@ -24,6 +24,7 @@ const (
 )
 
 var countryHeaderCandidates = []string{
+	"EO-Client-IPCountry",
 	"CF-IPCountry",
 	"CloudFront-Viewer-Country",
 	"X-Vercel-IP-Country",
@@ -46,6 +47,11 @@ func enforceAccessPolicy(c *gin.Context, scope AccessPolicyScope) bool {
 
 	setting := access_setting.GetAccessControlSetting()
 	if reason, ok := blockedByGeo(c, setting); ok {
+		abortAccessDenied(c, scope, reason)
+		return false
+	}
+
+	if reason, ok := blockedByScopedChinaMainlandPolicy(c, setting, scope); ok {
 		abortAccessDenied(c, scope, reason)
 		return false
 	}
@@ -89,6 +95,116 @@ func blockedByGeo(c *gin.Context, setting *access_setting.AccessControlSetting) 
 	return "", false
 }
 
+func blockedByScopedChinaMainlandPolicy(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {
+	if !setting.BlockChinaMainlandHomepage && !setting.BlockChinaMainlandUserSensitivePages {
+		return "", false
+	}
+	if !requestFromChinaMainland(c) {
+		return "", false
+	}
+
+	path := normalizedRequestPath(c)
+	if setting.BlockChinaMainlandUserSensitivePages && scope == AccessPolicyScopeAPI && isChinaMainlandSensitiveAPIPath(path) {
+		role, ok := currentAuthenticatedRequestRole(c)
+		if !ok {
+			return "", false
+		}
+		if role >= common.RoleAuditAdminUser {
+			return "", false
+		}
+		return "sensitive user page access from China Mainland is blocked", true
+	}
+
+	role, ok := currentRequestRole(c)
+	if !ok {
+		role = common.RoleGuestUser
+	}
+	if role >= common.RoleAuditAdminUser {
+		return "", false
+	}
+
+	if setting.BlockChinaMainlandHomepage && scope == AccessPolicyScopeWeb && path == "/" {
+		return "homepage access from China Mainland is blocked", true
+	}
+	if setting.BlockChinaMainlandUserSensitivePages && isChinaMainlandSensitivePath(scope, path) {
+		return "sensitive user page access from China Mainland is blocked", true
+	}
+	return "", false
+}
+
+func requestFromChinaMainland(c *gin.Context) bool {
+	country := requestCountry(c)
+	return country.Known && access_setting.IsChinaMainlandCountryCode(country.CountryCode)
+}
+
+func normalizedRequestPath(c *gin.Context) string {
+	path := c.Request.URL.Path
+	if path == "" {
+		return "/"
+	}
+	if len(path) > 1 {
+		path = strings.TrimRight(path, "/")
+		if path == "" {
+			return "/"
+		}
+	}
+	return path
+}
+
+func isChinaMainlandSensitivePath(scope AccessPolicyScope, path string) bool {
+	switch scope {
+	case AccessPolicyScopeWeb:
+		return isChinaMainlandSensitiveWebPath(path)
+	case AccessPolicyScopeAPI:
+		return isChinaMainlandSensitiveAPIPath(path)
+	default:
+		return false
+	}
+}
+
+func isChinaMainlandSensitiveWebPath(path string) bool {
+	switch path {
+	case "/console/token", "/console/topup", "/console/billing":
+		return true
+	default:
+		return false
+	}
+}
+
+func isChinaMainlandSensitiveAPIPath(path string) bool {
+	if path == "/api/token" || strings.HasPrefix(path, "/api/token/") {
+		return true
+	}
+	if path == "/api/subscription/self" || strings.HasPrefix(path, "/api/subscription/self/") {
+		return true
+	}
+	if strings.HasPrefix(path, "/api/subscription/") && strings.HasSuffix(path, "/pay") {
+		return true
+	}
+	if path == "/api/user/topup" || strings.HasPrefix(path, "/api/user/topup/") {
+		return true
+	}
+	if strings.HasPrefix(path, "/api/user/stripe/") ||
+		strings.HasPrefix(path, "/api/user/creem/") ||
+		strings.HasPrefix(path, "/api/user/waffo/") ||
+		strings.HasPrefix(path, "/api/user/alipay/official/") ||
+		strings.HasPrefix(path, "/api/user/wechat-pay/official/") ||
+		strings.HasPrefix(path, "/api/user/self-serve/") {
+		return true
+	}
+	switch path {
+	case "/api/user/pay",
+		"/api/user/amount",
+		"/api/user/stripe/amount",
+		"/api/user/aff",
+		"/api/user/aff/commissions",
+		"/api/user/aff_transfer":
+		return true
+	default:
+		return false
+	}
+}
+
 func requestCountry(c *gin.Context) access_setting.CountryLookupResult {
 	for _, header := range countryHeaderCandidates {
 		code := access_setting.NormalizeCountryCode(c.GetHeader(header))
@@ -116,6 +232,14 @@ func validCountryHeaderValue(code string) bool {
 		return false
 	}
 	return true
+}
+
+func RequestCountry(c *gin.Context) access_setting.CountryLookupResult {
+	return requestCountry(c)
+}
+
+func IsChinaMainlandRequest(c *gin.Context) bool {
+	return requestFromChinaMainland(c)
 }
 
 func blockedByIdentity(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {
@@ -173,6 +297,21 @@ func currentRequestRole(c *gin.Context) (int, bool) {
 	}
 
 	return common.RoleGuestUser, false
+}
+
+func currentAuthenticatedRequestRole(c *gin.Context) (int, bool) {
+	hasCredential := hasAPIAuthCredential(c)
+	if role, exists := c.Get("role"); exists {
+		if normalized, ok := normalizeRole(role); ok {
+			return roleOrTokenRole(c, normalized, hasCredential)
+		}
+	}
+	if role, ok := common.GetContextKey(c, constant.ContextKeyUserRole); ok {
+		if normalized, ok := normalizeRole(role); ok {
+			return roleOrTokenRole(c, normalized, hasCredential)
+		}
+	}
+	return tokenUserRole(c, hasCredential)
 }
 
 func roleOrTokenRole(c *gin.Context, role int, hasCredential bool) (int, bool) {

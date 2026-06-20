@@ -22,10 +22,18 @@ func withAccessControlSetting(t *testing.T, update func(setting *access_setting.
 }
 
 func performAccessControlRequest(scope AccessPolicyScope, header map[string]string, routeTag string) *httptest.ResponseRecorder {
-	return performAccessControlRequestWithRole(scope, header, routeTag, nil)
+	return performAccessControlRequestWithRoleAtPath(scope, header, routeTag, nil, "/test")
 }
 
 func performAccessControlRequestWithRole(scope AccessPolicyScope, header map[string]string, routeTag string, role *int) *httptest.ResponseRecorder {
+	return performAccessControlRequestWithRoleAtPath(scope, header, routeTag, role, "/test")
+}
+
+func performAccessControlRequestAtPath(scope AccessPolicyScope, header map[string]string, routeTag string, path string) *httptest.ResponseRecorder {
+	return performAccessControlRequestWithRoleAtPath(scope, header, routeTag, nil, path)
+}
+
+func performAccessControlRequestWithRoleAtPath(scope AccessPolicyScope, header map[string]string, routeTag string, role *int, path string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	if routeTag != "" {
@@ -38,11 +46,11 @@ func performAccessControlRequestWithRole(scope AccessPolicyScope, header map[str
 		})
 	}
 	router.Use(AccessControl(scope))
-	router.GET("/test", func(c *gin.Context) {
+	router.GET("/*path", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": true})
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
 	for key, value := range header {
 		req.Header.Set(key, value)
 	}
@@ -77,6 +85,20 @@ func TestAccessControlBlocksChinaMainlandHeader(t *testing.T) {
 
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 	require.Contains(t, recorder.Body.String(), `"success":false`)
+	require.Contains(t, recorder.Body.String(), "访问受限")
+}
+
+func TestAccessControlRecognizesTencentEOClientIPCountryHeader(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.BlockChinaMainland = true
+	})
+
+	recorder := performAccessControlRequest(AccessPolicyScopeWeb, map[string]string{
+		"EO-Client-IPCountry": "CN",
+	}, "")
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "访问受限")
 }
 
@@ -179,4 +201,102 @@ func TestAccessControlDoesNotBlockAdminsWhenOnlyUsersBlocked(t *testing.T) {
 	userRole := common.RoleCommonUser
 	userRecorder := performAccessControlRequestWithRole(AccessPolicyScopeAPI, nil, "api", &userRole)
 	require.Equal(t, http.StatusForbidden, userRecorder.Code)
+}
+
+func TestAccessControlBlocksChinaMainlandHomepageOnly(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.BlockChinaMainlandHomepage = true
+	})
+
+	header := map[string]string{"EO-Client-IPCountry": "CN"}
+	homepageRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, header, "web", "/")
+	require.Equal(t, http.StatusForbidden, homepageRecorder.Code)
+
+	logRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, header, "web", "/console/log")
+	require.Equal(t, http.StatusOK, logRecorder.Code)
+}
+
+func TestAccessControlChinaMainlandHomepageAllowsAdmins(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.BlockChinaMainlandHomepage = true
+	})
+
+	adminRole := common.RoleAdminUser
+	recorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeWeb, map[string]string{
+		"EO-Client-IPCountry": "CN",
+	}, "web", &adminRole, "/")
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestAccessControlBlocksChinaMainlandSensitiveWebPagesForUsersOnly(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.BlockChinaMainlandUserSensitivePages = true
+	})
+
+	header := map[string]string{"EO-Client-IPCountry": "CN"}
+	userRole := common.RoleCommonUser
+	for _, path := range []string{"/console/token", "/console/topup", "/console/billing"} {
+		recorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeWeb, header, "web", &userRole, path)
+		require.Equal(t, http.StatusForbidden, recorder.Code, path)
+	}
+
+	logRecorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeWeb, header, "web", &userRole, "/console/log")
+	require.Equal(t, http.StatusOK, logRecorder.Code)
+
+	adminRole := common.RoleAuditAdminUser
+	adminRecorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeWeb, header, "web", &adminRole, "/console/token")
+	require.Equal(t, http.StatusOK, adminRecorder.Code)
+}
+
+func TestAccessControlDefersChinaMainlandSensitiveAPIWithCredentialUntilAuth(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.APIPolicyEnabled = true
+		setting.BlockChinaMainlandUserSensitivePages = true
+	})
+
+	recorder := performAccessControlRequestAtPath(AccessPolicyScopeAPI, map[string]string{
+		"EO-Client-IPCountry": "CN",
+		"Authorization":       "Bearer sk-test",
+	}, "api", "/api/token")
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestAccessControlBlocksChinaMainlandSensitiveAPIAfterAuth(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.APIPolicyEnabled = true
+		setting.BlockChinaMainlandUserSensitivePages = true
+	})
+
+	header := map[string]string{"EO-Client-IPCountry": "CN"}
+	userRole := common.RoleCommonUser
+	for _, path := range []string{
+		"/api/token",
+		"/api/user/topup/info",
+		"/api/user/topup/self",
+		"/api/user/waffo/amount",
+		"/api/user/stripe/pay",
+		"/api/user/self-serve/preview",
+		"/api/user/wechat-pay/official/status",
+		"/api/subscription/stripe/pay",
+		"/api/subscription/balance/pay",
+		"/api/subscription/self/preference",
+	} {
+		recorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeAPI, header, "api", &userRole, path)
+		require.Equal(t, http.StatusForbidden, recorder.Code, path)
+	}
+
+	logRecorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeAPI, header, "api", &userRole, "/api/log/self")
+	require.Equal(t, http.StatusOK, logRecorder.Code)
+
+	callbackRecorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeAPI, header, "api", &userRole, "/api/subscription/epay/notify")
+	require.Equal(t, http.StatusOK, callbackRecorder.Code)
+
+	adminRole := common.RoleAdminUser
+	adminRecorder := performAccessControlRequestWithRoleAtPath(AccessPolicyScopeAPI, header, "api", &adminRole, "/api/token")
+	require.Equal(t, http.StatusOK, adminRecorder.Code)
 }

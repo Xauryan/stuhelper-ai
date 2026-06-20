@@ -338,11 +338,34 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 
-	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
-	if newAPIError != nil {
-		return nil, newAPIError
+	for {
+		newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
+		if newAPIError == nil {
+			return channel, nil
+		}
+		if !service.ShouldRetryChannelSetupError(newAPIError) {
+			return nil, newAPIError
+		}
+		if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+			return nil, newAPIError
+		}
+		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
+		retryParam.ExcludeChannel(channel.Id)
+		service.ReportRelayResult(channel.Id, newAPIError)
+		nextChannel, nextSelectGroup, nextErr := service.CacheGetRandomSatisfiedChannel(retryParam)
+		if nextErr != nil {
+			if errors.Is(nextErr, service.ErrRelayLoopNoAvailableChannel) {
+				return nil, types.NewErrorWithStatusCode(nextErr, types.ErrorCodeChannelRelayLoop, http.StatusLoopDetected, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+			}
+			return nil, newAPIError
+		}
+		if nextChannel == nil {
+			return nil, newAPIError
+		}
+		channel = nextChannel
+		selectGroup = nextSelectGroup
+		info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
 	}
-	return channel, nil
 }
 
 // responseAlreadyCommitted reports whether any byte (status line or body) has

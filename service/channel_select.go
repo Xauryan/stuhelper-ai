@@ -9,10 +9,12 @@ import (
 	"github.com/Xauryan/stuhelper-ai/constant"
 	"github.com/Xauryan/stuhelper-ai/logger"
 	"github.com/Xauryan/stuhelper-ai/model"
+	"github.com/Xauryan/stuhelper-ai/types"
 	"github.com/gin-gonic/gin"
 )
 
 var ErrRelayLoopNoAvailableChannel = errors.New("relay loop guard excluded all available channels")
+var ErrNoAvailableChannelAfterExclusions = errors.New("excluded all available channels")
 
 type RetryParam struct {
 	Ctx               *gin.Context
@@ -81,11 +83,22 @@ func mergeExcludeChannelIDs(a, b map[int]struct{}) map[int]struct{} {
 	return merged
 }
 
+func isAutoGroupRequest(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	tokenGroup := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+	if tokenGroup != "" {
+		return tokenGroup == "auto"
+	}
+	return common.GetContextKeyString(c, constant.ContextKeyUsingGroup) == "auto"
+}
+
 func nextAutoGroupRetryIndex(c *gin.Context) (int, []string, bool) {
 	if c == nil {
 		return 0, nil, false
 	}
-	if common.GetContextKeyString(c, constant.ContextKeyUsingGroup) != "auto" {
+	if !isAutoGroupRequest(c) {
 		return 0, nil, false
 	}
 	if !common.GetContextKeyBool(c, constant.ContextKeyTokenCrossGroupRetry) {
@@ -140,6 +153,25 @@ func PrepareAutoGroupRetry(c *gin.Context) bool {
 	return true
 }
 
+func setSelectedAutoGroup(c *gin.Context, group string) {
+	if c == nil || group == "" {
+		return
+	}
+	common.SetContextKey(c, constant.ContextKeyAutoGroup, group)
+	common.SetContextKey(c, constant.ContextKeyUsingGroup, group)
+}
+
+func SetSelectedAutoGroup(c *gin.Context, group string) {
+	setSelectedAutoGroup(c, group)
+}
+
+func ShouldRetryChannelSetupError(err *types.StuHelperAIError) bool {
+	if types.IsSkipRetryError(err) {
+		return false
+	}
+	return ClassifyRelayError(err).Retryable
+}
+
 // CacheGetRandomSatisfiedChannel tries to get a random channel that satisfies the requirements.
 // 尝试获取一个满足要求的随机渠道。
 //
@@ -179,12 +211,18 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	var channel *model.Channel
 	var err error
 	selectGroup := param.TokenGroup
+	if param.Ctx != nil && param.TokenGroup != "" && common.GetContextKeyString(param.Ctx, constant.ContextKeyTokenGroup) == "" {
+		common.SetContextKey(param.Ctx, constant.ContextKeyTokenGroup, param.TokenGroup)
+	}
 	userGroup := common.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
-	excludeChannelIDs := mergeExcludeChannelIDs(param.ExcludeChannelIDs, RelayLoopExcludeChannelIDs(param.Ctx))
+	requestExcludeChannelIDs := param.ExcludeChannelIDs
+	relayLoopExcludeChannelIDs := RelayLoopExcludeChannelIDs(param.Ctx)
+	breakerExcludeChannelIDs := BreakerOpenChannelIDs()
+	excludeChannelIDs := mergeExcludeChannelIDs(requestExcludeChannelIDs, relayLoopExcludeChannelIDs)
 	// Shield channels whose breaker is Open (cooling down) by folding them into
 	// the same exclude set used for per-request failover. Half-open channels are
 	// not in this set, so a probe request can flow through and test recovery.
-	excludeChannelIDs = mergeExcludeChannelIDs(excludeChannelIDs, BreakerOpenChannelIDs())
+	excludeChannelIDs = mergeExcludeChannelIDs(excludeChannelIDs, breakerExcludeChannelIDs)
 
 	if param.TokenGroup == "auto" {
 		autoGroups := GetContextAutoGroups(param.Ctx, userGroup)
@@ -232,7 +270,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 				param.SetRetry(0)
 				continue
 			}
-			common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, autoGroup)
+			setSelectedAutoGroup(param.Ctx, autoGroup)
 			selectGroup = autoGroup
 			logger.LogDebug(param.Ctx, "Auto selected group: %s", autoGroup)
 
@@ -266,7 +304,10 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 		}
 	}
 	if channel == nil && len(excludeChannelIDs) > 0 {
-		return nil, selectGroup, fmt.Errorf("%w: group=%s, model=%s", ErrRelayLoopNoAvailableChannel, selectGroup, param.ModelName)
+		if len(requestExcludeChannelIDs) == 0 && len(breakerExcludeChannelIDs) == 0 && len(relayLoopExcludeChannelIDs) > 0 {
+			return nil, selectGroup, fmt.Errorf("%w: group=%s, model=%s", ErrRelayLoopNoAvailableChannel, selectGroup, param.ModelName)
+		}
+		return nil, selectGroup, fmt.Errorf("%w: group=%s, model=%s", ErrNoAvailableChannelAfterExclusions, selectGroup, param.ModelName)
 	}
 	return channel, selectGroup, nil
 }

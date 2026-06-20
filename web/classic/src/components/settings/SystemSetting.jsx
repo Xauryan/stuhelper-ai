@@ -114,6 +114,8 @@ const SystemSetting = () => {
     'access_control.api_policy_enabled': '',
     'access_control.block_china_mainland': '',
     'access_control.block_european_union': '',
+    'access_control.block_china_mainland_homepage': '',
+    'access_control.block_china_mainland_user_sensitive_pages': '',
     'access_control.block_guests': '',
     'access_control.block_users': '',
     'access_control.block_admins': '',
@@ -158,6 +160,8 @@ const SystemSetting = () => {
           case 'access_control.api_policy_enabled':
           case 'access_control.block_china_mainland':
           case 'access_control.block_european_union':
+          case 'access_control.block_china_mainland_homepage':
+          case 'access_control.block_china_mainland_user_sensitive_pages':
           case 'access_control.block_guests':
           case 'access_control.block_users':
           case 'access_control.block_admins':
@@ -434,6 +438,15 @@ const SystemSetting = () => {
       {
         key: 'access_control.block_european_union',
         value: !!inputs['access_control.block_european_union'],
+      },
+      {
+        key: 'access_control.block_china_mainland_homepage',
+        value: !!inputs['access_control.block_china_mainland_homepage'],
+      },
+      {
+        key: 'access_control.block_china_mainland_user_sensitive_pages',
+        value:
+          !!inputs['access_control.block_china_mainland_user_sensitive_pages'],
       },
       {
         key: 'access_control.block_guests',
@@ -1038,7 +1051,7 @@ const SystemSetting = () => {
                   />
                   <Text type='secondary' style={{ display: 'block' }}>
                     {t(
-                      '国家和地区识别优先使用 CF-IPCountry、CloudFront-Viewer-Country、X-Vercel-IP-Country 等代理头；未提供代理头时，可配置本地 MaxMind 兼容 MMDB 数据库路径。',
+                      '国家和地区识别优先使用 EO-Client-IPCountry、CF-IPCountry、CloudFront-Viewer-Country、X-Vercel-IP-Country 等代理头；未提供代理头时，可配置本地 MaxMind 兼容 MMDB 数据库路径。',
                     )}
                   </Text>
                   <Row
@@ -1084,6 +1097,44 @@ const SystemSetting = () => {
                       </Form.Checkbox>
                     </Col>
                   </Row>
+                  <Text
+                    type='secondary'
+                    style={{ display: 'block', marginTop: 8 }}
+                  >
+                    {t(
+                      '上方地域封禁为全局策略，会同时影响游客、普通用户和管理员；如需管理员不受影响，请使用下方中国大陆细粒度策略。',
+                    )}
+                  </Text>
+
+                  <Row
+                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                    style={{ marginTop: 16 }}
+                  >
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.Checkbox
+                        field='access_control.block_china_mainland_homepage'
+                        noLabel
+                      >
+                        {t('封禁中国大陆 IP 访问官网主页')}
+                      </Form.Checkbox>
+                    </Col>
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.Checkbox
+                        field='access_control.block_china_mainland_user_sensitive_pages'
+                        noLabel
+                      >
+                        {t('封禁中国大陆普通用户访问令牌、钱包和账单')}
+                      </Form.Checkbox>
+                    </Col>
+                  </Row>
+                  <Text
+                    type='secondary'
+                    style={{ display: 'block', marginTop: 8 }}
+                  >
+                    {t(
+                      '中国大陆细粒度策略会放行审计管理员、管理员和超级管理员；使用日志等其他控制台页面不受影响。',
+                    )}
+                  </Text>
 
                   <Row
                     gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}

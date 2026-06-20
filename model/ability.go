@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/setting/ratio_setting"
 
 	"github.com/samber/lo"
 	"gorm.io/gorm"
@@ -57,23 +58,32 @@ func GetAllEnableAbilities() []Ability {
 	return abilities
 }
 
-func getPriority(group string, model string, retry int) (int, error) {
+func routableModelCandidates(model string) []string {
+	models := []string{model}
+	normalized := ratio_setting.FormatMatchingModelName(model)
+	if normalized != "" && normalized != model {
+		models = append(models, normalized)
+	}
+	return models
+}
 
+func getPriority(group string, model string, retry int, excludeChannelIDs map[int]struct{}) (int, bool, error) {
 	var priorities []int
-	err := DB.Model(&Ability{}).
+	query := DB.Model(&Ability{}).
 		Select("DISTINCT(priority)").
-		Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, model, true).
-		Order("priority DESC").              // 按优先级降序排序
-		Pluck("priority", &priorities).Error // Pluck用于将查询的结果直接扫描到一个切片中
+		Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, model, true)
+	if len(excludeChannelIDs) > 0 {
+		query = query.Where("channel_id NOT IN ?", lo.Keys(excludeChannelIDs))
+	}
+	err := query.Order("priority DESC").Pluck("priority", &priorities).Error
 
 	if err != nil {
 		// 处理错误
-		return 0, err
+		return 0, false, err
 	}
 
 	if len(priorities) == 0 {
-		// 如果没有查询到优先级，则返回错误
-		return 0, errors.New("数据库一致性被破坏")
+		return 0, false, nil
 	}
 
 	// 确定要使用的优先级
@@ -84,21 +94,26 @@ func getPriority(group string, model string, retry int) (int, error) {
 	} else {
 		priorityToUse = priorities[retry]
 	}
-	return priorityToUse, nil
+	return priorityToUse, true, nil
 }
 
-func getChannelQuery(group string, model string, retry int) (*gorm.DB, error) {
-	maxPrioritySubQuery := DB.Model(&Ability{}).Select("MAX(priority)").Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, model, true)
-	channelQuery := DB.Where(commonGroupCol+" = ? and model = ? and enabled = ? and priority = (?)", group, model, true, maxPrioritySubQuery)
-	if retry != 0 {
-		priority, err := getPriority(group, model, retry)
-		if err != nil {
-			return nil, err
-		} else {
-			channelQuery = DB.Where(commonGroupCol+" = ? and model = ? and enabled = ? and priority = ?", group, model, true, priority)
-		}
+func getChannelQuery(group string, model string, retry int, excludeChannelIDs map[int]struct{}) (*gorm.DB, error) {
+	priorityRetry := retry
+	if len(excludeChannelIDs) > 0 {
+		priorityRetry = 0
+	}
+	priority, found, err := getPriority(group, model, priorityRetry, excludeChannelIDs)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
 	}
 
+	channelQuery := DB.Where(commonGroupCol+" = ? and model = ? and enabled = ? and priority = ?", group, model, true, priority)
+	if len(excludeChannelIDs) > 0 {
+		channelQuery = channelQuery.Where("channel_id NOT IN ?", lo.Keys(excludeChannelIDs))
+	}
 	return channelQuery, nil
 }
 
@@ -110,26 +125,25 @@ func GetChannelExcluding(group string, model string, retry int, excludeChannelID
 	var abilities []Ability
 
 	var err error = nil
-	channelQuery, err := getChannelQuery(group, model, retry)
-	if err != nil {
-		return nil, err
-	}
-	if common.UsingSQLite || common.UsingPostgreSQL {
-		err = channelQuery.Order("weight DESC").Find(&abilities).Error
-	} else {
-		err = channelQuery.Order("weight DESC").Find(&abilities).Error
-	}
-	if err != nil {
-		return nil, err
-	}
-	if len(excludeChannelIDs) > 0 {
-		filteredAbilities := make([]Ability, 0, len(abilities))
-		for _, ability := range abilities {
-			if _, excluded := excludeChannelIDs[ability.ChannelId]; !excluded {
-				filteredAbilities = append(filteredAbilities, ability)
-			}
+	for _, modelCandidate := range routableModelCandidates(model) {
+		channelQuery, queryErr := getChannelQuery(group, modelCandidate, retry, excludeChannelIDs)
+		if queryErr != nil {
+			return nil, queryErr
 		}
-		abilities = filteredAbilities
+		if channelQuery == nil {
+			continue
+		}
+		if common.UsingSQLite || common.UsingPostgreSQL {
+			err = channelQuery.Order("weight DESC").Find(&abilities).Error
+		} else {
+			err = channelQuery.Order("weight DESC").Find(&abilities).Error
+		}
+		if err != nil {
+			return nil, err
+		}
+		if len(abilities) > 0 {
+			break
+		}
 	}
 	channel := Channel{}
 	if len(abilities) > 0 {

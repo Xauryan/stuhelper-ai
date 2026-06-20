@@ -12,6 +12,7 @@ import (
 	"github.com/Xauryan/stuhelper-ai/constant"
 	"github.com/Xauryan/stuhelper-ai/model"
 	"github.com/Xauryan/stuhelper-ai/setting"
+	"github.com/Xauryan/stuhelper-ai/types"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
@@ -207,6 +208,26 @@ func TestAutoSelectionUsesModelMappingSourceAlias(t *testing.T) {
 	require.Equal(t, "default", selectGroup)
 }
 
+func TestAutoSelectionDBFallbackUsesNormalizedModelName(t *testing.T) {
+	db := setupRelayLoopGuardTestDB(t)
+	seedRelayLoopGuardChannel(t, db, 44, "default", "gpt-4o-gizmo-*")
+
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+
+	channel, selectGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        c,
+		TokenGroup: "auto",
+		ModelName:  "gpt-4o-gizmo-test",
+		Retry:      common.GetPointer(0),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 44, channel.Id)
+	require.Equal(t, "default", selectGroup)
+}
+
 func TestPrepareAutoGroupRetrySelectsNextConcreteGroup(t *testing.T) {
 	db := setupRelayLoopGuardTestDB(t)
 	seedRelayLoopGuardChannel(t, db, 11, "default", "gpt-4o-mini")
@@ -241,6 +262,64 @@ func TestPrepareAutoGroupRetrySelectsNextConcreteGroup(t *testing.T) {
 	require.NotNil(t, channel)
 	require.Equal(t, 22, channel.Id)
 	require.Equal(t, "backup", selectGroup)
+}
+
+func TestAutoSelectionStoresConcreteUsingGroupAndKeepsAutoRetryState(t *testing.T) {
+	db := setupRelayLoopGuardTestDB(t)
+	seedRelayLoopGuardChannel(t, db, 11, "default", "gpt-4o-mini")
+	seedRelayLoopGuardChannel(t, db, 22, "backup", "gpt-4o-mini")
+
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyUsingGroup, "auto")
+	common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+	common.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, true)
+
+	channel, selectGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:        c,
+		TokenGroup: "auto",
+		ModelName:  "gpt-4o-mini",
+		Retry:      common.GetPointer(0),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 11, channel.Id)
+	require.Equal(t, "default", selectGroup)
+	require.Equal(t, "default", common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
+	require.Equal(t, "default", common.GetContextKeyString(c, constant.ContextKeyAutoGroup))
+	require.Equal(t, "auto", common.GetContextKeyString(c, constant.ContextKeyTokenGroup))
+
+	require.True(t, PrepareAutoGroupRetry(c))
+	require.Equal(t, 1, common.GetContextKeyInt(c, constant.ContextKeyAutoGroupIndex))
+}
+
+func TestSetSelectedAutoGroupStoresConcreteGroup(t *testing.T) {
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyTokenGroup, "auto")
+
+	SetSelectedAutoGroup(c, "backup")
+
+	require.Equal(t, "backup", common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
+	require.Equal(t, "backup", common.GetContextKeyString(c, constant.ContextKeyAutoGroup))
+	require.Equal(t, "auto", common.GetContextKeyString(c, constant.ContextKeyTokenGroup))
+}
+
+func TestShouldRetryChannelSetupErrorHonorsSkipRetry(t *testing.T) {
+	err := types.NewError(
+		errors.New("setup failed"),
+		types.ErrorCodeChannelNoAvailableKey,
+		types.ErrOptionWithSkipRetry(),
+	)
+
+	require.False(t, ShouldRetryChannelSetupError(err))
+}
+
+func TestShouldRetryChannelSetupErrorRetriesChannelErrors(t *testing.T) {
+	err := types.NewError(
+		errors.New("no enabled keys"),
+		types.ErrorCodeChannelNoAvailableKey,
+	)
+
+	require.True(t, ShouldRetryChannelSetupError(err))
 }
 
 func TestAutoSelectionAllowsTokenPriorityWhenSystemAutoGroupsEmpty(t *testing.T) {
@@ -302,4 +381,25 @@ func TestAutoSelectionReturnsRelayLoopErrorWhenAllChannelsExcluded(t *testing.T)
 	require.Nil(t, channel)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrRelayLoopNoAvailableChannel))
+}
+
+func TestAutoSelectionRequestExcludeDoesNotReportRelayLoop(t *testing.T) {
+	db := setupRelayLoopGuardTestDB(t)
+	seedRelayLoopGuardChannel(t, db, 11, "default", "gpt-4o-mini")
+
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+
+	channel, _, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:               c,
+		TokenGroup:        "auto",
+		ModelName:         "gpt-4o-mini",
+		Retry:             common.GetPointer(0),
+		ExcludeChannelIDs: map[int]struct{}{11: {}},
+	})
+
+	require.Nil(t, channel)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrNoAvailableChannelAfterExclusions))
+	require.False(t, errors.Is(err, ErrRelayLoopNoAvailableChannel))
 }

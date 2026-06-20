@@ -70,6 +70,37 @@ export function isRoot() {
   return user.role >= USER_ROLES.ROOT;
 }
 
+const CHINA_MAINLAND_SENSITIVE_WEB_PATHS = new Set([
+  '/console/token',
+  '/console/topup',
+  '/console/billing',
+]);
+
+function normalizeRoutePath(pathname) {
+  if (!pathname) return '/';
+  if (pathname.length > 1 && pathname.endsWith('/')) {
+    return pathname.replace(/\/+$/, '') || '/';
+  }
+  return pathname;
+}
+
+export function isChinaMainlandRouteRestricted(status, pathname) {
+  const accessControl = status?.access_control;
+  if (!accessControl?.request_from_china_mainland || isAuditAdmin()) {
+    return false;
+  }
+
+  const path = normalizeRoutePath(pathname);
+  if (accessControl.block_china_mainland_homepage && path === '/') {
+    return true;
+  }
+
+  return (
+    accessControl.block_china_mainland_user_sensitive_pages &&
+    CHINA_MAINLAND_SENSITIVE_WEB_PATHS.has(path)
+  );
+}
+
 export function getSystemName() {
   let system_name = localStorage.getItem('system_name');
   if (!system_name) return DEFAULT_SYSTEM_NAME;
