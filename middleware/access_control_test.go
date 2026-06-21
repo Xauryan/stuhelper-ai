@@ -63,6 +63,18 @@ func boolPtr(value bool) *bool {
 	return &value
 }
 
+func requireWebAccessDeniedPage(t *testing.T, recorder *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Contains(t, recorder.Header().Get("Content-Type"), "text/html")
+	body := recorder.Body.String()
+	require.Contains(t, body, "本站不对您所在的地区开放")
+	require.Contains(t, body, "您当前 IP")
+	require.Contains(t, body, "IP 归属地")
+	require.Contains(t, body, `replaceState(null, "", "/forbidden?access_limited=1")`)
+	require.NotContains(t, body, `"success":false`)
+}
+
 func TestAccessControlAllowsWhenPolicyDisabled(t *testing.T) {
 	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
 		setting.WebPolicyEnabled = false
@@ -87,9 +99,8 @@ func TestAccessControlBlocksChinaMainlandHeader(t *testing.T) {
 		"CF-IPCountry": "CN",
 	}, "")
 
-	require.Equal(t, http.StatusForbidden, recorder.Code)
-	require.Contains(t, recorder.Body.String(), `"success":false`)
-	require.Contains(t, recorder.Body.String(), "访问受限")
+	requireWebAccessDeniedPage(t, recorder)
+	require.Contains(t, recorder.Body.String(), "中国大陆")
 }
 
 func TestAccessControlRecognizesTencentEOClientIPCountryHeader(t *testing.T) {
@@ -102,8 +113,7 @@ func TestAccessControlRecognizesTencentEOClientIPCountryHeader(t *testing.T) {
 		"EO-Client-IPCountry": "CN",
 	}, "")
 
-	require.Equal(t, http.StatusForbidden, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "访问受限")
+	requireWebAccessDeniedPage(t, recorder)
 }
 
 func TestAccessControlBlocksEuropeanUnionHeader(t *testing.T) {
@@ -116,8 +126,8 @@ func TestAccessControlBlocksEuropeanUnionHeader(t *testing.T) {
 		"CloudFront-Viewer-Country": "DE",
 	}, "")
 
-	require.Equal(t, http.StatusForbidden, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "访问受限")
+	requireWebAccessDeniedPage(t, recorder)
+	require.Contains(t, recorder.Body.String(), "欧盟地区（DE）")
 }
 
 func TestAccessControlRoleGeoRuleBlocksChinaMainlandUserOnly(t *testing.T) {
@@ -223,6 +233,48 @@ func TestAccessControlRoleGeoRuleDefersCredentialedAPIUntilAuth(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
+func TestAccessControlSourceResourceRuleBlocksChinaMainlandGuestHome(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.SourceResourceRules = map[string]map[string]access_setting.SourceResourceAccessRule{
+			access_setting.RoleGeoSourceChinaMainland: {
+				AccessResourceHome: {
+					Guest: boolPtr(true),
+				},
+			},
+		}
+	})
+
+	header := map[string]string{"EO-Client-IPCountry": "CN"}
+	homeRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, header, "web", "/")
+	require.Equal(t, http.StatusForbidden, homeRecorder.Code)
+
+	fallbackRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, header, "web", "/1")
+	require.Equal(t, http.StatusForbidden, fallbackRecorder.Code)
+
+	pricingRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, header, "web", "/pricing")
+	require.Equal(t, http.StatusOK, pricingRecorder.Code)
+}
+
+func TestAccessControlSourceResourceRuleDefersCredentialedAPIUntilAuth(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.APIPolicyEnabled = true
+		setting.SourceResourceRules = map[string]map[string]access_setting.SourceResourceAccessRule{
+			access_setting.RoleGeoSourceChinaMainland: {
+				AccessResourceModelAPI: {
+					Guest: boolPtr(true),
+				},
+			},
+		}
+	})
+
+	recorder := performAccessControlRequestAtPath(AccessPolicyScopeAPI, map[string]string{
+		"EO-Client-IPCountry": "CN",
+		"Authorization":       "Bearer sk-test",
+	}, "relay", "/v1/chat/completions")
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
 func TestAccessControlBlocksAPIGuestWithoutCredential(t *testing.T) {
 	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
 		setting.APIPolicyEnabled = true
@@ -258,8 +310,7 @@ func TestAccessControlDoesNotDeferWebGuestWithAPICredentialHeader(t *testing.T) 
 		"Authorization": "Bearer sk-test",
 	}, "web")
 
-	require.Equal(t, http.StatusForbidden, recorder.Code)
-	require.Contains(t, recorder.Body.String(), `"success":false`)
+	requireWebAccessDeniedPage(t, recorder)
 }
 
 func TestAccessControlRelayUsesOpenAIErrorShape(t *testing.T) {
@@ -322,6 +373,20 @@ func TestAccessControlBlocksChinaMainlandHomepageOnly(t *testing.T) {
 
 	logRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, header, "web", "/console/log")
 	require.Equal(t, http.StatusOK, logRecorder.Code)
+}
+
+func TestAccessControlBlocksChinaMainlandHomepageFallbackPath(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.BlockChinaMainlandHomepage = true
+	})
+
+	header := map[string]string{"EO-Client-IPCountry": "CN"}
+	fallbackRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, header, "web", "/1")
+	require.Equal(t, http.StatusForbidden, fallbackRecorder.Code)
+
+	loginRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, header, "web", "/login")
+	require.Equal(t, http.StatusOK, loginRecorder.Code)
 }
 
 func TestAccessControlChinaMainlandHomepageAllowsAdmins(t *testing.T) {

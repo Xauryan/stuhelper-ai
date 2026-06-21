@@ -4160,6 +4160,9 @@
     "鉴权名称": "Nom d’authentification",
     "鉴权值": "Valeur d’authentification",
     "默认 Bearer": "Bearer par défaut",
-    "不发送鉴权": "Sans authentification"
+    "不发送鉴权": "Sans authentification",
+    "本站不对您所在的地区开放。": "Ce site n'est pas disponible dans votre région.",
+    "您当前 IP：{{ip}}": "Votre IP actuelle : {{ip}}",
+    "IP 归属地：{{location}}": "Localisation IP : {{location}}"
   }
 }

@@ -77,6 +77,7 @@ const CHINA_MAINLAND_SENSITIVE_WEB_PATHS = new Set([
 ]);
 
 export const ACCESS_RESOURCES = {
+  ALL: 'all',
   WEB: 'web',
   HOME: 'home',
   MODEL_API: 'model_api',
@@ -129,6 +130,13 @@ export function getRouteResourceKeys(pathname) {
     case '/privacy-policy':
       appendResourceKey(keys, ACCESS_RESOURCES.WEB);
       break;
+    case '/setup':
+    case '/login':
+    case '/register':
+    case '/reset':
+    case '/user/reset':
+    case '/favicon.ico':
+      break;
     case '/console':
       appendResourceKey(keys, ACCESS_RESOURCES.DASHBOARD);
       break;
@@ -180,11 +188,48 @@ export function getRouteResourceKeys(pathname) {
     default:
       if (path.startsWith('/console/chat') || path === '/chat2link') {
         appendResourceKey(keys, ACCESS_RESOURCES.CHAT);
+      } else if (isWebSPAFallbackPath(path)) {
+        appendResourceKey(keys, ACCESS_RESOURCES.WEB);
+        appendResourceKey(keys, ACCESS_RESOURCES.HOME);
       }
       break;
   }
 
   return keys;
+}
+
+function isWebSPAFallbackPath(path) {
+  if (!path || path === '/') return true;
+  if (
+    [
+      '/setup',
+      '/login',
+      '/register',
+      '/reset',
+      '/user/reset',
+      '/forbidden',
+      '/favicon.ico',
+    ].includes(path)
+  ) {
+    return false;
+  }
+  if (
+    path.startsWith('/api') ||
+    path.startsWith('/v1') ||
+    path.startsWith('/v1beta') ||
+    path.startsWith('/mj') ||
+    path.startsWith('/suno') ||
+    path.startsWith('/kling') ||
+    path.startsWith('/jimeng') ||
+    path.startsWith('/pg') ||
+    path.startsWith('/assets') ||
+    path.startsWith('/static') ||
+    path.startsWith('/oauth') ||
+    path.includes('.')
+  ) {
+    return false;
+  }
+  return !path.startsWith('/console');
 }
 
 export function getCurrentUserRole() {
@@ -229,6 +274,36 @@ export function isResourceAllowed(status, resourceKey, role) {
   return true;
 }
 
+function getRequestAccessSources(accessControl) {
+  const sources = ['all'];
+  if (!accessControl?.request_country_known) {
+    sources.push('unknown_country');
+    return sources;
+  }
+  if (accessControl?.request_from_china_mainland) {
+    sources.push('china_mainland');
+  }
+  if (accessControl?.request_from_european_union) {
+    sources.push('european_union');
+  }
+  return sources;
+}
+
+function sourceResourceRuleBlocks(status, resourceKey, role) {
+  const accessControl = status?.access_control;
+  const rules = accessControl?.source_resource_rules;
+  if (!rules || !resourceKey) return false;
+
+  const level = getRoleAccessLevel(role ?? getCurrentUserRole());
+  return getRequestAccessSources(accessControl).some((source) => {
+    const sourceRules = rules?.[source];
+    return (
+      sourceRules?.[ACCESS_RESOURCES.ALL]?.[level] === true ||
+      sourceRules?.[resourceKey]?.[level] === true
+    );
+  });
+}
+
 export function isRouteResourceRestricted(status, pathname, role) {
   const accessControl = status?.access_control;
   if (accessControl?.web_policy_enabled === false) {
@@ -237,7 +312,11 @@ export function isRouteResourceRestricted(status, pathname, role) {
 
   const keys = getRouteResourceKeys(pathname);
   if (keys.length === 0) return false;
-  return keys.some((key) => !isResourceAllowed(status, key, role));
+  return keys.some(
+    (key) =>
+      sourceResourceRuleBlocks(status, key, role) ||
+      !isResourceAllowed(status, key, role),
+  );
 }
 
 export function isChinaMainlandRouteRestricted(status, pathname) {
@@ -250,7 +329,10 @@ export function isChinaMainlandRouteRestricted(status, pathname) {
   }
 
   const path = normalizeRoutePath(pathname);
-  if (accessControl.block_china_mainland_homepage && path === '/') {
+  if (
+    accessControl.block_china_mainland_homepage &&
+    (path === '/' || isWebSPAFallbackPath(path))
+  ) {
     return true;
   }
 

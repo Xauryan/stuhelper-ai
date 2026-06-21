@@ -48,8 +48,9 @@ func GetStatus(c *gin.Context) {
 	passkeySetting := system_setting.GetPasskeySettings()
 	legalSetting := system_setting.GetLegalSettings()
 	accessControlSetting := access_setting.GetAccessControlSetting()
-	requestCountry := middleware.RequestCountry(c)
-	requestFromChinaMainland := requestCountry.Known && access_setting.IsChinaMainlandCountryCode(requestCountry.CountryCode)
+	accessDeniedInfo := middleware.AccessDeniedInfo(c)
+	requestFromChinaMainland := accessDeniedInfo.CountryKnown && access_setting.IsChinaMainlandCountryCode(accessDeniedInfo.CountryCode)
+	requestFromEuropeanUnion := accessDeniedInfo.CountryKnown && access_setting.IsEuropeanUnionCountryCode(accessDeniedInfo.CountryCode)
 	currentRole, ok := middleware.CurrentRequestRole(c)
 	if !ok {
 		currentRole = common.RoleGuestUser
@@ -145,14 +146,18 @@ func GetStatus(c *gin.Context) {
 			"block_china_mainland_homepage":             accessControlSetting.BlockChinaMainlandHomepage,
 			"block_china_mainland_user_sensitive_pages": accessControlSetting.BlockChinaMainlandUserSensitivePages,
 			"role_geo_rules":                            accessControlSetting.RoleGeoRules,
+			"source_resource_rules":                     accessControlSetting.SourceResourceRules,
 			"resource_rules":                            accessControlSetting.ResourceRules,
 			"resource_access":                           middleware.ResourceAccessForRole(currentRole),
 			"resource_keys":                             middleware.AccessResourceKeys(),
 			"current_role":                              currentRole,
-			"request_country_code":                      requestCountry.CountryCode,
-			"request_country_known":                     requestCountry.Known,
-			"request_country_source":                    requestCountry.Source,
+			"request_ip":                                accessDeniedInfo.IP,
+			"request_country_code":                      accessDeniedInfo.CountryCode,
+			"request_country_label":                     accessDeniedInfo.CountryLabel,
+			"request_country_known":                     accessDeniedInfo.CountryKnown,
+			"request_country_source":                    accessDeniedInfo.CountrySource,
 			"request_from_china_mainland":               requestFromChinaMainland,
+			"request_from_european_union":               requestFromEuropeanUnion,
 		},
 	}
 

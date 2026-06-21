@@ -113,7 +113,7 @@ function App() {
   }, [statusState?.status?.HeaderNavModules]);
 
   if (isRouteAccessRestricted(statusState?.status, location.pathname)) {
-    return <Forbidden />;
+    return <Forbidden accessLimited />;
   }
 
   return (
@@ -135,7 +135,17 @@ function App() {
             </Suspense>
           }
         />
-        <Route path='/forbidden' element={<Forbidden />} />
+        <Route
+          path='/forbidden'
+          element={
+            <Forbidden
+              accessLimited={
+                new URLSearchParams(location.search).get('access_limited') ===
+                '1'
+              }
+            />
+          }
+        />
         <Route
           path='/console/models'
           element={

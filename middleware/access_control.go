@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"strconv"
@@ -23,7 +24,16 @@ const (
 	AccessPolicyScopeAPI AccessPolicyScope = "api"
 )
 
+type AccessDeniedRequestInfo struct {
+	IP            string `json:"ip"`
+	CountryCode   string `json:"country_code"`
+	CountryLabel  string `json:"country_label"`
+	CountryKnown  bool   `json:"country_known"`
+	CountrySource string `json:"country_source"`
+}
+
 const (
+	AccessResourceAll               = "all"
 	AccessResourceWeb               = "web"
 	AccessResourceHome              = "home"
 	AccessResourceModelAPI          = "model_api"
@@ -98,6 +108,11 @@ func enforceAccessPolicy(c *gin.Context, scope AccessPolicyScope) bool {
 	}
 
 	if reason, ok := blockedByRoleGeoRule(c, setting, scope); ok {
+		abortAccessDenied(c, scope, reason)
+		return false
+	}
+
+	if reason, ok := blockedBySourceResourceRule(c, setting, scope); ok {
 		abortAccessDenied(c, scope, reason)
 		return false
 	}
@@ -207,6 +222,60 @@ func roleGeoRuleBlocksRole(rule access_setting.RoleGeoAccessRule, roleLevel stri
 	return value != nil && *value
 }
 
+func blockedBySourceResourceRule(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {
+	if setting == nil || len(setting.SourceResourceRules) == 0 {
+		return "", false
+	}
+
+	keys := resourceKeysForRequest(scope, c.Request.Method, normalizedRequestPath(c), c.GetString(RouteTagKey))
+	if len(keys) == 0 {
+		return "", false
+	}
+
+	role, ok := currentRequestRole(c)
+	if !ok {
+		if scope == AccessPolicyScopeAPI && hasAPIAuthCredential(c) {
+			return "", false
+		}
+		role = common.RoleGuestUser
+	}
+
+	sources := roleGeoSourcesForRequest(c)
+	roleLevel := roleAccessLevel(role)
+	for _, source := range sources {
+		resourceRules := setting.SourceResourceRules[source]
+		if len(resourceRules) == 0 {
+			continue
+		}
+		if sourceResourceRuleBlocksRole(resourceRules[AccessResourceAll], roleLevel) {
+			return fmt.Sprintf("all resource access from %s is blocked for %s", source, roleLevel), true
+		}
+		for _, key := range keys {
+			if sourceResourceRuleBlocksRole(resourceRules[key], roleLevel) {
+				return fmt.Sprintf("resource %s access from %s is blocked for %s", key, source, roleLevel), true
+			}
+		}
+	}
+	return "", false
+}
+
+func sourceResourceRuleBlocksRole(rule access_setting.SourceResourceAccessRule, roleLevel string) bool {
+	var value *bool
+	switch roleLevel {
+	case "root":
+		value = rule.Root
+	case "admin":
+		value = rule.Admin
+	case "audit_admin":
+		value = rule.AuditAdmin
+	case "user":
+		value = rule.User
+	default:
+		value = rule.Guest
+	}
+	return value != nil && *value
+}
+
 func blockedByScopedChinaMainlandPolicy(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {
 	if !setting.BlockChinaMainlandHomepage && !setting.BlockChinaMainlandUserSensitivePages {
 		return "", false
@@ -235,7 +304,7 @@ func blockedByScopedChinaMainlandPolicy(c *gin.Context, setting *access_setting.
 		return "", false
 	}
 
-	if setting.BlockChinaMainlandHomepage && scope == AccessPolicyScopeWeb && path == "/" {
+	if setting.BlockChinaMainlandHomepage && scope == AccessPolicyScopeWeb && webPathMatchesHomeAccess(path) {
 		return "homepage access from China Mainland is blocked", true
 	}
 	if setting.BlockChinaMainlandUserSensitivePages && isChinaMainlandSensitivePath(scope, path) {
@@ -281,6 +350,10 @@ func isChinaMainlandSensitiveWebPath(path string) bool {
 	default:
 		return false
 	}
+}
+
+func webPathMatchesHomeAccess(path string) bool {
+	return path == "/" || isWebSPAFallbackPath(path)
 }
 
 func isChinaMainlandSensitiveAPIPath(path string) bool {
@@ -358,6 +431,8 @@ func webResourceKeys(path string) []string {
 		keys = appendResourceKey(keys, AccessResourceHome)
 	case "/pricing", "/rankings", "/about", "/user-agreement", "/privacy-policy":
 		keys = appendResourceKey(keys, AccessResourceWeb)
+	case "/setup", "/login", "/register", "/reset", "/user/reset", "/favicon.ico":
+		return keys
 	case "/console":
 		keys = appendResourceKey(keys, AccessResourceDashboard)
 	case "/console/token":
@@ -394,8 +469,37 @@ func webResourceKeys(path string) []string {
 		if strings.HasPrefix(path, "/console/chat") || path == "/chat2link" {
 			keys = appendResourceKey(keys, AccessResourceChat)
 		}
+		if len(keys) == 0 && isWebSPAFallbackPath(path) {
+			keys = appendResourceKey(keys, AccessResourceWeb)
+			keys = appendResourceKey(keys, AccessResourceHome)
+		}
 	}
 	return keys
+}
+
+func isWebSPAFallbackPath(path string) bool {
+	if path == "" || path == "/" {
+		return true
+	}
+	switch path {
+	case "/setup", "/login", "/register", "/reset", "/user/reset", "/forbidden", "/favicon.ico":
+		return false
+	}
+	if strings.HasPrefix(path, "/api") ||
+		strings.HasPrefix(path, "/v1") ||
+		strings.HasPrefix(path, "/v1beta") ||
+		strings.HasPrefix(path, "/mj") ||
+		strings.HasPrefix(path, "/suno") ||
+		strings.HasPrefix(path, "/kling") ||
+		strings.HasPrefix(path, "/jimeng") ||
+		strings.HasPrefix(path, "/pg") ||
+		strings.HasPrefix(path, "/assets") ||
+		strings.HasPrefix(path, "/static") ||
+		strings.HasPrefix(path, "/oauth") ||
+		strings.Contains(path, ".") {
+		return false
+	}
+	return !strings.HasPrefix(path, "/console")
 }
 
 func apiResourceKeys(method string, path string, routeTag string) []string {
@@ -722,6 +826,17 @@ func RequestCountry(c *gin.Context) access_setting.CountryLookupResult {
 	return requestCountry(c)
 }
 
+func AccessDeniedInfo(c *gin.Context) AccessDeniedRequestInfo {
+	country := requestCountry(c)
+	return AccessDeniedRequestInfo{
+		IP:            requestIP(c),
+		CountryCode:   country.CountryCode,
+		CountryLabel:  countryDisplayLabel(country),
+		CountryKnown:  country.Known,
+		CountrySource: country.Source,
+	}
+}
+
 func IsChinaMainlandRequest(c *gin.Context) bool {
 	return requestFromChinaMainland(c)
 }
@@ -877,6 +992,31 @@ func userRoleFromCacheOrDB(userID int) int {
 	return user.Role
 }
 
+func requestIP(c *gin.Context) string {
+	ip := strings.TrimSpace(c.ClientIP())
+	if ip == "" {
+		return "未知"
+	}
+	return ip
+}
+
+func countryDisplayLabel(country access_setting.CountryLookupResult) string {
+	if !country.Known {
+		return "未知"
+	}
+	code := access_setting.NormalizeCountryCode(country.CountryCode)
+	if code == "" {
+		return "未知"
+	}
+	if access_setting.IsChinaMainlandCountryCode(code) {
+		return "中国大陆"
+	}
+	if access_setting.IsEuropeanUnionCountryCode(code) {
+		return "欧盟地区（" + code + "）"
+	}
+	return code
+}
+
 func abortAccessDenied(c *gin.Context, scope AccessPolicyScope, reason string) {
 	message := "访问受限"
 	if common.DebugEnabled && reason != "" {
@@ -888,9 +1028,178 @@ func abortAccessDenied(c *gin.Context, scope AccessPolicyScope, reason string) {
 		return
 	}
 
+	if scope == AccessPolicyScopeWeb {
+		abortWithAccessDeniedPage(c, message)
+		return
+	}
+
 	c.JSON(http.StatusForbidden, gin.H{
 		"success": false,
 		"message": message,
 	})
 	c.Abort()
+}
+
+func abortWithAccessDeniedPage(c *gin.Context, message string) {
+	info := AccessDeniedInfo(c)
+	c.Header("Cache-Control", "no-store")
+	c.Header("X-Robots-Tag", "noindex, nofollow")
+	c.Data(http.StatusForbidden, "text/html; charset=utf-8", []byte(renderAccessDeniedPage(message, info)))
+	c.Abort()
+}
+
+func renderAccessDeniedPage(message string, info AccessDeniedRequestInfo) string {
+	title := html.EscapeString(message)
+	ip := html.EscapeString(info.IP)
+	countryLabel := html.EscapeString(info.CountryLabel)
+
+	return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>` + title + `</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --page-bg: #f7f8fa;
+      --panel-bg: #ffffff;
+      --text: #1f2329;
+      --muted: #646a73;
+      --border: #dfe3e8;
+      --accent: #d92d20;
+      --accent-bg: #fff1f0;
+      --shadow: 0 18px 60px rgba(31, 35, 41, 0.12);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page-bg: #111318;
+        --panel-bg: #191c22;
+        --text: #f2f3f5;
+        --muted: #a7adb8;
+        --border: #343841;
+        --accent: #ff7875;
+        --accent-bg: rgba(255, 120, 117, 0.12);
+        --shadow: 0 18px 60px rgba(0, 0, 0, 0.3);
+      }
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      color: var(--text);
+      background: var(--page-bg);
+      font-family: Lato, "Helvetica Neue", Arial, "Microsoft YaHei", sans-serif;
+    }
+    main {
+      width: min(100%, 560px);
+      padding: 32px;
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 32px;
+      padding: 4px 12px;
+      color: var(--accent);
+      background: var(--accent-bg);
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .badge::before {
+      content: "!";
+      display: inline-flex;
+      width: 18px;
+      height: 18px;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      background: var(--accent);
+      border-radius: 50%;
+      font-size: 12px;
+      line-height: 1;
+    }
+    h1 {
+      margin: 22px 0 12px;
+      font-size: 28px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+    dl {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 12px 18px;
+      margin: 28px 0 0;
+      padding-top: 22px;
+      border-top: 1px solid var(--border);
+    }
+    dt {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    dd {
+      min-width: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 600;
+    }
+    @media (max-width: 520px) {
+      body {
+        padding: 16px;
+      }
+      main {
+        padding: 24px;
+      }
+      h1 {
+        font-size: 24px;
+      }
+      dl {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      dd + dt {
+        margin-top: 10px;
+      }
+    }
+  </style>
+  <script>
+    if (window.location.pathname !== "/forbidden" || window.location.search !== "?access_limited=1") {
+      window.history.replaceState(null, "", "/forbidden?access_limited=1");
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <div class="badge">` + title + `</div>
+    <h1>本站不对您所在的地区开放。</h1>
+    <p>访问策略已根据当前网络来源拦截本次请求。</p>
+    <dl>
+      <dt>您当前 IP：</dt>
+      <dd>` + ip + `</dd>
+      <dt>IP 归属地：</dt>
+      <dd>` + countryLabel + `</dd>
+    </dl>
+  </main>
+</body>
+</html>`
 }

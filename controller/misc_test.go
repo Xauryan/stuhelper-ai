@@ -133,3 +133,30 @@ func TestGetStatusIncludesSiteMetaSettings(t *testing.T) {
 	require.Equal(t, "ai,gateway", response.Data["seo_keywords"])
 	require.Equal(t, "https://example.com/og.png", response.Data["seo_image"])
 }
+
+func TestGetStatusIncludesAccessControlRequestLocation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	ctx.Request.Header.Set("CF-IPCountry", "CN")
+
+	GetStatus(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			AccessControl map[string]interface{} `json:"access_control"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	require.NotEmpty(t, response.Data.AccessControl["request_ip"])
+	require.Equal(t, "CN", response.Data.AccessControl["request_country_code"])
+	require.Equal(t, "中国大陆", response.Data.AccessControl["request_country_label"])
+	require.Equal(t, true, response.Data.AccessControl["request_country_known"])
+	require.Equal(t, true, response.Data.AccessControl["request_from_china_mainland"])
+}

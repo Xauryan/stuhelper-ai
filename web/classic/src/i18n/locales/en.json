@@ -4372,6 +4372,9 @@
     "鉴权名称": "Auth Name",
     "鉴权值": "Auth Value",
     "默认 Bearer": "Default Bearer",
-    "不发送鉴权": "No Auth"
+    "不发送鉴权": "No Auth",
+    "本站不对您所在的地区开放。": "This site is not available in your region.",
+    "您当前 IP：{{ip}}": "Your current IP: {{ip}}",
+    "IP 归属地：{{location}}": "IP location: {{location}}"
   }
 }

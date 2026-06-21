@@ -18,8 +18,9 @@ type AccessControlSetting struct {
 
 	GeoIPDatabasePath string `json:"geoip_database_path"`
 
-	RoleGeoRules  map[string]RoleGeoAccessRule  `json:"role_geo_rules"`
-	ResourceRules map[string]ResourceAccessRule `json:"resource_rules"`
+	RoleGeoRules        map[string]RoleGeoAccessRule                   `json:"role_geo_rules"`
+	SourceResourceRules map[string]map[string]SourceResourceAccessRule `json:"source_resource_rules"`
+	ResourceRules       map[string]ResourceAccessRule                  `json:"resource_rules"`
 }
 
 const (
@@ -45,6 +46,14 @@ type ResourceAccessRule struct {
 	Root       *bool `json:"root,omitempty"`
 }
 
+type SourceResourceAccessRule struct {
+	Guest      *bool `json:"guest,omitempty"`
+	User       *bool `json:"user,omitempty"`
+	AuditAdmin *bool `json:"audit_admin,omitempty"`
+	Admin      *bool `json:"admin,omitempty"`
+	Root       *bool `json:"root,omitempty"`
+}
+
 var accessControlSetting = AccessControlSetting{
 	WebPolicyEnabled:                     false,
 	APIPolicyEnabled:                     false,
@@ -57,6 +66,7 @@ var accessControlSetting = AccessControlSetting{
 	BlockAdmins:                          false,
 	GeoIPDatabasePath:                    "",
 	RoleGeoRules:                         map[string]RoleGeoAccessRule{},
+	SourceResourceRules:                  map[string]map[string]SourceResourceAccessRule{},
 	ResourceRules:                        map[string]ResourceAccessRule{},
 }
 

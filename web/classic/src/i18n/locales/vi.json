@@ -4687,6 +4687,9 @@
     "鉴权名称": "Tên xác thực",
     "鉴权值": "Giá trị xác thực",
     "默认 Bearer": "Bearer mặc định",
-    "不发送鉴权": "Không gửi xác thực"
+    "不发送鉴权": "Không gửi xác thực",
+    "本站不对您所在的地区开放。": "Trang web này không khả dụng tại khu vực của bạn.",
+    "您当前 IP：{{ip}}": "IP hiện tại của bạn: {{ip}}",
+    "IP 归属地：{{location}}": "Vị trí IP: {{location}}"
   }
 }
