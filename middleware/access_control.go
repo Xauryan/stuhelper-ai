@@ -32,6 +32,15 @@ type AccessDeniedRequestInfo struct {
 	CountrySource string `json:"country_source"`
 }
 
+type AccessDeniedReason struct {
+	Kind     string            `json:"kind"`
+	Source   string            `json:"source,omitempty"`
+	Resource string            `json:"resource,omitempty"`
+	Role     string            `json:"role,omitempty"`
+	Scope    AccessPolicyScope `json:"scope,omitempty"`
+	Debug    string            `json:"debug,omitempty"`
+}
+
 const (
 	AccessResourceAll               = "all"
 	AccessResourceWeb               = "web"
@@ -102,7 +111,7 @@ func enforceAccessPolicy(c *gin.Context, scope AccessPolicyScope) bool {
 	}
 
 	setting := access_setting.GetAccessControlSetting()
-	if reason, ok := blockedByGeo(c, setting); ok {
+	if reason, ok := blockedByGeo(c, setting, scope); ok {
 		abortAccessDenied(c, scope, reason)
 		return false
 	}
@@ -147,34 +156,48 @@ func isAccessPolicyEnabled(scope AccessPolicyScope) bool {
 	}
 }
 
-func blockedByGeo(c *gin.Context, setting *access_setting.AccessControlSetting) (string, bool) {
+func blockedByGeo(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (*AccessDeniedReason, bool) {
 	if !setting.BlockChinaMainland && !setting.BlockEuropeanUnion {
-		return "", false
+		return nil, false
 	}
 
 	country := requestCountry(c)
 	if !country.Known {
-		return "", false
+		return nil, false
 	}
 
 	if setting.BlockChinaMainland && access_setting.IsChinaMainlandCountryCode(country.CountryCode) {
-		return fmt.Sprintf("access from China Mainland is blocked (%s)", country.Source), true
+		return &AccessDeniedReason{
+			Kind:     "geo_china_mainland",
+			Source:   access_setting.RoleGeoSourceChinaMainland,
+			Resource: AccessResourceAll,
+			Role:     "all",
+			Scope:    scope,
+			Debug:    fmt.Sprintf("access from China Mainland is blocked (%s)", country.Source),
+		}, true
 	}
 	if setting.BlockEuropeanUnion && access_setting.IsEuropeanUnionCountryCode(country.CountryCode) {
-		return fmt.Sprintf("access from the European Union is blocked (%s)", country.Source), true
+		return &AccessDeniedReason{
+			Kind:     "geo_european_union",
+			Source:   access_setting.RoleGeoSourceEuropeanUnion,
+			Resource: AccessResourceAll,
+			Role:     "all",
+			Scope:    scope,
+			Debug:    fmt.Sprintf("access from the European Union is blocked (%s)", country.Source),
+		}, true
 	}
-	return "", false
+	return nil, false
 }
 
-func blockedByRoleGeoRule(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {
+func blockedByRoleGeoRule(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (*AccessDeniedReason, bool) {
 	if setting == nil || len(setting.RoleGeoRules) == 0 {
-		return "", false
+		return nil, false
 	}
 
 	role, ok := currentRequestRole(c)
 	if !ok {
 		if scope == AccessPolicyScopeAPI && hasAPIAuthCredential(c) {
-			return "", false
+			return nil, false
 		}
 		role = common.RoleGuestUser
 	}
@@ -183,10 +206,17 @@ func blockedByRoleGeoRule(c *gin.Context, setting *access_setting.AccessControlS
 	roleLevel := roleAccessLevel(role)
 	for _, source := range sources {
 		if roleGeoRuleBlocksRole(setting.RoleGeoRules[source], roleLevel) {
-			return fmt.Sprintf("access from %s is blocked for %s", source, roleLevel), true
+			return &AccessDeniedReason{
+				Kind:     "role_geo",
+				Source:   source,
+				Resource: AccessResourceAll,
+				Role:     roleLevel,
+				Scope:    scope,
+				Debug:    fmt.Sprintf("access from %s is blocked for %s", source, roleLevel),
+			}, true
 		}
 	}
-	return "", false
+	return nil, false
 }
 
 func roleGeoSourcesForRequest(c *gin.Context) []string {
@@ -222,20 +252,20 @@ func roleGeoRuleBlocksRole(rule access_setting.RoleGeoAccessRule, roleLevel stri
 	return value != nil && *value
 }
 
-func blockedBySourceResourceRule(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {
+func blockedBySourceResourceRule(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (*AccessDeniedReason, bool) {
 	if setting == nil || len(setting.SourceResourceRules) == 0 {
-		return "", false
+		return nil, false
 	}
 
 	keys := resourceKeysForRequest(scope, c.Request.Method, normalizedRequestPath(c), c.GetString(RouteTagKey))
 	if len(keys) == 0 {
-		return "", false
+		return nil, false
 	}
 
 	role, ok := currentRequestRole(c)
 	if !ok {
 		if scope == AccessPolicyScopeAPI && hasAPIAuthCredential(c) {
-			return "", false
+			return nil, false
 		}
 		role = common.RoleGuestUser
 	}
@@ -248,15 +278,29 @@ func blockedBySourceResourceRule(c *gin.Context, setting *access_setting.AccessC
 			continue
 		}
 		if sourceResourceRuleBlocksRole(resourceRules[AccessResourceAll], roleLevel) {
-			return fmt.Sprintf("all resource access from %s is blocked for %s", source, roleLevel), true
+			return &AccessDeniedReason{
+				Kind:     "source_resource_all",
+				Source:   source,
+				Resource: AccessResourceAll,
+				Role:     roleLevel,
+				Scope:    scope,
+				Debug:    fmt.Sprintf("all resource access from %s is blocked for %s", source, roleLevel),
+			}, true
 		}
 		for _, key := range keys {
 			if sourceResourceRuleBlocksRole(resourceRules[key], roleLevel) {
-				return fmt.Sprintf("resource %s access from %s is blocked for %s", key, source, roleLevel), true
+				return &AccessDeniedReason{
+					Kind:     "source_resource",
+					Source:   source,
+					Resource: key,
+					Role:     roleLevel,
+					Scope:    scope,
+					Debug:    fmt.Sprintf("resource %s access from %s is blocked for %s", key, source, roleLevel),
+				}, true
 			}
 		}
 	}
-	return "", false
+	return nil, false
 }
 
 func sourceResourceRuleBlocksRole(rule access_setting.SourceResourceAccessRule, roleLevel string) bool {
@@ -276,24 +320,31 @@ func sourceResourceRuleBlocksRole(rule access_setting.SourceResourceAccessRule, 
 	return value != nil && *value
 }
 
-func blockedByScopedChinaMainlandPolicy(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {
+func blockedByScopedChinaMainlandPolicy(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (*AccessDeniedReason, bool) {
 	if !setting.BlockChinaMainlandHomepage && !setting.BlockChinaMainlandUserSensitivePages {
-		return "", false
+		return nil, false
 	}
 	if !requestFromChinaMainland(c) {
-		return "", false
+		return nil, false
 	}
 
 	path := normalizedRequestPath(c)
 	if setting.BlockChinaMainlandUserSensitivePages && scope == AccessPolicyScopeAPI && isChinaMainlandSensitiveAPIPath(path) {
 		role, ok := currentAuthenticatedRequestRole(c)
 		if !ok {
-			return "", false
+			return nil, false
 		}
 		if role >= common.RoleAuditAdminUser {
-			return "", false
+			return nil, false
 		}
-		return "sensitive user page access from China Mainland is blocked", true
+		return &AccessDeniedReason{
+			Kind:     "china_mainland_sensitive",
+			Source:   access_setting.RoleGeoSourceChinaMainland,
+			Resource: firstResourceKeyForRequest(scope, c),
+			Role:     roleAccessLevel(role),
+			Scope:    scope,
+			Debug:    "sensitive user page access from China Mainland is blocked",
+		}, true
 	}
 
 	role, ok := currentRequestRole(c)
@@ -301,16 +352,38 @@ func blockedByScopedChinaMainlandPolicy(c *gin.Context, setting *access_setting.
 		role = common.RoleGuestUser
 	}
 	if role >= common.RoleAuditAdminUser {
-		return "", false
+		return nil, false
 	}
 
 	if setting.BlockChinaMainlandHomepage && scope == AccessPolicyScopeWeb && webPathMatchesHomeAccess(path) {
-		return "homepage access from China Mainland is blocked", true
+		return &AccessDeniedReason{
+			Kind:     "china_mainland_home",
+			Source:   access_setting.RoleGeoSourceChinaMainland,
+			Resource: AccessResourceHome,
+			Role:     roleAccessLevel(role),
+			Scope:    scope,
+			Debug:    "homepage access from China Mainland is blocked",
+		}, true
 	}
 	if setting.BlockChinaMainlandUserSensitivePages && isChinaMainlandSensitivePath(scope, path) {
-		return "sensitive user page access from China Mainland is blocked", true
+		return &AccessDeniedReason{
+			Kind:     "china_mainland_sensitive",
+			Source:   access_setting.RoleGeoSourceChinaMainland,
+			Resource: firstResourceKeyForRequest(scope, c),
+			Role:     roleAccessLevel(role),
+			Scope:    scope,
+			Debug:    "sensitive user page access from China Mainland is blocked",
+		}, true
 	}
-	return "", false
+	return nil, false
+}
+
+func firstResourceKeyForRequest(scope AccessPolicyScope, c *gin.Context) string {
+	keys := resourceKeysForRequest(scope, c.Request.Method, normalizedRequestPath(c), c.GetString(RouteTagKey))
+	if len(keys) == 0 {
+		return ""
+	}
+	return keys[0]
 }
 
 func requestFromChinaMainland(c *gin.Context) bool {
@@ -390,26 +463,34 @@ func isChinaMainlandSensitiveAPIPath(path string) bool {
 	}
 }
 
-func blockedByResourceRule(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {
+func blockedByResourceRule(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (*AccessDeniedReason, bool) {
 	keys := resourceKeysForRequest(scope, c.Request.Method, normalizedRequestPath(c), c.GetString(RouteTagKey))
 	if len(keys) == 0 {
-		return "", false
+		return nil, false
 	}
 
 	role, ok := currentRequestRole(c)
 	if !ok {
 		if scope == AccessPolicyScopeAPI && hasAPIAuthCredential(c) {
-			return "", false
+			return nil, false
 		}
 		role = common.RoleGuestUser
 	}
 
+	roleLevel := roleAccessLevel(role)
 	for _, key := range keys {
 		if !resourceAllowedForRole(setting, key, role) {
-			return fmt.Sprintf("resource %s access is blocked for %s", key, roleAccessLevel(role)), true
+			return &AccessDeniedReason{
+				Kind:     "resource",
+				Source:   access_setting.RoleGeoSourceAll,
+				Resource: key,
+				Role:     roleLevel,
+				Scope:    scope,
+				Debug:    fmt.Sprintf("resource %s access is blocked for %s", key, roleLevel),
+			}, true
 		}
 	}
-	return "", false
+	return nil, false
 }
 
 func resourceKeysForRequest(scope AccessPolicyScope, method string, path string, routeTag string) []string {
@@ -860,34 +941,56 @@ func AccessResourceKeys() []string {
 	return keys
 }
 
-func blockedByIdentity(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {
+func blockedByIdentity(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (*AccessDeniedReason, bool) {
 	if !setting.BlockGuests && !setting.BlockUsers && !setting.BlockAdmins {
-		return "", false
+		return nil, false
 	}
 
 	role, ok := currentRequestRole(c)
 	if !ok {
 		if scope == AccessPolicyScopeAPI && hasAPIAuthCredential(c) {
-			return "", false
+			return nil, false
 		}
 		role = common.RoleGuestUser
 	}
 
+	roleLevel := roleAccessLevel(role)
 	switch {
 	case role >= common.RoleAuditAdminUser:
 		if setting.BlockAdmins {
-			return "administrator access is blocked", true
+			return &AccessDeniedReason{
+				Kind:     "identity_admins",
+				Source:   access_setting.RoleGeoSourceAll,
+				Resource: AccessResourceAll,
+				Role:     roleLevel,
+				Scope:    scope,
+				Debug:    "administrator access is blocked",
+			}, true
 		}
 	case role >= common.RoleCommonUser:
 		if setting.BlockUsers {
-			return "user access is blocked", true
+			return &AccessDeniedReason{
+				Kind:     "identity_users",
+				Source:   access_setting.RoleGeoSourceAll,
+				Resource: AccessResourceAll,
+				Role:     roleLevel,
+				Scope:    scope,
+				Debug:    "user access is blocked",
+			}, true
 		}
 	default:
 		if setting.BlockGuests {
-			return "guest access is blocked", true
+			return &AccessDeniedReason{
+				Kind:     "identity_guests",
+				Source:   access_setting.RoleGeoSourceAll,
+				Resource: AccessResourceAll,
+				Role:     roleLevel,
+				Scope:    scope,
+				Debug:    "guest access is blocked",
+			}, true
 		}
 	}
-	return "", false
+	return nil, false
 }
 
 func currentRequestRole(c *gin.Context) (int, bool) {
@@ -1017,10 +1120,179 @@ func countryDisplayLabel(country access_setting.CountryLookupResult) string {
 	return code
 }
 
-func abortAccessDenied(c *gin.Context, scope AccessPolicyScope, reason string) {
+func accessDeniedReasonText(reason *AccessDeniedReason) string {
+	if reason == nil {
+		return "当前请求命中了访问限制策略。"
+	}
+
+	source := accessSourceLabel(reason.Source)
+	resource := accessResourceLabel(reason.Resource)
+	role := accessRoleLabel(reason.Role)
+	switch reason.Kind {
+	case "geo_china_mainland":
+		return "当前 IP 被识别为中国大陆，命中了中国大陆全局来源限制。"
+	case "geo_european_union":
+		return "当前 IP 被识别为欧盟地区，命中了欧盟全局来源限制。"
+	case "role_geo":
+		return fmt.Sprintf("%s的%s被限制访问全部资源。", source, role)
+	case "source_resource_all":
+		return fmt.Sprintf("%s的%s被限制访问全部资源。", source, role)
+	case "source_resource":
+		return fmt.Sprintf("%s的%s被限制访问%s。", source, role, resource)
+	case "china_mainland_home":
+		return "当前 IP 被识别为中国大陆，游客或普通用户被限制访问官网首页。"
+	case "china_mainland_sensitive":
+		if reason.Resource != "" {
+			return fmt.Sprintf("当前 IP 被识别为中国大陆，%s被限制访问%s。", role, resource)
+		}
+		return "当前 IP 被识别为中国大陆，普通用户被限制访问令牌、钱包或账单资源。"
+	case "resource":
+		return fmt.Sprintf("不区分来源时，%s被限制访问%s。", role, resource)
+	case "identity_guests":
+		return "游客访问已被全局身份策略限制。"
+	case "identity_users":
+		return "普通用户访问已被全局身份策略限制。"
+	case "identity_admins":
+		return "管理员访问已被全局身份策略限制。"
+	default:
+		return "当前请求命中了访问限制策略。"
+	}
+}
+
+func reasonSource(reason *AccessDeniedReason) string {
+	if reason == nil {
+		return ""
+	}
+	return reason.Source
+}
+
+func reasonResource(reason *AccessDeniedReason) string {
+	if reason == nil {
+		return ""
+	}
+	return reason.Resource
+}
+
+func reasonRole(reason *AccessDeniedReason) string {
+	if reason == nil {
+		return ""
+	}
+	return reason.Role
+}
+
+func reasonScope(reason *AccessDeniedReason) AccessPolicyScope {
+	if reason == nil {
+		return ""
+	}
+	return reason.Scope
+}
+
+func accessSourceLabel(source string) string {
+	switch source {
+	case access_setting.RoleGeoSourceAll:
+		return "全部来源"
+	case access_setting.RoleGeoSourceChinaMainland:
+		return "中国大陆 IP"
+	case access_setting.RoleGeoSourceEuropeanUnion:
+		return "欧盟 IP"
+	case access_setting.RoleGeoSourceUnknown:
+		return "未知地区"
+	case "":
+		return "未指定来源"
+	default:
+		return source
+	}
+}
+
+func accessResourceLabel(resource string) string {
+	switch resource {
+	case AccessResourceAll:
+		return "全部资源"
+	case AccessResourceWeb:
+		return "官网页面"
+	case AccessResourceHome:
+		return "官网首页"
+	case AccessResourceModelAPI:
+		return "模型 API"
+	case AccessResourceToken:
+		return "令牌管理"
+	case AccessResourceWallet:
+		return "钱包充值"
+	case AccessResourceBilling:
+		return "账单"
+	case AccessResourceUsageLog:
+		return "使用日志"
+	case AccessResourceDashboard:
+		return "数据看板"
+	case AccessResourcePlayground:
+		return "操练场"
+	case AccessResourceChat:
+		return "聊天"
+	case AccessResourcePersonal:
+		return "个人设置"
+	case AccessResourceDrawingLog:
+		return "绘图日志"
+	case AccessResourceTaskLog:
+		return "任务日志"
+	case AccessResourceAdminChannel:
+		return "渠道管理"
+	case AccessResourceAdminSubscription:
+		return "订阅管理"
+	case AccessResourceAdminModel:
+		return "模型管理"
+	case AccessResourceAdminRedemption:
+		return "兑换码管理"
+	case AccessResourceAdminUser:
+		return "用户管理"
+	case AccessResourceAdminReferral:
+		return "邀请管理"
+	case AccessResourceAdminSetting:
+		return "系统设置"
+	case "":
+		return "未指定资源"
+	default:
+		return resource
+	}
+}
+
+func accessRoleLabel(role string) string {
+	switch role {
+	case "guest":
+		return "游客"
+	case "user":
+		return "普通用户"
+	case "audit_admin":
+		return "审计管理员"
+	case "admin":
+		return "管理员"
+	case "root":
+		return "超级管理员"
+	case "all":
+		return "全部角色"
+	case "":
+		return "未识别角色"
+	default:
+		return role
+	}
+}
+
+func accessScopeLabel(scope AccessPolicyScope) string {
+	switch scope {
+	case AccessPolicyScopeWeb:
+		return "官网 Web"
+	case AccessPolicyScopeAPI:
+		return "API"
+	case "":
+		return "未指定范围"
+	default:
+		return string(scope)
+	}
+}
+
+func abortAccessDenied(c *gin.Context, scope AccessPolicyScope, reason *AccessDeniedReason) {
 	message := "访问受限"
-	if common.DebugEnabled && reason != "" {
-		message = message + ": " + reason
+	if common.DebugEnabled && reason != nil && reason.Debug != "" {
+		message = message + ": " + reason.Debug
 	}
 
 	if c.GetString(RouteTagKey) == "relay" {
@@ -1029,29 +1301,36 @@ func abortAccessDenied(c *gin.Context, scope AccessPolicyScope, reason string) {
 	}
 
 	if scope == AccessPolicyScopeWeb {
-		abortWithAccessDeniedPage(c, message)
+		abortWithAccessDeniedPage(c, message, reason)
 		return
 	}
 
 	c.JSON(http.StatusForbidden, gin.H{
-		"success": false,
-		"message": message,
+		"success":     false,
+		"message":     message,
+		"reason":      reason,
+		"reason_text": accessDeniedReasonText(reason),
 	})
 	c.Abort()
 }
 
-func abortWithAccessDeniedPage(c *gin.Context, message string) {
+func abortWithAccessDeniedPage(c *gin.Context, message string, reason *AccessDeniedReason) {
 	info := AccessDeniedInfo(c)
 	c.Header("Cache-Control", "no-store")
 	c.Header("X-Robots-Tag", "noindex, nofollow")
-	c.Data(http.StatusForbidden, "text/html; charset=utf-8", []byte(renderAccessDeniedPage(message, info)))
+	c.Data(http.StatusForbidden, "text/html; charset=utf-8", []byte(renderAccessDeniedPage(message, info, reason)))
 	c.Abort()
 }
 
-func renderAccessDeniedPage(message string, info AccessDeniedRequestInfo) string {
+func renderAccessDeniedPage(message string, info AccessDeniedRequestInfo, reason *AccessDeniedReason) string {
 	title := html.EscapeString(message)
 	ip := html.EscapeString(info.IP)
 	countryLabel := html.EscapeString(info.CountryLabel)
+	reasonText := html.EscapeString(accessDeniedReasonText(reason))
+	sourceText := html.EscapeString(accessSourceLabel(reasonSource(reason)))
+	resourceText := html.EscapeString(accessResourceLabel(reasonResource(reason)))
+	roleText := html.EscapeString(accessRoleLabel(reasonRole(reason)))
+	scopeText := html.EscapeString(accessScopeLabel(reasonScope(reason)))
 
 	return `<!doctype html>
 <html lang="zh-CN">
@@ -1191,9 +1470,17 @@ func renderAccessDeniedPage(message string, info AccessDeniedRequestInfo) string
 <body>
   <main>
     <div class="badge">` + title + `</div>
-    <h1>本站不对您所在的地区开放。</h1>
-    <p>访问策略已根据当前网络来源拦截本次请求。</p>
+    <h1>访问请求已被策略拦截。</h1>
+    <p>` + reasonText + `</p>
     <dl>
+      <dt>命中来源：</dt>
+      <dd>` + sourceText + `</dd>
+      <dt>命中资源：</dt>
+      <dd>` + resourceText + `</dd>
+      <dt>命中角色：</dt>
+      <dd>` + roleText + `</dd>
+      <dt>策略范围：</dt>
+      <dd>` + scopeText + `</dd>
       <dt>您当前 IP：</dt>
       <dd>` + ip + `</dd>
       <dt>IP 归属地：</dt>

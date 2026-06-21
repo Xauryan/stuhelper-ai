@@ -68,11 +68,16 @@ func requireWebAccessDeniedPage(t *testing.T, recorder *httptest.ResponseRecorde
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 	require.Contains(t, recorder.Header().Get("Content-Type"), "text/html")
 	body := recorder.Body.String()
-	require.Contains(t, body, "本站不对您所在的地区开放")
+	require.Contains(t, body, "访问请求已被策略拦截")
+	require.Contains(t, body, "命中来源")
+	require.Contains(t, body, "命中资源")
+	require.Contains(t, body, "命中角色")
+	require.Contains(t, body, "策略范围")
 	require.Contains(t, body, "您当前 IP")
 	require.Contains(t, body, "IP 归属地")
 	require.Contains(t, body, `replaceState(null, "", "/forbidden?access_limited=1")`)
 	require.NotContains(t, body, `"success":false`)
+	require.NotContains(t, body, "本站不对您所在的地区开放")
 }
 
 func TestAccessControlAllowsWhenPolicyDisabled(t *testing.T) {
@@ -101,6 +106,7 @@ func TestAccessControlBlocksChinaMainlandHeader(t *testing.T) {
 
 	requireWebAccessDeniedPage(t, recorder)
 	require.Contains(t, recorder.Body.String(), "中国大陆")
+	require.Contains(t, recorder.Body.String(), "中国大陆全局来源限制")
 }
 
 func TestAccessControlRecognizesTencentEOClientIPCountryHeader(t *testing.T) {
@@ -128,6 +134,7 @@ func TestAccessControlBlocksEuropeanUnionHeader(t *testing.T) {
 
 	requireWebAccessDeniedPage(t, recorder)
 	require.Contains(t, recorder.Body.String(), "欧盟地区（DE）")
+	require.Contains(t, recorder.Body.String(), "欧盟全局来源限制")
 }
 
 func TestAccessControlRoleGeoRuleBlocksChinaMainlandUserOnly(t *testing.T) {
@@ -175,6 +182,23 @@ func TestAccessControlRoleGeoRuleBlocksEuropeanUnionGuest(t *testing.T) {
 		"CloudFront-Viewer-Country": "DE",
 	}, "web", &userRole)
 	require.Equal(t, http.StatusOK, userRecorder.Code)
+}
+
+func TestAccessControlDoesNotTreatRussiaAsEuropeanUnion(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.RoleGeoRules = map[string]access_setting.RoleGeoAccessRule{
+			access_setting.RoleGeoSourceEuropeanUnion: {
+				Guest: boolPtr(true),
+			},
+		}
+	})
+
+	recorder := performAccessControlRequest(AccessPolicyScopeWeb, map[string]string{
+		"EO-Client-IPCountry": "RU",
+	}, "web")
+
+	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
 func TestAccessControlRoleGeoRuleBlocksAllSourceAuditAdminOnly(t *testing.T) {
@@ -248,9 +272,11 @@ func TestAccessControlSourceResourceRuleBlocksChinaMainlandGuestHome(t *testing.
 	header := map[string]string{"EO-Client-IPCountry": "CN"}
 	homeRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, header, "web", "/")
 	require.Equal(t, http.StatusForbidden, homeRecorder.Code)
+	require.Contains(t, homeRecorder.Body.String(), "中国大陆 IP的游客被限制访问官网首页")
 
 	fallbackRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, header, "web", "/1")
 	require.Equal(t, http.StatusForbidden, fallbackRecorder.Code)
+	require.Contains(t, fallbackRecorder.Body.String(), "中国大陆 IP的游客被限制访问官网首页")
 
 	pricingRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, header, "web", "/pricing")
 	require.Equal(t, http.StatusOK, pricingRecorder.Code)
@@ -285,6 +311,7 @@ func TestAccessControlBlocksAPIGuestWithoutCredential(t *testing.T) {
 
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 	require.Contains(t, recorder.Body.String(), `"success":false`)
+	require.Contains(t, recorder.Body.String(), `"reason_text":"游客访问已被全局身份策略限制。"`)
 }
 
 func TestAccessControlDefersCredentialedAPIIdentityUntilAuth(t *testing.T) {
@@ -485,6 +512,7 @@ func TestAccessControlResourceRuleBlocksGuestHomepage(t *testing.T) {
 
 	homepageRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, nil, "web", "/")
 	require.Equal(t, http.StatusForbidden, homepageRecorder.Code)
+	require.Contains(t, homepageRecorder.Body.String(), "不区分来源时，游客被限制访问官网首页")
 
 	loginRecorder := performAccessControlRequestAtPath(AccessPolicyScopeWeb, nil, "web", "/login")
 	require.Equal(t, http.StatusOK, loginRecorder.Code)

@@ -143,8 +143,13 @@ func GetStatus(c *gin.Context) {
 		"access_control": gin.H{
 			"web_policy_enabled":                        accessControlSetting.WebPolicyEnabled,
 			"api_policy_enabled":                        accessControlSetting.APIPolicyEnabled,
+			"block_china_mainland":                      accessControlSetting.BlockChinaMainland,
+			"block_european_union":                      accessControlSetting.BlockEuropeanUnion,
 			"block_china_mainland_homepage":             accessControlSetting.BlockChinaMainlandHomepage,
 			"block_china_mainland_user_sensitive_pages": accessControlSetting.BlockChinaMainlandUserSensitivePages,
+			"block_guests":                              accessControlSetting.BlockGuests,
+			"block_users":                               accessControlSetting.BlockUsers,
+			"block_admins":                              accessControlSetting.BlockAdmins,
 			"role_geo_rules":                            accessControlSetting.RoleGeoRules,
 			"source_resource_rules":                     accessControlSetting.SourceResourceRules,
 			"resource_rules":                            accessControlSetting.ResourceRules,

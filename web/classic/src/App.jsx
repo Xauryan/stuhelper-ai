@@ -26,7 +26,7 @@ import {
   PrivateRoute,
   AdminRoute,
   AuditAdminRoute,
-  isRouteAccessRestricted,
+  getRouteAccessRestrictionReason,
 } from './helpers';
 import RegisterForm from './components/auth/RegisterForm';
 import LoginForm from './components/auth/LoginForm';
@@ -112,8 +112,12 @@ function App() {
     return false;
   }, [statusState?.status?.HeaderNavModules]);
 
-  if (isRouteAccessRestricted(statusState?.status, location.pathname)) {
-    return <Forbidden accessLimited />;
+  const restrictionReason = getRouteAccessRestrictionReason(
+    statusState?.status,
+    location.pathname,
+  );
+  if (restrictionReason) {
+    return <Forbidden accessLimited accessReason={restrictionReason} />;
   }
 
   return (

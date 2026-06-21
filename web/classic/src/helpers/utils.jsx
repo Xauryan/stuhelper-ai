@@ -100,6 +100,13 @@ export const ACCESS_RESOURCES = {
   ADMIN_SETTING: 'admin_setting',
 };
 
+export const ACCESS_SOURCES = {
+  ALL: 'all',
+  CHINA_MAINLAND: 'china_mainland',
+  EUROPEAN_UNION: 'european_union',
+  UNKNOWN_COUNTRY: 'unknown_country',
+};
+
 export function normalizeRoutePath(pathname) {
   if (!pathname) return '/';
   if (pathname.length > 1 && pathname.endsWith('/')) {
@@ -243,6 +250,14 @@ export function getCurrentUserRole() {
   }
 }
 
+function getRequestRole(status, role) {
+  const resolvedRole =
+    role ?? status?.access_control?.current_role ?? getCurrentUserRole();
+  const numericRole = Number(resolvedRole);
+  if (!Number.isFinite(numericRole)) return USER_ROLES.GUEST;
+  return numericRole;
+}
+
 export function getRoleAccessLevel(role = getCurrentUserRole()) {
   if (role >= USER_ROLES.ROOT) return 'root';
   if (role >= USER_ROLES.ADMIN) return 'admin';
@@ -256,7 +271,7 @@ export function isResourceAllowed(status, resourceKey, role) {
 
   const accessControl = status?.access_control;
   const rules = accessControl?.resource_rules;
-  const level = getRoleAccessLevel(role ?? getCurrentUserRole());
+  const level = getRoleAccessLevel(getRequestRole(status, role));
   const rule = rules?.[resourceKey];
 
   if (rule && Object.prototype.hasOwnProperty.call(rule, level)) {
@@ -275,78 +290,266 @@ export function isResourceAllowed(status, resourceKey, role) {
 }
 
 function getRequestAccessSources(accessControl) {
-  const sources = ['all'];
+  const sources = [ACCESS_SOURCES.ALL];
   if (!accessControl?.request_country_known) {
-    sources.push('unknown_country');
+    sources.push(ACCESS_SOURCES.UNKNOWN_COUNTRY);
     return sources;
   }
   if (accessControl?.request_from_china_mainland) {
-    sources.push('china_mainland');
+    sources.push(ACCESS_SOURCES.CHINA_MAINLAND);
   }
   if (accessControl?.request_from_european_union) {
-    sources.push('european_union');
+    sources.push(ACCESS_SOURCES.EUROPEAN_UNION);
   }
   return sources;
 }
 
-function sourceResourceRuleBlocks(status, resourceKey, role) {
-  const accessControl = status?.access_control;
-  const rules = accessControl?.source_resource_rules;
-  if (!rules || !resourceKey) return false;
-
-  const level = getRoleAccessLevel(role ?? getCurrentUserRole());
-  return getRequestAccessSources(accessControl).some((source) => {
-    const sourceRules = rules?.[source];
-    return (
-      sourceRules?.[ACCESS_RESOURCES.ALL]?.[level] === true ||
-      sourceRules?.[resourceKey]?.[level] === true
-    );
-  });
+function roleRuleBlocks(rule, level) {
+  return rule?.[level] === true;
 }
 
-export function isRouteResourceRestricted(status, pathname, role) {
+function sourceResourceRestrictionReason(status, resourceKeys, role) {
+  const accessControl = status?.access_control;
+  const rules = accessControl?.source_resource_rules;
+  if (!rules || resourceKeys.length === 0) return null;
+
+  const level = getRoleAccessLevel(getRequestRole(status, role));
+  for (const source of getRequestAccessSources(accessControl)) {
+    const sourceRules = rules?.[source];
+    if (!sourceRules) continue;
+
+    if (roleRuleBlocks(sourceRules?.[ACCESS_RESOURCES.ALL], level)) {
+      return {
+        kind: 'source_resource_all',
+        source,
+        resource: ACCESS_RESOURCES.ALL,
+        role: level,
+        scope: 'web',
+      };
+    }
+
+    for (const resourceKey of resourceKeys) {
+      if (roleRuleBlocks(sourceRules?.[resourceKey], level)) {
+        return {
+          kind: 'source_resource',
+          source,
+          resource: resourceKey,
+          role: level,
+          scope: 'web',
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function roleGeoRestrictionReason(status, role) {
+  const accessControl = status?.access_control;
+  const rules = accessControl?.role_geo_rules;
+  if (!rules) return null;
+
+  const level = getRoleAccessLevel(getRequestRole(status, role));
+  for (const source of getRequestAccessSources(accessControl)) {
+    if (roleRuleBlocks(rules?.[source], level)) {
+      return {
+        kind: 'role_geo',
+        source,
+        resource: ACCESS_RESOURCES.ALL,
+        role: level,
+        scope: 'web',
+      };
+    }
+  }
+  return null;
+}
+
+function resourceRestrictionReason(status, resourceKey, role) {
+  if (isResourceAllowed(status, resourceKey, role)) return null;
+  return {
+    kind: 'resource',
+    source: ACCESS_SOURCES.ALL,
+    resource: resourceKey,
+    role: getRoleAccessLevel(getRequestRole(status, role)),
+    scope: 'web',
+  };
+}
+
+export function getRouteResourceRestrictionReason(status, pathname, role) {
   const accessControl = status?.access_control;
   if (accessControl?.web_policy_enabled === false) {
-    return false;
+    return null;
   }
 
   const keys = getRouteResourceKeys(pathname);
-  if (keys.length === 0) return false;
-  return keys.some(
-    (key) =>
-      sourceResourceRuleBlocks(status, key, role) ||
-      !isResourceAllowed(status, key, role),
+  if (keys.length === 0) return null;
+
+  const sourceResourceReason = sourceResourceRestrictionReason(
+    status,
+    keys,
+    role,
   );
+  if (sourceResourceReason) return sourceResourceReason;
+
+  for (const key of keys) {
+    const reason = resourceRestrictionReason(status, key, role);
+    if (reason) return reason;
+  }
+
+  return null;
 }
 
-export function isChinaMainlandRouteRestricted(status, pathname) {
+export function isRouteResourceRestricted(status, pathname, role) {
+  return !!getRouteResourceRestrictionReason(status, pathname, role);
+}
+
+export function getChinaMainlandRouteRestrictionReason(status, pathname, role) {
   const accessControl = status?.access_control;
   if (accessControl?.web_policy_enabled === false) {
-    return false;
+    return null;
   }
-  if (!accessControl?.request_from_china_mainland || isAuditAdmin()) {
-    return false;
+  if (
+    !accessControl?.request_from_china_mainland ||
+    getRequestRole(status, role) >= USER_ROLES.AUDIT_ADMIN
+  ) {
+    return null;
   }
 
   const path = normalizeRoutePath(pathname);
+  const level = getRoleAccessLevel(getRequestRole(status, role));
   if (
     accessControl.block_china_mainland_homepage &&
     (path === '/' || isWebSPAFallbackPath(path))
   ) {
-    return true;
+    return {
+      kind: 'china_mainland_home',
+      source: ACCESS_SOURCES.CHINA_MAINLAND,
+      resource: ACCESS_RESOURCES.HOME,
+      role: level,
+      scope: 'web',
+    };
+  }
+
+  if (
+    accessControl.block_china_mainland_user_sensitive_pages &&
+    CHINA_MAINLAND_SENSITIVE_WEB_PATHS.has(path)
+  ) {
+    return {
+      kind: 'china_mainland_sensitive',
+      source: ACCESS_SOURCES.CHINA_MAINLAND,
+      resource: getRouteResourceKeys(path)[0] || '',
+      role: level,
+      scope: 'web',
+    };
+  }
+
+  return null;
+}
+
+export function isChinaMainlandRouteRestricted(status, pathname, role) {
+  return !!getChinaMainlandRouteRestrictionReason(status, pathname, role);
+}
+
+function getGlobalGeoRestrictionReason(status) {
+  const accessControl = status?.access_control;
+  if (accessControl?.web_policy_enabled === false) {
+    return null;
+  }
+  if (
+    accessControl?.block_china_mainland &&
+    accessControl?.request_from_china_mainland
+  ) {
+    return {
+      kind: 'geo_china_mainland',
+      source: ACCESS_SOURCES.CHINA_MAINLAND,
+      resource: ACCESS_RESOURCES.ALL,
+      role: 'all',
+      scope: 'web',
+    };
+  }
+  if (
+    accessControl?.block_european_union &&
+    accessControl?.request_from_european_union
+  ) {
+    return {
+      kind: 'geo_european_union',
+      source: ACCESS_SOURCES.EUROPEAN_UNION,
+      resource: ACCESS_RESOURCES.ALL,
+      role: 'all',
+      scope: 'web',
+    };
+  }
+  return null;
+}
+
+function getIdentityRestrictionReason(status, role) {
+  const accessControl = status?.access_control;
+  if (accessControl?.web_policy_enabled === false) {
+    return null;
+  }
+
+  const requestRole = getRequestRole(status, role);
+  const level = getRoleAccessLevel(requestRole);
+  if (requestRole >= USER_ROLES.AUDIT_ADMIN) {
+    if (accessControl?.block_admins) {
+      return {
+        kind: 'identity_admins',
+        source: ACCESS_SOURCES.ALL,
+        resource: ACCESS_RESOURCES.ALL,
+        role: level,
+        scope: 'web',
+      };
+    }
+    return null;
+  }
+  if (requestRole >= USER_ROLES.COMMON) {
+    if (accessControl?.block_users) {
+      return {
+        kind: 'identity_users',
+        source: ACCESS_SOURCES.ALL,
+        resource: ACCESS_RESOURCES.ALL,
+        role: level,
+        scope: 'web',
+      };
+    }
+    return null;
+  }
+  if (accessControl?.block_guests) {
+    return {
+      kind: 'identity_guests',
+      source: ACCESS_SOURCES.ALL,
+      resource: ACCESS_RESOURCES.ALL,
+      role: level,
+      scope: 'web',
+    };
+  }
+  return null;
+}
+
+export function getRouteAccessRestrictionReason(status, pathname, role) {
+  const keys = getRouteResourceKeys(pathname);
+  const sourceResourceReason = sourceResourceRestrictionReason(
+    status,
+    keys,
+    role,
+  );
+  let resourceReason = null;
+  for (const key of keys) {
+    resourceReason = resourceRestrictionReason(status, key, role);
+    if (resourceReason) break;
   }
 
   return (
-    accessControl.block_china_mainland_user_sensitive_pages &&
-    CHINA_MAINLAND_SENSITIVE_WEB_PATHS.has(path)
+    getGlobalGeoRestrictionReason(status) ||
+    roleGeoRestrictionReason(status, role) ||
+    sourceResourceReason ||
+    getChinaMainlandRouteRestrictionReason(status, pathname, role) ||
+    resourceReason ||
+    getIdentityRestrictionReason(status, role)
   );
 }
 
 export function isRouteAccessRestricted(status, pathname, role) {
-  return (
-    isRouteResourceRestricted(status, pathname, role) ||
-    isChinaMainlandRouteRestricted(status, pathname)
-  );
+  return !!getRouteAccessRestrictionReason(status, pathname, role);
 }
 
 export function getSystemName() {
