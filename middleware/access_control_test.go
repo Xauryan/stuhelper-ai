@@ -120,6 +120,109 @@ func TestAccessControlBlocksEuropeanUnionHeader(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), "访问受限")
 }
 
+func TestAccessControlRoleGeoRuleBlocksChinaMainlandUserOnly(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.RoleGeoRules = map[string]access_setting.RoleGeoAccessRule{
+			access_setting.RoleGeoSourceChinaMainland: {
+				User: boolPtr(true),
+			},
+		}
+	})
+
+	header := map[string]string{"EO-Client-IPCountry": "CN"}
+	userRole := common.RoleCommonUser
+	userRecorder := performAccessControlRequestWithRole(AccessPolicyScopeWeb, header, "web", &userRole)
+	require.Equal(t, http.StatusForbidden, userRecorder.Code)
+
+	adminRole := common.RoleAdminUser
+	adminRecorder := performAccessControlRequestWithRole(AccessPolicyScopeWeb, header, "web", &adminRole)
+	require.Equal(t, http.StatusOK, adminRecorder.Code)
+
+	usUserRecorder := performAccessControlRequestWithRole(AccessPolicyScopeWeb, map[string]string{
+		"EO-Client-IPCountry": "US",
+	}, "web", &userRole)
+	require.Equal(t, http.StatusOK, usUserRecorder.Code)
+}
+
+func TestAccessControlRoleGeoRuleBlocksEuropeanUnionGuest(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.RoleGeoRules = map[string]access_setting.RoleGeoAccessRule{
+			access_setting.RoleGeoSourceEuropeanUnion: {
+				Guest: boolPtr(true),
+			},
+		}
+	})
+
+	guestRecorder := performAccessControlRequest(AccessPolicyScopeWeb, map[string]string{
+		"CloudFront-Viewer-Country": "DE",
+	}, "web")
+	require.Equal(t, http.StatusForbidden, guestRecorder.Code)
+
+	userRole := common.RoleCommonUser
+	userRecorder := performAccessControlRequestWithRole(AccessPolicyScopeWeb, map[string]string{
+		"CloudFront-Viewer-Country": "DE",
+	}, "web", &userRole)
+	require.Equal(t, http.StatusOK, userRecorder.Code)
+}
+
+func TestAccessControlRoleGeoRuleBlocksAllSourceAuditAdminOnly(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.APIPolicyEnabled = true
+		setting.RoleGeoRules = map[string]access_setting.RoleGeoAccessRule{
+			access_setting.RoleGeoSourceAll: {
+				AuditAdmin: boolPtr(true),
+			},
+		}
+	})
+
+	auditRole := common.RoleAuditAdminUser
+	auditRecorder := performAccessControlRequestWithRole(AccessPolicyScopeAPI, nil, "api", &auditRole)
+	require.Equal(t, http.StatusForbidden, auditRecorder.Code)
+
+	adminRole := common.RoleAdminUser
+	adminRecorder := performAccessControlRequestWithRole(AccessPolicyScopeAPI, nil, "api", &adminRole)
+	require.Equal(t, http.StatusOK, adminRecorder.Code)
+}
+
+func TestAccessControlRoleGeoRuleBlocksUnknownCountryGuest(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.WebPolicyEnabled = true
+		setting.RoleGeoRules = map[string]access_setting.RoleGeoAccessRule{
+			access_setting.RoleGeoSourceUnknown: {
+				Guest: boolPtr(true),
+			},
+		}
+	})
+
+	unknownRecorder := performAccessControlRequest(AccessPolicyScopeWeb, nil, "web")
+	require.Equal(t, http.StatusForbidden, unknownRecorder.Code)
+
+	knownRecorder := performAccessControlRequest(AccessPolicyScopeWeb, map[string]string{
+		"EO-Client-IPCountry": "US",
+	}, "web")
+	require.Equal(t, http.StatusOK, knownRecorder.Code)
+}
+
+func TestAccessControlRoleGeoRuleDefersCredentialedAPIUntilAuth(t *testing.T) {
+	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
+		setting.APIPolicyEnabled = true
+		setting.RoleGeoRules = map[string]access_setting.RoleGeoAccessRule{
+			access_setting.RoleGeoSourceChinaMainland: {
+				Guest: boolPtr(true),
+			},
+		}
+	})
+
+	recorder := performAccessControlRequest(AccessPolicyScopeAPI, map[string]string{
+		"EO-Client-IPCountry": "CN",
+		"Authorization":       "Bearer sk-test",
+	}, "api")
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
 func TestAccessControlBlocksAPIGuestWithoutCredential(t *testing.T) {
 	withAccessControlSetting(t, func(setting *access_setting.AccessControlSetting) {
 		setting.APIPolicyEnabled = true

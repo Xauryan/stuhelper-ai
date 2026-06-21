@@ -144,6 +144,7 @@ func GetStatus(c *gin.Context) {
 			"api_policy_enabled":                        accessControlSetting.APIPolicyEnabled,
 			"block_china_mainland_homepage":             accessControlSetting.BlockChinaMainlandHomepage,
 			"block_china_mainland_user_sensitive_pages": accessControlSetting.BlockChinaMainlandUserSensitivePages,
+			"role_geo_rules":                            accessControlSetting.RoleGeoRules,
 			"resource_rules":                            accessControlSetting.ResourceRules,
 			"resource_access":                           middleware.ResourceAccessForRole(currentRole),
 			"resource_keys":                             middleware.AccessResourceKeys(),

@@ -29,6 +29,7 @@ import {
   TagInput,
   Spin,
   Card,
+  Collapse,
   Checkbox,
   Radio,
   Select,
@@ -82,6 +83,29 @@ const ACCESS_CONTROL_ROLES = [
   { key: 'audit_admin', label: '审计管理员' },
   { key: 'admin', label: '管理员' },
   { key: 'root', label: '超级管理员' },
+];
+
+const ACCESS_ROLE_GEO_SOURCES = [
+  {
+    key: 'all',
+    label: '全部来源',
+    description: '不区分来源 IP 或国家地区，按角色限制访问。',
+  },
+  {
+    key: 'china_mainland',
+    label: '中国大陆 IP',
+    description: '国家代码识别为 CN 的请求。',
+  },
+  {
+    key: 'european_union',
+    label: '欧盟 IP',
+    description: '国家代码识别为欧盟成员国的请求。',
+  },
+  {
+    key: 'unknown_country',
+    label: '未知地区',
+    description: '无法通过可信代理头或 MMDB 识别国家代码的请求。',
+  },
 ];
 
 const ACCESS_RESOURCE_GROUPS = [
@@ -225,10 +249,97 @@ const parseAccessResourceRules = (value) => {
   }
 };
 
+const parseAccessRoleGeoRules = (value) => {
+  if (!value) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+      return {};
+    }
+    return parsed;
+  } catch (e) {
+    return {};
+  }
+};
+
 const accessRuleAllows = (rules, resourceKey, roleKey) =>
   rules?.[resourceKey]?.[roleKey] !== false;
 
 const serializeAccessResourceRules = (rules) => JSON.stringify(rules, null, 2);
+
+const accessRoleGeoBlocks = (rules, sourceKey, roleKey) =>
+  rules?.[sourceKey]?.[roleKey] === true;
+
+const serializeAccessRoleGeoRules = (rules) => JSON.stringify(rules, null, 2);
+
+const normalizeAccessRoleGeoRules = (rules) => {
+  const nextRules = {};
+  Object.entries(rules || {}).forEach(([sourceKey, sourceRules]) => {
+    if (!sourceRules || Array.isArray(sourceRules)) return;
+    if (typeof sourceRules !== 'object') return;
+
+    const nextSourceRules = {};
+    ACCESS_CONTROL_ROLES.forEach((role) => {
+      if (sourceRules[role.key] === true) {
+        nextSourceRules[role.key] = true;
+      }
+    });
+    if (Object.keys(nextSourceRules).length > 0) {
+      nextRules[sourceKey] = nextSourceRules;
+    }
+  });
+  return nextRules;
+};
+
+const mergeLegacyAccessRoleGeoRules = (rules, values) => {
+  const nextRules = normalizeAccessRoleGeoRules(rules);
+  const setBlocked = (sourceKey, roleKey) => {
+    nextRules[sourceKey] = {
+      ...(nextRules[sourceKey] || {}),
+      [roleKey]: true,
+    };
+  };
+  const setAllRolesBlocked = (sourceKey) => {
+    ACCESS_CONTROL_ROLES.forEach((role) => setBlocked(sourceKey, role.key));
+  };
+
+  if (toBoolean(values['access_control.block_china_mainland'])) {
+    setAllRolesBlocked('china_mainland');
+  }
+  if (toBoolean(values['access_control.block_european_union'])) {
+    setAllRolesBlocked('european_union');
+  }
+  if (toBoolean(values['access_control.block_guests'])) {
+    setBlocked('all', 'guest');
+  }
+  if (toBoolean(values['access_control.block_users'])) {
+    setBlocked('all', 'user');
+  }
+  if (toBoolean(values['access_control.block_admins'])) {
+    setBlocked('all', 'audit_admin');
+    setBlocked('all', 'admin');
+    setBlocked('all', 'root');
+  }
+
+  return nextRules;
+};
+
+const roleGeoSourceBlocksEveryRole = (rules, sourceKey) =>
+  ACCESS_CONTROL_ROLES.every((role) =>
+    accessRoleGeoBlocks(rules, sourceKey, role.key),
+  );
+
+const legacyAccessFlagsFromRoleGeoRules = (rules) => ({
+  blockChinaMainland: roleGeoSourceBlocksEveryRole(rules, 'china_mainland'),
+  blockEuropeanUnion: roleGeoSourceBlocksEveryRole(rules, 'european_union'),
+  blockGuests: accessRoleGeoBlocks(rules, 'all', 'guest'),
+  blockUsers: accessRoleGeoBlocks(rules, 'all', 'user'),
+  blockAdmins:
+    accessRoleGeoBlocks(rules, 'all', 'audit_admin') &&
+    accessRoleGeoBlocks(rules, 'all', 'admin') &&
+    accessRoleGeoBlocks(rules, 'all', 'root'),
+});
 
 const SystemSetting = () => {
   const { t } = useTranslation();
@@ -306,6 +417,7 @@ const SystemSetting = () => {
     'access_control.block_users': '',
     'access_control.block_admins': '',
     'access_control.geoip_database_path': '',
+    'access_control.role_geo_rules': '',
     'access_control.resource_rules': '',
   });
 
@@ -323,6 +435,7 @@ const SystemSetting = () => {
   const [domainList, setDomainList] = useState([]);
   const [ipList, setIpList] = useState([]);
   const [allowedPorts, setAllowedPorts] = useState([]);
+  const [accessRoleGeoRules, setAccessRoleGeoRules] = useState({});
   const [accessResourceRules, setAccessResourceRules] = useState({});
 
   const getOptions = async () => {
@@ -345,6 +458,16 @@ const SystemSetting = () => {
               item.value = item.value || '{}';
             }
             setAccessResourceRules(parseAccessResourceRules(item.value));
+            break;
+          case 'access_control.role_geo_rules':
+            try {
+              item.value = item.value
+                ? JSON.stringify(JSON.parse(item.value), null, 2)
+                : '{}';
+            } catch (e) {
+              item.value = item.value || '{}';
+            }
+            setAccessRoleGeoRules(parseAccessRoleGeoRules(item.value));
             break;
           case 'EmailDomainWhitelist':
             setEmailDomainWhitelist(item.value ? item.value.split(',') : []);
@@ -432,10 +555,23 @@ const SystemSetting = () => {
         }
         newInputs[item.key] = item.value;
       });
+      const mergedAccessRoleGeoRules = mergeLegacyAccessRoleGeoRules(
+        parseAccessRoleGeoRules(newInputs['access_control.role_geo_rules']),
+        newInputs,
+      );
+      const mergedAccessRoleGeoRulesValue = serializeAccessRoleGeoRules(
+        mergedAccessRoleGeoRules,
+      );
+      newInputs['access_control.role_geo_rules'] =
+        mergedAccessRoleGeoRulesValue;
+      setAccessRoleGeoRules(mergedAccessRoleGeoRules);
       setInputs(newInputs);
       setOriginInputs(newInputs);
       if (newInputs['access_control.resource_rules'] === undefined) {
         setAccessResourceRules({});
+      }
+      if (newInputs['access_control.role_geo_rules'] === undefined) {
+        setAccessRoleGeoRules({});
       }
       // 同步模式布尔到本地状态
       if (
@@ -623,7 +759,9 @@ const SystemSetting = () => {
   };
 
   const submitAccessControl = async () => {
+    const roleGeoRules = normalizeAccessRoleGeoRules(accessRoleGeoRules || {});
     const resourceRules = accessResourceRules || {};
+    const legacyFlags = legacyAccessFlagsFromRoleGeoRules(roleGeoRules);
 
     const options = [
       {
@@ -636,11 +774,11 @@ const SystemSetting = () => {
       },
       {
         key: 'access_control.block_china_mainland',
-        value: !!inputs['access_control.block_china_mainland'],
+        value: legacyFlags.blockChinaMainland,
       },
       {
         key: 'access_control.block_european_union',
-        value: !!inputs['access_control.block_european_union'],
+        value: legacyFlags.blockEuropeanUnion,
       },
       {
         key: 'access_control.block_china_mainland_homepage',
@@ -653,19 +791,23 @@ const SystemSetting = () => {
       },
       {
         key: 'access_control.block_guests',
-        value: !!inputs['access_control.block_guests'],
+        value: legacyFlags.blockGuests,
       },
       {
         key: 'access_control.block_users',
-        value: !!inputs['access_control.block_users'],
+        value: legacyFlags.blockUsers,
       },
       {
         key: 'access_control.block_admins',
-        value: !!inputs['access_control.block_admins'],
+        value: legacyFlags.blockAdmins,
       },
       {
         key: 'access_control.geoip_database_path',
         value: inputs['access_control.geoip_database_path'] || '',
+      },
+      {
+        key: 'access_control.role_geo_rules',
+        value: JSON.stringify(roleGeoRules),
       },
       {
         key: 'access_control.resource_rules',
@@ -673,6 +815,153 @@ const SystemSetting = () => {
       },
     ];
     await updateOptions(options);
+  };
+
+  const syncAccessRoleGeoRules = (nextRules) => {
+    const normalizedRules = normalizeAccessRoleGeoRules(nextRules);
+    const nextValue = serializeAccessRoleGeoRules(normalizedRules);
+    const legacyFlags = legacyAccessFlagsFromRoleGeoRules(normalizedRules);
+    setAccessRoleGeoRules(normalizedRules);
+    setInputs((prev) => ({
+      ...prev,
+      'access_control.role_geo_rules': nextValue,
+      'access_control.block_china_mainland': legacyFlags.blockChinaMainland,
+      'access_control.block_european_union': legacyFlags.blockEuropeanUnion,
+      'access_control.block_guests': legacyFlags.blockGuests,
+      'access_control.block_users': legacyFlags.blockUsers,
+      'access_control.block_admins': legacyFlags.blockAdmins,
+    }));
+    formApiRef.current?.setValue?.('access_control.role_geo_rules', nextValue);
+    formApiRef.current?.setValue?.(
+      'access_control.block_china_mainland',
+      legacyFlags.blockChinaMainland,
+    );
+    formApiRef.current?.setValue?.(
+      'access_control.block_european_union',
+      legacyFlags.blockEuropeanUnion,
+    );
+    formApiRef.current?.setValue?.(
+      'access_control.block_guests',
+      legacyFlags.blockGuests,
+    );
+    formApiRef.current?.setValue?.(
+      'access_control.block_users',
+      legacyFlags.blockUsers,
+    );
+    formApiRef.current?.setValue?.(
+      'access_control.block_admins',
+      legacyFlags.blockAdmins,
+    );
+  };
+
+  const setAccessRoleGeoBlocked = (sourceKey, roleKey, blocked) => {
+    const nextRules = { ...(accessRoleGeoRules || {}) };
+    const nextSourceRules = { ...(nextRules[sourceKey] || {}) };
+    if (blocked) {
+      nextSourceRules[roleKey] = true;
+    } else {
+      delete nextSourceRules[roleKey];
+    }
+
+    if (Object.keys(nextSourceRules).length > 0) {
+      nextRules[sourceKey] = nextSourceRules;
+    } else {
+      delete nextRules[sourceKey];
+    }
+    syncAccessRoleGeoRules(nextRules);
+  };
+
+  const setAccessRoleGeoSourceBlocked = (sourceKey, blocked) => {
+    const nextRules = { ...(accessRoleGeoRules || {}) };
+    if (blocked) {
+      nextRules[sourceKey] = ACCESS_CONTROL_ROLES.reduce(
+        (rules, role) => ({
+          ...rules,
+          [role.key]: true,
+        }),
+        {},
+      );
+    } else {
+      delete nextRules[sourceKey];
+    }
+    syncAccessRoleGeoRules(nextRules);
+  };
+
+  const resetAccessRoleGeoRules = () => {
+    syncAccessRoleGeoRules({});
+  };
+
+  const renderAccessRoleGeoMatrix = () => {
+    const rules = accessRoleGeoRules || {};
+    return (
+      <div
+        className='overflow-x-auto rounded-md border'
+        style={{ borderColor: 'var(--semi-color-border)' }}
+      >
+        <div
+          className='grid min-w-[820px] items-center border-b px-3 py-2 text-sm font-medium'
+          style={{
+            gridTemplateColumns: 'minmax(220px, 1.3fr) repeat(5, 112px)',
+            borderColor: 'var(--semi-color-border)',
+            background: 'var(--semi-color-fill-0)',
+          }}
+        >
+          <div>{t('来源 / 角色')}</div>
+          {ACCESS_CONTROL_ROLES.map((role) => (
+            <div key={role.key}>{t(role.label)}</div>
+          ))}
+        </div>
+        {ACCESS_ROLE_GEO_SOURCES.map((source) => {
+          const allBlocked = ACCESS_CONTROL_ROLES.every((role) =>
+            accessRoleGeoBlocks(rules, source.key, role.key),
+          );
+          const someBlocked = ACCESS_CONTROL_ROLES.some((role) =>
+            accessRoleGeoBlocks(rules, source.key, role.key),
+          );
+          return (
+            <div
+              key={source.key}
+              className='grid min-w-[820px] items-center border-b px-3 py-2 text-sm last:border-b-0'
+              style={{
+                gridTemplateColumns: 'minmax(220px, 1.3fr) repeat(5, 112px)',
+                borderColor: 'var(--semi-color-border)',
+              }}
+            >
+              <div className='min-w-0 pr-3'>
+                <Checkbox
+                  checked={allBlocked}
+                  indeterminate={!allBlocked && someBlocked}
+                  onChange={(event) =>
+                    setAccessRoleGeoSourceBlocked(
+                      source.key,
+                      event.target.checked,
+                    )
+                  }
+                >
+                  <span className='font-medium'>{t(source.label)}</span>
+                </Checkbox>
+                <div className='truncate pl-6 text-xs text-gray-500'>
+                  {source.key} · {t(source.description)}
+                </div>
+              </div>
+              {ACCESS_CONTROL_ROLES.map((role) => (
+                <Checkbox
+                  key={`${source.key}:${role.key}`}
+                  checked={accessRoleGeoBlocks(rules, source.key, role.key)}
+                  onChange={(event) =>
+                    setAccessRoleGeoBlocked(
+                      source.key,
+                      role.key,
+                      event.target.checked,
+                    )
+                  }
+                />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   const syncAccessResourceRules = (nextRules) => {
@@ -1425,35 +1714,29 @@ const SystemSetting = () => {
                     </Col>
                   </Row>
 
-                  <Row
-                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
-                    style={{ marginTop: 16 }}
-                  >
-                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-                      <Form.Checkbox
-                        field='access_control.block_china_mainland'
-                        noLabel
+                  <div style={{ marginTop: 20 }}>
+                    <div className='mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between'>
+                      <div>
+                        <Text strong>{t('来源角色限制矩阵')}</Text>
+                        <Text
+                          type='secondary'
+                          style={{ display: 'block', marginTop: 4 }}
+                        >
+                          {t(
+                            '勾选表示限制该角色从对应来源访问；未勾选表示不因该来源和角色组合拦截。行标题可批量限制或放开该来源的全部角色。',
+                          )}
+                        </Text>
+                      </div>
+                      <Button
+                        type='tertiary'
+                        theme='outline'
+                        onClick={resetAccessRoleGeoRules}
                       >
-                        {t('禁止中国大陆 IP 访问')}
-                      </Form.Checkbox>
-                    </Col>
-                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-                      <Form.Checkbox
-                        field='access_control.block_european_union'
-                        noLabel
-                      >
-                        {t('禁止欧盟国家 IP 访问')}
-                      </Form.Checkbox>
-                    </Col>
-                  </Row>
-                  <Text
-                    type='secondary'
-                    style={{ display: 'block', marginTop: 8 }}
-                  >
-                    {t(
-                      '上方地域封禁为全局策略，会同时影响游客、普通用户和管理员；如需管理员不受影响，请使用下方中国大陆细粒度策略。',
-                    )}
-                  </Text>
+                        {t('清空来源限制')}
+                      </Button>
+                    </div>
+                    {renderAccessRoleGeoMatrix()}
+                  </div>
 
                   <Row
                     gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
@@ -1485,67 +1768,42 @@ const SystemSetting = () => {
                     )}
                   </Text>
 
-                  <div style={{ marginTop: 20 }}>
-                    <div className='mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between'>
-                      <div>
-                        <Text strong>{t('资源访问矩阵')}</Text>
+                  <Collapse keepDOM style={{ marginTop: 20 }}>
+                    <Collapse.Panel
+                      header={t('高级资源访问覆盖')}
+                      itemKey='resource-rules'
+                    >
+                      <div className='mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between'>
                         <Text
                           type='secondary'
                           style={{ display: 'block', marginTop: 4 }}
                         >
                           {t(
-                            '勾选表示允许访问，取消勾选表示拒绝访问；分组表头可按身份批量切换。字段缺失默认允许，保存时会写入原 access_control.resource_rules 配置。',
+                            '资源覆盖用于按页面或接口资源单独允许/拒绝访问，和来源 IP 限制是两类策略。勾选表示允许访问，取消勾选表示拒绝访问；字段缺失默认允许。',
                           )}
                         </Text>
+                        <div className='flex flex-wrap gap-2'>
+                          <Button
+                            type='tertiary'
+                            theme='outline'
+                            onClick={() =>
+                              applyAccessPreset(DEFAULT_ACCESS_RESOURCE_RULES)
+                            }
+                          >
+                            {t('应用常用限制')}
+                          </Button>
+                          <Button
+                            type='tertiary'
+                            theme='outline'
+                            onClick={resetAccessResourceRules}
+                          >
+                            {t('全部允许')}
+                          </Button>
+                        </div>
                       </div>
-                      <div className='flex flex-wrap gap-2'>
-                        <Button
-                          type='tertiary'
-                          theme='outline'
-                          onClick={() =>
-                            applyAccessPreset(DEFAULT_ACCESS_RESOURCE_RULES)
-                          }
-                        >
-                          {t('应用常用限制')}
-                        </Button>
-                        <Button
-                          type='tertiary'
-                          theme='outline'
-                          onClick={resetAccessResourceRules}
-                        >
-                          {t('全部允许')}
-                        </Button>
-                      </div>
-                    </div>
-                    {renderAccessResourceMatrix()}
-                  </div>
-
-                  <Row
-                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
-                    style={{ marginTop: 16 }}
-                  >
-                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
-                      <Form.Checkbox
-                        field='access_control.block_guests'
-                        noLabel
-                      >
-                        {t('禁止游客访问')}
-                      </Form.Checkbox>
-                    </Col>
-                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
-                      <Form.Checkbox field='access_control.block_users' noLabel>
-                        {t('禁止普通用户访问')}
-                      </Form.Checkbox>
-                    </Col>
-                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
-                      <Form.Checkbox
-                        field='access_control.block_admins'
-                        noLabel
-                      >
-                        {t('禁止管理员访问')}
-                      </Form.Checkbox>
-                    </Col>
-                  </Row>
+                      {renderAccessResourceMatrix()}
+                    </Collapse.Panel>
+                  </Collapse>
 
                   <Row
                     gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}

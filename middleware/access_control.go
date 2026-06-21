@@ -97,6 +97,11 @@ func enforceAccessPolicy(c *gin.Context, scope AccessPolicyScope) bool {
 		return false
 	}
 
+	if reason, ok := blockedByRoleGeoRule(c, setting, scope); ok {
+		abortAccessDenied(c, scope, reason)
+		return false
+	}
+
 	if reason, ok := blockedByScopedChinaMainlandPolicy(c, setting, scope); ok {
 		abortAccessDenied(c, scope, reason)
 		return false
@@ -144,6 +149,62 @@ func blockedByGeo(c *gin.Context, setting *access_setting.AccessControlSetting) 
 		return fmt.Sprintf("access from the European Union is blocked (%s)", country.Source), true
 	}
 	return "", false
+}
+
+func blockedByRoleGeoRule(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {
+	if setting == nil || len(setting.RoleGeoRules) == 0 {
+		return "", false
+	}
+
+	role, ok := currentRequestRole(c)
+	if !ok {
+		if scope == AccessPolicyScopeAPI && hasAPIAuthCredential(c) {
+			return "", false
+		}
+		role = common.RoleGuestUser
+	}
+
+	sources := roleGeoSourcesForRequest(c)
+	roleLevel := roleAccessLevel(role)
+	for _, source := range sources {
+		if roleGeoRuleBlocksRole(setting.RoleGeoRules[source], roleLevel) {
+			return fmt.Sprintf("access from %s is blocked for %s", source, roleLevel), true
+		}
+	}
+	return "", false
+}
+
+func roleGeoSourcesForRequest(c *gin.Context) []string {
+	sources := []string{access_setting.RoleGeoSourceAll}
+	country := requestCountry(c)
+	if !country.Known {
+		return append(sources, access_setting.RoleGeoSourceUnknown)
+	}
+
+	if access_setting.IsChinaMainlandCountryCode(country.CountryCode) {
+		sources = append(sources, access_setting.RoleGeoSourceChinaMainland)
+	}
+	if access_setting.IsEuropeanUnionCountryCode(country.CountryCode) {
+		sources = append(sources, access_setting.RoleGeoSourceEuropeanUnion)
+	}
+	return sources
+}
+
+func roleGeoRuleBlocksRole(rule access_setting.RoleGeoAccessRule, roleLevel string) bool {
+	var value *bool
+	switch roleLevel {
+	case "root":
+		value = rule.Root
+	case "admin":
+		value = rule.Admin
+	case "audit_admin":
+		value = rule.AuditAdmin
+	case "user":
+		value = rule.User
+	default:
+		value = rule.Guest
+	}
+	return value != nil && *value
 }
 
 func blockedByScopedChinaMainlandPolicy(c *gin.Context, setting *access_setting.AccessControlSetting, scope AccessPolicyScope) (string, bool) {

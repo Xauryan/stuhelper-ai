@@ -18,11 +18,12 @@ StuHelper AI 支持在服务端按请求来源国家/地区、访问身份和资
 | `access_control.block_users`                               | 禁止普通用户访问。API token 请求按 token 所属用户角色判断。                                                                                                                                                   | `false` |
 | `access_control.block_admins`                              | 禁止管理员访问。包含审计管理员、管理员和超级管理员。                                                                                                                                                          | `false` |
 | `access_control.geoip_database_path`                       | 本地 MaxMind 兼容 MMDB 国家库路径。留空时只使用代理注入的国家代码请求头。                                                                                                                                     | 空      |
-| `access_control.resource_rules`                            | 资源级访问矩阵。按资源 key 配置 `guest`、`user`、`audit_admin`、`admin`、`root` 五类身份是否允许访问；字段缺失表示默认允许。                                                                                  | `{}`    |
+| `access_control.role_geo_rules`                            | 来源角色限制矩阵。按来源 key 配置 `guest`、`user`、`audit_admin`、`admin`、`root` 五类身份是否被限制访问；字段为 `true` 表示限制，字段缺失表示不因该来源和角色组合拦截。                                       | `{}`    |
+| `access_control.resource_rules`                            | 高级资源访问覆盖。按资源 key 配置 `guest`、`user`、`audit_admin`、`admin`、`root` 五类身份是否允许访问；字段缺失表示默认允许。                                                                                | `{}`    |
 
 ## 身份层级
 
-资源级规则使用五类身份字段：
+来源角色限制和资源级规则都使用五类身份字段：
 
 | 字段          | 角色                                                                                                                               | 后端角色值 |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------- |
@@ -32,17 +33,69 @@ StuHelper AI 支持在服务端按请求来源国家/地区、访问身份和资
 | `admin`       | 管理员。                                                                                                                           | `10`       |
 | `root`        | 超级管理员。                                                                                                                       | `100`      |
 
-字段没有继承关系，必须按身份单独配置。例如只写 `"admin": false` 只会禁止管理员，
-不会自动禁止超级管理员；如需超级管理员也禁止，必须同时写 `"root": false`。
+字段没有继承关系，必须按身份单独配置。例如来源限制里只写 `"admin": true` 只会禁止管理员，
+不会自动禁止超级管理员；如需超级管理员也禁止，必须同时写 `"root": true`。资源覆盖里只写
+`"admin": false` 只会拒绝管理员，不会自动拒绝超级管理员。
 
-## 资源级规则
+## 来源角色限制矩阵
 
-classic 后台的 `系统设置 -> 访问限制 -> 资源访问矩阵` 提供按资源分组的权限勾选界面：
+classic 后台的 `系统设置 -> 访问限制 -> 来源角色限制矩阵` 是访问限制的主界面：
+行是来源地区/IP 类别，列是游客、普通用户、审计管理员、管理员和超级管理员。
+勾选表示限制该角色从对应来源访问，未勾选表示不因该来源和角色组合拦截。
+行标题复选框可以批量限制或放开该来源的全部角色。
+
+该界面保存时写入 `access_control.role_geo_rules`。底层配置是 JSON 对象，第一层 key 是来源，
+第二层 key 是身份字段。语义如下：
+
+- 没有配置某个来源：默认不因该来源拦截。
+- 配置了来源但缺少某个身份字段：该身份默认不因该来源拦截。
+- 某身份字段为 `true`：拒绝该身份从该来源访问。
+
+内置来源 key：
+
+| 来源 key           | 覆盖范围                                                                 |
+| ------------------ | ------------------------------------------------------------------------ |
+| `all`              | 全部来源，不区分 IP 或国家地区。                                         |
+| `china_mainland`   | 识别为中国大陆的请求，国家代码为 `CN`。                                  |
+| `european_union`   | 识别为欧盟成员国的请求。                                                 |
+| `unknown_country`  | 无法通过可信代理头或 MMDB 识别国家代码的请求。                           |
+
+示例：禁止中国大陆 IP 的普通用户访问，禁止欧盟 IP 的游客访问，同时禁止全部来源的审计管理员访问：
+
+```json
+{
+  "china_mainland": {
+    "user": true
+  },
+  "european_union": {
+    "guest": true
+  },
+  "all": {
+    "audit_admin": true
+  }
+}
+```
+
+旧配置的关系：
+
+- `block_china_mainland=true` 等价于 `china_mainland` 行五类身份全部限制。
+- `block_european_union=true` 等价于 `european_union` 行五类身份全部限制。
+- `block_guests=true` 等价于 `all.guest=true`。
+- `block_users=true` 等价于 `all.user=true`。
+- `block_admins=true` 等价于 `all.audit_admin=true`、`all.admin=true`、`all.root=true`。
+
+classic 后台读取设置时会把这些旧开关合并进来源角色矩阵；保存时会从矩阵反写旧开关，以保持
+旧版本配置和自动化脚本兼容。如果只限制某个地区的部分角色，例如只限制中国大陆普通用户，
+对应旧全局地域开关会保存为 `false`，实际拦截由 `access_control.role_geo_rules` 执行。
+
+## 高级资源访问覆盖
+
+classic 后台的 `系统设置 -> 访问限制 -> 高级资源访问覆盖` 提供按资源分组的权限勾选界面：
 行是资源，列是游客、普通用户、审计管理员、管理员和超级管理员。勾选表示允许访问，
 取消勾选表示拒绝访问；每个分组标题行上的复选框可以按身份批量切换该分组下全部资源。
 “全部允许”会清空资源级覆盖规则，“应用常用限制”会写入首页、令牌、钱包和账单的常见限制模板。
 
-该界面保存时仍写入 `access_control.resource_rules`。底层配置是 JSON 对象，第一层 key 是资源，
+该界面保存时写入 `access_control.resource_rules`。底层配置是 JSON 对象，第一层 key 是资源，
 第二层 key 是身份字段。语义如下：
 
 - 没有配置某个资源：默认允许。
@@ -144,7 +197,9 @@ classic 前端会从 `/api/status` 读取 `access_control.resource_rules` 和
    `X-Vercel-IP-Country`、`X-Country-Code`、`X-Geo-Country`。
 2. 如果没有可用请求头，并且配置了 `access_control.geoip_database_path`，后端会用
    `gin.Context.ClientIP()` 得到客户端 IP，再查询本地 MMDB 文件。
-3. 如果无法识别国家代码，地域策略不拦截该请求，只继续执行身份策略。
+3. 如果无法识别国家代码，`block_china_mainland`、`block_european_union`、`china_mainland`
+   和 `european_union` 来源策略都不会命中；如需限制这类请求，可在来源角色限制矩阵中配置
+   `unknown_country`。
 
 腾讯云 EdgeOne 推荐在 EO 控制台开启“客户端 IP 地理位置头部”回源，或通过规则引擎修改
 HTTP 回源请求头，把客户端 IP 所在国家/地区写入请求头。头部名称推荐使用
@@ -169,8 +224,8 @@ ISO 3166-1 alpha-2；如需自定义回源头，可参考腾讯云 EdgeOne 的
 - `access_control.block_china_mainland_homepage`
 - `access_control.block_china_mainland_user_sensitive_pages`
 
-不要为该需求启用 `access_control.block_china_mainland`。该旧开关是全局地域封禁，会先于细粒度
-策略生效，并且会影响管理员。
+不要为该需求启用 `access_control.block_china_mainland`，也不要把来源矩阵的 `china_mainland`
+整行全部勾选。两者都是全局地域封禁语义，会先于细粒度策略生效，并且会影响管理员。
 
 细粒度策略的 Web 受限路径：
 
@@ -200,20 +255,21 @@ ISO 3166-1 alpha-2；如需自定义回源头，可参考腾讯云 EdgeOne 的
 细粒度策略不会限制 `/console/log`、`/api/log/self` 等日志页面和日志接口。支付平台回调接口
 例如 `/api/subscription/epay/notify` 也不会因为该策略被拦截。
 
-`/api/status` 会返回当前请求的 `access_control` 识别结果，classic 前端据此隐藏受限菜单项并在
-客户端路由显示 403；真正的访问控制仍在服务端中间件执行。
+`/api/status` 会返回当前请求的 `access_control` 识别结果，包括 `role_geo_rules`、
+`resource_rules`、当前角色和来源国家代码。classic 前端据此隐藏受限菜单项并在客户端路由
+显示 403；真正的访问控制仍在服务端中间件执行。
 
 ## 生效路径
 
 - Web 策略挂在 classic Web 路由层，影响静态资源、favicon、首页兜底页面和外置前端
   重定向路径。
 - API 策略分两段执行：
-  - `/api/*`、relay、视频和旧 dashboard API 路由会先执行地域限制和游客限制。
+  - `/api/*`、relay、视频和旧 dashboard API 路由会先执行地域限制、来源角色限制和游客限制。
     前置游客判断会识别 `Authorization`、`api-key`、`mj-api-secret`、`x-api-key`、
     `x-goog-api-key`、WebSocket `Sec-WebSocket-Protocol` 中的 OpenAI realtime key，以及
-    `key` query 参数；带这些凭据的请求会延后到认证完成后再按真实角色判断。
+    `key` query 参数；带这些凭据的请求会延后到认证完成后再按真实角色判断来源角色和身份限制。
   - `UserAuth`、`TokenAuth`、`TokenAuthReadOnly` 等认证完成后，会再次按真实用户角色执行
-    用户/管理员限制。
+    来源角色、用户和管理员限制。
 - Relay API 的拒绝响应保持 OpenAI 风格错误体；管理后台 API 和 Web 返回
   `{ "success": false, "message": "访问受限" }`。
 
@@ -223,8 +279,9 @@ ISO 3166-1 alpha-2；如需自定义回源头，可参考腾讯云 EdgeOne 的
   配置正确，否则 MMDB 查询可能拿到代理 IP。
 - `CF-IPCountry` 等请求头只有在入口代理可信时才应使用。不要允许外部客户端绕过代理直连
   后端并伪造这些请求头。
-- 启用 `block_users` 或 `block_admins` 前，应确认仍有不受该策略影响的管理入口，例如临时
-  保留 Web 策略关闭、API 策略关闭，或通过部署层临时改回 options 表。
+- 在来源角色矩阵中限制 `all.user`、`all.audit_admin`、`all.admin` 或 `all.root` 前，应确认仍有
+  不受该策略影响的管理入口，例如临时保留 Web 策略关闭、API 策略关闭，或通过部署层临时
+  改回 options 表。
 - 使用腾讯云 EdgeOne 时，优先使用 EO 注入的国家/地区请求头，应用本身不需要实时下载 IP
   数据库，也不应该在每次请求时联网查询 IP 归属地。
 - 如果没有可信代理头，可使用本地 MaxMind 兼容 MMDB 国家库作为兜底，例如 GeoLite2 Country
