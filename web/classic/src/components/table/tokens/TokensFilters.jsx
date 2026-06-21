@@ -27,6 +27,7 @@ const TokensFilters = ({
   searchTokens,
   loading,
   searching,
+  setShowColumnSelector,
   t,
 }) => {
   // Handle form reset and immediate search
@@ -96,6 +97,14 @@ const TokensFilters = ({
             size='small'
           >
             {t('重置')}
+          </Button>
+          <Button
+            type='tertiary'
+            onClick={() => setShowColumnSelector(true)}
+            className='flex-1 md:flex-initial md:w-auto'
+            size='small'
+          >
+            {t('列设置')}
           </Button>
         </div>
       </div>

@@ -26,7 +26,6 @@ import {
   Typography,
   Empty,
   Divider,
-  Avatar,
   Modal,
   Tag,
   Switch,
@@ -38,8 +37,48 @@ import {
 import { Plus, Edit, Trash2, Save, Settings } from 'lucide-react';
 import { API, showError, showSuccess } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
+import { TruncatedTag } from '../../../components/common/ui/RenderUtils';
 
 const { Text } = Typography;
+
+const API_INFO_COLOR_SWATCHES = {
+  blue: '#3b82f6',
+  green: '#22c55e',
+  cyan: '#06b6d4',
+  purple: '#a855f7',
+  pink: '#ec4899',
+  red: '#ef4444',
+  orange: '#f97316',
+  amber: '#f59e0b',
+  yellow: '#eab308',
+  lime: '#84cc16',
+  'light-green': '#4ade80',
+  teal: '#14b8a6',
+  'light-blue': '#38bdf8',
+  indigo: '#6366f1',
+  violet: '#8b5cf6',
+  grey: '#9ca3af',
+  slate: '#64748b',
+};
+
+const getApiInfoColor = (color) =>
+  API_INFO_COLOR_SWATCHES[color] || API_INFO_COLOR_SWATCHES.blue;
+
+const getSemiTagColor = (color) => (color === 'slate' ? 'grey' : color);
+
+const ApiInfoColorDot = ({ color }) => (
+  <span
+    aria-hidden='true'
+    style={{
+      display: 'inline-block',
+      width: 14,
+      height: 14,
+      borderRadius: '50%',
+      backgroundColor: getApiInfoColor(color),
+      boxShadow: 'inset 0 0 0 1px rgba(0, 0, 0, 0.08)',
+    }}
+  />
+);
 
 const SettingsAPIInfo = ({ options, refresh }) => {
   const { t } = useTranslation();
@@ -82,6 +121,7 @@ const SettingsAPIInfo = ({ options, refresh }) => {
     { value: 'indigo', label: 'indigo' },
     { value: 'violet', label: 'violet' },
     { value: 'grey', label: 'grey' },
+    { value: 'slate', label: 'slate' },
   ];
 
   const updateOption = async (key, value) => {
@@ -247,26 +287,43 @@ const SettingsAPIInfo = ({ options, refresh }) => {
       title: t('API地址'),
       dataIndex: 'url',
       render: (text, record) => (
-        <Tag color={record.color} shape='circle' style={{ maxWidth: '280px' }}>
+        <TruncatedTag
+          color={getSemiTagColor(record.color)}
+          shape='circle'
+          maxWidth={280}
+          tooltipContent={text}
+        >
           {text}
-        </Tag>
+        </TruncatedTag>
       ),
     },
     {
       title: t('线路描述'),
       dataIndex: 'route',
-      render: (text, record) => <Tag shape='circle'>{text}</Tag>,
+      render: (text, record) => (
+        <TruncatedTag shape='circle' maxWidth={160} tooltipContent={text}>
+          {text}
+        </TruncatedTag>
+      ),
     },
     {
       title: t('说明'),
       dataIndex: 'description',
       ellipsis: true,
-      render: (text, record) => <Tag shape='circle'>{text || '-'}</Tag>,
+      render: (text, record) => (
+        <TruncatedTag
+          shape='circle'
+          maxWidth={220}
+          tooltipContent={text || '-'}
+        >
+          {text || '-'}
+        </TruncatedTag>
+      ),
     },
     {
       title: t('颜色'),
       dataIndex: 'color',
-      render: (color) => <Avatar size='extra-extra-small' color={color} />,
+      render: (color) => <ApiInfoColorDot color={color} />,
     },
     {
       title: t('操作'),
@@ -481,7 +538,7 @@ const SettingsAPIInfo = ({ options, refresh }) => {
             onChange={(value) => setApiForm({ ...apiForm, color: value })}
             render={(option) => (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Avatar size='extra-extra-small' color={option.value} />
+                <ApiInfoColorDot color={option.value} />
                 {option.label}
               </div>
             )}

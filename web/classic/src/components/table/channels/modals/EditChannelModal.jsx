@@ -49,6 +49,7 @@ import {
   Col,
   Highlight,
   Input,
+  Select,
   Tooltip,
   Collapse,
   Dropdown,
@@ -86,6 +87,8 @@ import {
   IconBolt,
   IconSearch,
   IconChevronDown,
+  IconDelete,
+  IconPlus,
 } from '@douyinfe/semi-icons';
 
 const { Text, Title } = Typography;
@@ -130,6 +133,66 @@ const PARAM_OVERRIDE_OPERATIONS_TEMPLATE = {
 };
 
 const DEPRECATED_DOUBAO_CODING_PLAN_BASE_URL = 'doubao-coding-plan';
+const ADVANCED_CUSTOM_DEFAULT_ROUTE = {
+  incoming_path: '/v1/chat/completions',
+  upstream_path: '/v1/chat/completions',
+  converter: 'none',
+  auth_type: 'bearer',
+  auth_name: '',
+  auth_value: '{api_key}',
+};
+const ADVANCED_CUSTOM_CONVERTER_OPTIONS = [
+  { label: 'none', value: 'none' },
+  {
+    label: 'Anthropic Messages -> OpenAI Chat',
+    value: 'anthropic_messages_to_openai_chat_completions',
+  },
+  {
+    label: 'OpenAI Chat -> Anthropic Messages',
+    value: 'openai_chat_completions_to_anthropic_messages',
+  },
+  {
+    label: 'OpenAI Chat -> OpenAI Responses',
+    value: 'openai_chat_completions_to_openai_responses',
+  },
+  {
+    label: 'Gemini generateContent -> OpenAI Chat',
+    value: 'gemini_generate_content_to_openai_chat_completions',
+  },
+  {
+    label: 'OpenAI Chat -> Gemini generateContent',
+    value: 'openai_chat_completions_to_gemini_generate_content',
+  },
+];
+const ADVANCED_CUSTOM_AUTH_OPTIONS = [
+  { label: '默认 Bearer', value: 'bearer' },
+  { label: '不发送鉴权', value: 'none' },
+  { label: 'Header', value: 'header' },
+  { label: 'Query', value: 'query' },
+];
+const createAdvancedCustomRoute = (route = {}) => {
+  const auth = route.auth || {};
+  return {
+    ...ADVANCED_CUSTOM_DEFAULT_ROUTE,
+    incoming_path:
+      route.incoming_path || ADVANCED_CUSTOM_DEFAULT_ROUTE.incoming_path,
+    upstream_path:
+      route.upstream_path || ADVANCED_CUSTOM_DEFAULT_ROUTE.upstream_path,
+    converter: route.converter || ADVANCED_CUSTOM_DEFAULT_ROUTE.converter,
+    auth_type: auth.type || route.auth_type || 'bearer',
+    auth_name: auth.name || route.auth_name || '',
+    auth_value:
+      auth.value ||
+      route.auth_value ||
+      ADVANCED_CUSTOM_DEFAULT_ROUTE.auth_value,
+  };
+};
+const normalizeAdvancedCustomRoutes = (routes) => {
+  if (!Array.isArray(routes) || routes.length === 0) {
+    return [createAdvancedCustomRoute()];
+  }
+  return routes.map(createAdvancedCustomRoute);
+};
 
 // 支持并且已适配通过接口获取模型列表的渠道类型
 const MODEL_FETCHABLE_TYPES = new Set([
@@ -157,6 +220,8 @@ function type2secretPrompt(type) {
       return '按照如下格式输入: AccessKey|SecretAccessKey';
     case 57:
       return '请输入 ChatGPT Subscription (Codex) JSON 凭据（必须包含 access_token 和 account_id）';
+    case 58:
+      return '请输入 Advanced Custom 默认 API Key，可在路由鉴权值中使用 {api_key} 引用';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
@@ -217,6 +282,7 @@ const EditChannelModal = (props) => {
     upstream_model_update_last_check_time: 0,
     upstream_model_update_last_detected_models: [],
     upstream_model_update_ignored_models: '',
+    advanced_custom_routes: normalizeAdvancedCustomRoutes(),
   };
   const [batch, setBatch] = useState(false);
   const [multiToSingle, setMultiToSingle] = useState(false);
@@ -413,6 +479,14 @@ const EditChannelModal = (props) => {
     setAdvancedSettingsOpen(open);
     localStorage.setItem(ADVANCED_SETTINGS_EXPANDED_KEY, String(open));
   };
+  const revealAdvancedSettingsError = (message) => {
+    toggleAdvancedSettings(true);
+    showError(
+      message
+        ? `${message}\n${t('请在高级设置中修正后再提交')}`
+        : t('请在高级设置中修正后再提交'),
+    );
+  };
   const formContainerRef = useRef(null);
   const doubaoApiClickCountRef = useRef(0);
   const initialBaseUrlRef = useRef('');
@@ -551,6 +625,129 @@ const EditChannelModal = (props) => {
     handleInputChange('settings', settingsJson);
   };
 
+  const updateAdvancedCustomRoute = (index, key, value) => {
+    const routes = normalizeAdvancedCustomRoutes(inputs.advanced_custom_routes);
+    routes[index] = {
+      ...routes[index],
+      [key]: value,
+    };
+    handleInputChange('advanced_custom_routes', routes);
+  };
+
+  const addAdvancedCustomRoute = () => {
+    handleInputChange('advanced_custom_routes', [
+      ...normalizeAdvancedCustomRoutes(inputs.advanced_custom_routes),
+      createAdvancedCustomRoute(),
+    ]);
+  };
+
+  const removeAdvancedCustomRoute = (index) => {
+    const routes = normalizeAdvancedCustomRoutes(
+      inputs.advanced_custom_routes,
+    ).filter((_, routeIndex) => routeIndex !== index);
+    handleInputChange(
+      'advanced_custom_routes',
+      normalizeAdvancedCustomRoutes(routes),
+    );
+  };
+
+  const buildAdvancedCustomConfig = (routes) => {
+    const normalizedRoutes = normalizeAdvancedCustomRoutes(routes);
+    const seen = new Set();
+    const advancedRoutes = [];
+
+    for (let index = 0; index < normalizedRoutes.length; index++) {
+      const route = normalizedRoutes[index];
+      const incomingPath = String(route.incoming_path || '').trim();
+      const upstreamPath = String(route.upstream_path || '').trim();
+      const converter = String(route.converter || 'none').trim() || 'none';
+      const authType = String(route.auth_type || 'bearer').trim();
+      const authName = String(route.auth_name || '').trim();
+      const authValue = String(route.auth_value || '').trim();
+
+      if (!incomingPath) {
+        throw new Error(
+          t('Advanced Custom 第 {{index}} 条路由缺少入口路径', {
+            index: index + 1,
+          }),
+        );
+      }
+      if (!incomingPath.startsWith('/')) {
+        throw new Error(
+          t('Advanced Custom 第 {{index}} 条路由入口路径必须以 / 开头', {
+            index: index + 1,
+          }),
+        );
+      }
+      if (incomingPath.includes('?')) {
+        throw new Error(
+          t('Advanced Custom 第 {{index}} 条路由入口路径不能包含查询参数', {
+            index: index + 1,
+          }),
+        );
+      }
+      if (seen.has(incomingPath)) {
+        throw new Error(
+          t('Advanced Custom 路由入口路径重复：{{path}}', {
+            path: incomingPath,
+          }),
+        );
+      }
+      seen.add(incomingPath);
+
+      if (!upstreamPath) {
+        throw new Error(
+          t('Advanced Custom 第 {{index}} 条路由缺少上游路径', {
+            index: index + 1,
+          }),
+        );
+      }
+      if (
+        !upstreamPath.startsWith('/') &&
+        !/^https?:\/\//i.test(upstreamPath)
+      ) {
+        throw new Error(
+          t(
+            'Advanced Custom 第 {{index}} 条路由上游路径必须是 / 开头的路径或 http(s) URL',
+            { index: index + 1 },
+          ),
+        );
+      }
+      if ((authType === 'header' || authType === 'query') && !authName) {
+        throw new Error(
+          t('Advanced Custom 第 {{index}} 条路由缺少鉴权名称', {
+            index: index + 1,
+          }),
+        );
+      }
+      if ((authType === 'header' || authType === 'query') && !authValue) {
+        throw new Error(
+          t('Advanced Custom 第 {{index}} 条路由缺少鉴权值', {
+            index: index + 1,
+          }),
+        );
+      }
+
+      const nextRoute = {
+        incoming_path: incomingPath,
+        upstream_path: upstreamPath,
+        converter,
+      };
+      if (authType === 'none') {
+        nextRoute.auth = { type: 'none' };
+      } else if (authType === 'header' || authType === 'query') {
+        nextRoute.auth = {
+          type: authType,
+          name: authName,
+          value: authValue,
+        };
+      }
+      advancedRoutes.push(nextRoute);
+    }
+
+    return { advanced_routes: advancedRoutes };
+  };
+
   const applyClipboardConfig = (config) => {
     if (!config) return;
     setInputs((prev) => ({
@@ -672,6 +869,17 @@ const EditChannelModal = (props) => {
           formApiRef.current.setValue('vertex_files', []);
         }
         setInputs((prev) => ({ ...prev, vertex_files: [] }));
+      }
+      if (value === 58) {
+        setBatch(false);
+        setMultiToSingle(false);
+        setMultiKeyMode('random');
+        setInputs((prev) => ({
+          ...prev,
+          advanced_custom_routes: normalizeAdvancedCustomRoutes(
+            prev.advanced_custom_routes,
+          ),
+        }));
       }
     }
     //setAutoBan
@@ -903,6 +1111,9 @@ const EditChannelModal = (props) => {
           )
             ? parsedSettings.upstream_model_update_ignored_models.join(',')
             : '';
+          data.advanced_custom_routes = normalizeAdvancedCustomRoutes(
+            parsedSettings.advanced_custom?.advanced_routes,
+          );
         } catch (error) {
           console.error('解析其他设置失败:', error);
           data.azure_responses_version = '';
@@ -922,6 +1133,7 @@ const EditChannelModal = (props) => {
           data.upstream_model_update_last_check_time = 0;
           data.upstream_model_update_last_detected_models = [];
           data.upstream_model_update_ignored_models = '';
+          data.advanced_custom_routes = normalizeAdvancedCustomRoutes();
         }
       } else {
         // 兼容历史数据：老渠道没有 settings 时，默认按 json 展示
@@ -940,6 +1152,7 @@ const EditChannelModal = (props) => {
         data.upstream_model_update_last_check_time = 0;
         data.upstream_model_update_last_detected_models = [];
         data.upstream_model_update_ignored_models = '';
+        data.advanced_custom_routes = normalizeAdvancedCustomRoutes();
       }
 
       if (
@@ -980,7 +1193,6 @@ const EditChannelModal = (props) => {
 
       // Smart expand: auto-open advanced settings if any advanced field has a value
       const hasAdvancedValues =
-        (data.model_mapping && data.model_mapping.trim()) ||
         (data.param_override && data.param_override.trim()) ||
         (data.status_code_mapping && data.status_code_mapping.trim()) ||
         (data.header_override && data.header_override.trim()) ||
@@ -994,6 +1206,9 @@ const EditChannelModal = (props) => {
         data.pass_through_body_enabled ||
         data.force_format ||
         data.claude_beta_query ||
+        (data.type === 58 &&
+          Array.isArray(data.advanced_custom_routes) &&
+          data.advanced_custom_routes.length > 0) ||
         data.system_prompt_override;
       if (hasAdvancedValues) {
         setAdvancedSettingsOpen(true);
@@ -1548,6 +1763,11 @@ const EditChannelModal = (props) => {
       }
     }
 
+    if (localInputs.type === 58 && batch) {
+      showInfo(t('Advanced Custom 渠道不支持批量创建'));
+      return;
+    }
+
     if (localInputs.type === 41) {
       const keyType = localInputs.vertex_key_type || 'json';
       if (keyType === 'api_key') {
@@ -1680,7 +1900,7 @@ const EditChannelModal = (props) => {
       localInputs.status_code_mapping,
     );
     if (invalidStatusCodeEntries.length > 0) {
-      showError(
+      revealAdvancedSettingsError(
         `${t('状态码复写包含无效的状态码')}: ${invalidStatusCodeEntries.join(', ')}`,
       );
       return;
@@ -1737,6 +1957,19 @@ const EditChannelModal = (props) => {
     // type === 33 (AWS): 保存 aws_key_type 到 settings
     if (localInputs.type === 33) {
       settings.aws_key_type = localInputs.aws_key_type || 'ak_sk';
+    }
+
+    if (localInputs.type === 58) {
+      try {
+        settings.advanced_custom = buildAdvancedCustomConfig(
+          localInputs.advanced_custom_routes,
+        );
+      } catch (error) {
+        revealAdvancedSettingsError(error.message);
+        return;
+      }
+    } else if ('advanced_custom' in settings) {
+      delete settings.advanced_custom;
     }
 
     // type === 41 (Vertex): 始终保存 vertex_key_type 到 settings，避免编辑时被重置
@@ -1814,6 +2047,7 @@ const EditChannelModal = (props) => {
     delete localInputs.upstream_model_update_last_check_time;
     delete localInputs.upstream_model_update_last_detected_models;
     delete localInputs.upstream_model_update_ignored_models;
+    delete localInputs.advanced_custom_routes;
 
     let res;
     localInputs.auto_ban = localInputs.auto_ban ? 1 : 0;
@@ -1849,7 +2083,15 @@ const EditChannelModal = (props) => {
       props.refresh();
       props.handleClose();
     } else {
-      showError(message);
+      if (
+        /channel setting|advanced_custom|status_code|param_override|header_override|model_mapping|force_format|thinking_to_content|proxy|system_prompt/i.test(
+          String(message || ''),
+        )
+      ) {
+        revealAdvancedSettingsError(message);
+      } else {
+        showError(message);
+      }
     }
   };
 
@@ -2804,6 +3046,198 @@ const EditChannelModal = (props) => {
                             '免责声明：仅限个人使用，请勿分发或共享任何凭证。该渠道存在前置条件与使用门槛，请在充分了解流程与风险后使用，并遵守 OpenAI 的相关条款与政策。相关凭证与配置仅限接入 Codex CLI 使用，不适用于其他客户端、平台或渠道。',
                           )}
                         />
+                      )}
+
+                      {inputs.type === 58 && (
+                        <div className='mb-4 rounded-xl border border-[var(--semi-color-fill-2)] bg-[var(--semi-color-fill-0)] p-3'>
+                          <div className='flex items-center justify-between gap-2 mb-3'>
+                            <div>
+                              <Text className='text-sm font-medium'>
+                                {t('Advanced Custom 路由')}
+                              </Text>
+                              <div className='text-xs text-gray-600 mt-1'>
+                                {t(
+                                  '按请求路径选择上游路径，可为不同 endpoint 配置转换器与鉴权方式',
+                                )}
+                              </div>
+                            </div>
+                            <Button
+                              size='small'
+                              type='primary'
+                              theme='outline'
+                              icon={<IconPlus />}
+                              onClick={addAdvancedCustomRoute}
+                            >
+                              {t('添加路由')}
+                            </Button>
+                          </div>
+
+                          <div className='space-y-3'>
+                            {normalizeAdvancedCustomRoutes(
+                              inputs.advanced_custom_routes,
+                            ).map((route, index) => (
+                              <div
+                                key={`advanced-custom-route-${index}`}
+                                className='rounded-lg border border-[var(--semi-color-fill-2)] bg-[var(--semi-color-bg-0)] p-3'
+                              >
+                                <div className='flex items-center justify-between gap-2 mb-3'>
+                                  <Tag color='cyan'>
+                                    {t('路由')} #{index + 1}
+                                  </Tag>
+                                  <Button
+                                    size='small'
+                                    type='danger'
+                                    theme='borderless'
+                                    icon={<IconDelete />}
+                                    disabled={
+                                      normalizeAdvancedCustomRoutes(
+                                        inputs.advanced_custom_routes,
+                                      ).length <= 1
+                                    }
+                                    onClick={() =>
+                                      removeAdvancedCustomRoute(index)
+                                    }
+                                  />
+                                </div>
+
+                                <div className='grid grid-cols-1 gap-3'>
+                                  <div>
+                                    <Text
+                                      size='small'
+                                      className='block mb-1 text-gray-600'
+                                    >
+                                      {t('入口路径')}
+                                    </Text>
+                                    <Input
+                                      value={route.incoming_path}
+                                      placeholder='/v1/chat/completions'
+                                      onChange={(value) =>
+                                        updateAdvancedCustomRoute(
+                                          index,
+                                          'incoming_path',
+                                          value,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <Text
+                                      size='small'
+                                      className='block mb-1 text-gray-600'
+                                    >
+                                      {t('上游路径')}
+                                    </Text>
+                                    <Input
+                                      value={route.upstream_path}
+                                      placeholder='/v1/chat/completions 或 https://example.com/v1/chat/completions'
+                                      onChange={(value) =>
+                                        updateAdvancedCustomRoute(
+                                          index,
+                                          'upstream_path',
+                                          value,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <Text
+                                      size='small'
+                                      className='block mb-1 text-gray-600'
+                                    >
+                                      {t('转换器')}
+                                    </Text>
+                                    <Select
+                                      value={route.converter || 'none'}
+                                      optionList={
+                                        ADVANCED_CUSTOM_CONVERTER_OPTIONS
+                                      }
+                                      style={{ width: '100%' }}
+                                      onChange={(value) =>
+                                        updateAdvancedCustomRoute(
+                                          index,
+                                          'converter',
+                                          value,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <Text
+                                      size='small'
+                                      className='block mb-1 text-gray-600'
+                                    >
+                                      {t('鉴权方式')}
+                                    </Text>
+                                    <Select
+                                      value={route.auth_type || 'bearer'}
+                                      optionList={ADVANCED_CUSTOM_AUTH_OPTIONS.map(
+                                        (option) => ({
+                                          ...option,
+                                          label: t(option.label),
+                                        }),
+                                      )}
+                                      style={{ width: '100%' }}
+                                      onChange={(value) =>
+                                        updateAdvancedCustomRoute(
+                                          index,
+                                          'auth_type',
+                                          value,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  {(route.auth_type === 'header' ||
+                                    route.auth_type === 'query') && (
+                                    <Row gutter={12}>
+                                      <Col span={10}>
+                                        <Text
+                                          size='small'
+                                          className='block mb-1 text-gray-600'
+                                        >
+                                          {t('鉴权名称')}
+                                        </Text>
+                                        <Input
+                                          value={route.auth_name}
+                                          placeholder={
+                                            route.auth_type === 'query'
+                                              ? 'api_key'
+                                              : 'Authorization'
+                                          }
+                                          onChange={(value) =>
+                                            updateAdvancedCustomRoute(
+                                              index,
+                                              'auth_name',
+                                              value,
+                                            )
+                                          }
+                                        />
+                                      </Col>
+                                      <Col span={14}>
+                                        <Text
+                                          size='small'
+                                          className='block mb-1 text-gray-600'
+                                        >
+                                          {t('鉴权值')}
+                                        </Text>
+                                        <Input
+                                          value={route.auth_value}
+                                          placeholder='{api_key}'
+                                          onChange={(value) =>
+                                            updateAdvancedCustomRoute(
+                                              index,
+                                              'auth_value',
+                                              value,
+                                            )
+                                          }
+                                        />
+                                      </Col>
+                                    </Row>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
 
                       {inputs.type === 20 && (

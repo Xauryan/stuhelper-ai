@@ -37,6 +37,7 @@ import {
   isRoot,
 } from '../../../helpers';
 import { USER_ROLES } from '../../../constants/roles';
+import { TruncatedTag, TruncatedText } from '../../common/ui/RenderUtils';
 
 const renderTimestamp = (text) => (text ? timestamp2string(text) : '-');
 
@@ -84,16 +85,21 @@ const renderRole = (role, t) => {
 const renderUsername = (text, record) => {
   const remark = record.remark;
   if (!remark) {
-    return <span>{text}</span>;
+    return <TruncatedText maxWidth={160}>{text}</TruncatedText>;
   }
   const maxLen = 10;
   const displayRemark =
     remark.length > maxLen ? remark.slice(0, maxLen) + '…' : remark;
   return (
     <Space spacing={2}>
-      <span>{text}</span>
+      <TruncatedText maxWidth={140}>{text}</TruncatedText>
       <Tooltip content={remark} position='top' showArrow>
-        <Tag color='white' shape='circle' className='!text-xs'>
+        <Tag
+          color='white'
+          shape='circle'
+          className='!text-xs'
+          style={{ maxWidth: 140 }}
+        >
           <div className='flex items-center gap-1'>
             <div
               className='w-2 h-2 flex-shrink-0 rounded-full'
@@ -198,13 +204,25 @@ const renderInviteInfo = (text, record, t) => {
         <Tag color='white' shape='circle' className='!text-xs'>
           {t('收益')}: {renderQuota(record.aff_history_quota)}
         </Tag>
-        <Tag color='white' shape='circle' className='!text-xs'>
+        <TruncatedTag
+          color='white'
+          shape='circle'
+          className='!text-xs'
+          maxWidth={150}
+          tooltipContent={
+            record.inviter_id === 0
+              ? t('无邀请人')
+              : `${t('邀请人')}: ${
+                  record.inviter_display_name || record.inviter_username || '-'
+                } (ID ${record.inviter_id})`
+          }
+        >
           {record.inviter_id === 0
             ? t('无邀请人')
             : `${t('邀请人')}: ${
                 record.inviter_display_name || record.inviter_username || '-'
               } (ID ${record.inviter_id})`}
-        </Tag>
+        </TruncatedTag>
       </Space>
     </div>
   );

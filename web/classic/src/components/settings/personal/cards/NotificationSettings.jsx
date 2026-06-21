@@ -24,7 +24,6 @@ import {
   Card,
   Avatar,
   Form,
-  Radio,
   Toast,
   Tabs,
   TabPane,
@@ -48,6 +47,11 @@ import {
   mergeAdminConfig,
   useSidebar,
 } from '../../../../hooks/common/useSidebar';
+
+const NOTIFICATION_TYPES = new Set(['email', 'webhook', 'bark', 'gotify']);
+
+const normalizeWarningType = (value) =>
+  NOTIFICATION_TYPES.has(value) ? value : 'email';
 
 const NotificationSettings = ({
   t,
@@ -234,6 +238,23 @@ const NotificationSettings = ({
   const handleFormChange = (field, value) => {
     handleNotificationSettingChange(field, value);
   };
+
+  const handleNotificationTypeChange = (value) => {
+    const nextValue = normalizeWarningType(value);
+    formApiRef.current?.setValue('warningType', nextValue);
+    handleFormChange('warningType', nextValue);
+  };
+
+  const selectedWarningType = normalizeWarningType(
+    notificationSettings.warningType,
+  );
+
+  const notificationMethods = [
+    { value: 'email', label: t('邮件通知'), icon: <IconMail /> },
+    { value: 'webhook', label: t('Webhook通知'), icon: <IconLink /> },
+    { value: 'bark', label: t('Bark通知'), icon: <IconBell /> },
+    { value: 'gotify', label: t('Gotify通知'), icon: <Settings size={16} /> },
+  ];
 
   // 检查功能是否被管理员允许
   const isAllowedByAdmin = (sectionKey, moduleKey = null) => {
@@ -432,18 +453,35 @@ const NotificationSettings = ({
               itemKey='notification'
             >
               <div className='py-4'>
-                <Form.RadioGroup
-                  field='warningType'
-                  label={t('通知方式')}
-                  initValue={notificationSettings.warningType}
-                  onChange={(value) => handleFormChange('warningType', value)}
-                  rules={[{ required: true, message: t('请选择通知方式') }]}
-                >
-                  <Radio value='email'>{t('邮件通知')}</Radio>
-                  <Radio value='webhook'>{t('Webhook通知')}</Radio>
-                  <Radio value='bark'>{t('Bark通知')}</Radio>
-                  <Radio value='gotify'>{t('Gotify通知')}</Radio>
-                </Form.RadioGroup>
+                <Form.Slot label={t('通知方式')} required>
+                  <div
+                    className='grid grid-cols-2 sm:grid-cols-4 gap-2'
+                    role='group'
+                    aria-label={t('通知方式')}
+                  >
+                    {notificationMethods.map((method) => {
+                      const selected = selectedWarningType === method.value;
+                      return (
+                        <button
+                          key={method.value}
+                          type='button'
+                          className={`classic-segment-card ${selected ? 'classic-segment-card--selected' : ''}`}
+                          aria-pressed={selected}
+                          onClick={() =>
+                            handleNotificationTypeChange(method.value)
+                          }
+                        >
+                          <span className='classic-segment-card__icon'>
+                            {method.icon}
+                          </span>
+                          <span className='classic-segment-card__label'>
+                            {method.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Form.Slot>
 
                 <Form.AutoComplete
                   field='warningThreshold'
@@ -501,7 +539,7 @@ const NotificationSettings = ({
                 )}
 
                 {/* 邮件通知设置 */}
-                {notificationSettings.warningType === 'email' && (
+                {selectedWarningType === 'email' && (
                   <Form.Input
                     field='notificationEmail'
                     label={t('通知邮箱')}
@@ -518,7 +556,7 @@ const NotificationSettings = ({
                 )}
 
                 {/* Webhook通知设置 */}
-                {notificationSettings.warningType === 'webhook' && (
+                {selectedWarningType === 'webhook' && (
                   <>
                     <Form.Input
                       field='webhookUrl'
@@ -534,8 +572,7 @@ const NotificationSettings = ({
                       showClear
                       rules={[
                         {
-                          required:
-                            notificationSettings.warningType === 'webhook',
+                          required: selectedWarningType === 'webhook',
                           message: t('请输入Webhook地址'),
                         },
                         {
@@ -599,7 +636,7 @@ const NotificationSettings = ({
                 )}
 
                 {/* Bark推送设置 */}
-                {notificationSettings.warningType === 'bark' && (
+                {selectedWarningType === 'bark' && (
                   <>
                     <Form.Input
                       field='barkUrl'
@@ -615,7 +652,7 @@ const NotificationSettings = ({
                       showClear
                       rules={[
                         {
-                          required: notificationSettings.warningType === 'bark',
+                          required: selectedWarningType === 'bark',
                           message: t('请输入Bark推送URL'),
                         },
                         {
@@ -659,7 +696,7 @@ const NotificationSettings = ({
                 )}
 
                 {/* Gotify推送设置 */}
-                {notificationSettings.warningType === 'gotify' && (
+                {selectedWarningType === 'gotify' && (
                   <>
                     <Form.Input
                       field='gotifyUrl'
@@ -675,8 +712,7 @@ const NotificationSettings = ({
                       showClear
                       rules={[
                         {
-                          required:
-                            notificationSettings.warningType === 'gotify',
+                          required: selectedWarningType === 'gotify',
                           message: t('请输入Gotify服务器地址'),
                         },
                         {
@@ -700,8 +736,7 @@ const NotificationSettings = ({
                       showClear
                       rules={[
                         {
-                          required:
-                            notificationSettings.warningType === 'gotify',
+                          required: selectedWarningType === 'gotify',
                           message: t('请输入Gotify应用令牌'),
                         },
                       ]}

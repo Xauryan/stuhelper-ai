@@ -29,6 +29,7 @@ import {
   TagInput,
   Spin,
   Card,
+  Checkbox,
   Radio,
   Select,
 } from '@douyinfe/semi-ui';
@@ -74,6 +75,160 @@ const DEFAULT_ACCESS_RESOURCE_RULES = {
     root: true,
   },
 };
+
+const ACCESS_CONTROL_ROLES = [
+  { key: 'guest', label: '游客' },
+  { key: 'user', label: '普通用户' },
+  { key: 'audit_admin', label: '审计管理员' },
+  { key: 'admin', label: '管理员' },
+  { key: 'root', label: '超级管理员' },
+];
+
+const ACCESS_RESOURCE_GROUPS = [
+  {
+    key: 'site',
+    label: '站点入口',
+    resources: [
+      {
+        key: 'web',
+        label: '官网页面',
+        description: '官网普通页面、协议页和外置前端重定向。',
+      },
+      {
+        key: 'home',
+        label: '官网首页',
+        description: '根路径首页。',
+      },
+      {
+        key: 'model_api',
+        label: '模型 API',
+        description: 'OpenAI、Gemini、MJ、Suno 等模型调用入口。',
+      },
+    ],
+  },
+  {
+    key: 'workspace',
+    label: '控制台工作区',
+    resources: [
+      {
+        key: 'dashboard',
+        label: '数据看板',
+        description: '控制台首页和数据看板。',
+      },
+      {
+        key: 'token',
+        label: '令牌管理',
+        description: 'API Key 页面和令牌接口。',
+      },
+      {
+        key: 'wallet',
+        label: '钱包充值',
+        description: '钱包、充值和订阅购买。',
+      },
+      {
+        key: 'billing',
+        label: '账单',
+        description: '账单列表和用量账单接口。',
+      },
+      {
+        key: 'usage_log',
+        label: '使用日志',
+        description: '日志页面、日志接口和用量统计。',
+      },
+      {
+        key: 'playground',
+        label: '操练场',
+        description: '控制台操练场和 /pg 调用入口。',
+      },
+      {
+        key: 'chat',
+        label: '聊天',
+        description: '控制台聊天页和聊天分享入口。',
+      },
+      {
+        key: 'personal',
+        label: '个人设置',
+        description: '个人资料、2FA、Passkey、OAuth 绑定和签到。',
+      },
+      {
+        key: 'drawing_log',
+        label: '绘图日志',
+        description: 'Midjourney 绘图日志页面和接口。',
+      },
+      {
+        key: 'task_log',
+        label: '任务日志',
+        description: '异步任务日志页面和接口。',
+      },
+    ],
+  },
+  {
+    key: 'admin',
+    label: '管理后台',
+    resources: [
+      {
+        key: 'admin_channel',
+        label: '渠道管理',
+        description: '渠道、分组、预填分组和厂商管理。',
+      },
+      {
+        key: 'admin_subscription',
+        label: '订阅管理',
+        description: '订阅计划和用户订阅。',
+      },
+      {
+        key: 'admin_model',
+        label: '模型管理',
+        description: '模型元数据和模型规则。',
+      },
+      {
+        key: 'admin_redemption',
+        label: '兑换码管理',
+        description: '兑换码列表和兑换码操作。',
+      },
+      {
+        key: 'admin_user',
+        label: '用户管理',
+        description: '用户列表和用户管理操作。',
+      },
+      {
+        key: 'admin_referral',
+        label: '邀请管理',
+        description: '邀请记录和佣金明细。',
+      },
+      {
+        key: 'admin_setting',
+        label: '系统设置',
+        description: '系统配置、性能、倍率和 OAuth Provider。',
+      },
+    ],
+  },
+];
+
+const ACCESS_RESOURCE_KEY_SET = new Set(
+  ACCESS_RESOURCE_GROUPS.flatMap((group) =>
+    group.resources.map((resource) => resource.key),
+  ),
+);
+
+const parseAccessResourceRules = (value) => {
+  if (!value) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+      return {};
+    }
+    return parsed;
+  } catch (e) {
+    return {};
+  }
+};
+
+const accessRuleAllows = (rules, resourceKey, roleKey) =>
+  rules?.[resourceKey]?.[roleKey] !== false;
+
+const serializeAccessResourceRules = (rules) => JSON.stringify(rules, null, 2);
 
 const SystemSetting = () => {
   const { t } = useTranslation();
@@ -168,6 +323,7 @@ const SystemSetting = () => {
   const [domainList, setDomainList] = useState([]);
   const [ipList, setIpList] = useState([]);
   const [allowedPorts, setAllowedPorts] = useState([]);
+  const [accessResourceRules, setAccessResourceRules] = useState({});
 
   const getOptions = async () => {
     setLoading(true);
@@ -188,6 +344,7 @@ const SystemSetting = () => {
             } catch (e) {
               item.value = item.value || '{}';
             }
+            setAccessResourceRules(parseAccessResourceRules(item.value));
             break;
           case 'EmailDomainWhitelist':
             setEmailDomainWhitelist(item.value ? item.value.split(',') : []);
@@ -277,6 +434,9 @@ const SystemSetting = () => {
       });
       setInputs(newInputs);
       setOriginInputs(newInputs);
+      if (newInputs['access_control.resource_rules'] === undefined) {
+        setAccessResourceRules({});
+      }
       // 同步模式布尔到本地状态
       if (
         typeof newInputs['fetch_setting.domain_filter_mode'] !== 'undefined'
@@ -463,23 +623,7 @@ const SystemSetting = () => {
   };
 
   const submitAccessControl = async () => {
-    let resourceRules = {};
-    try {
-      const rawResourceRules =
-        inputs['access_control.resource_rules']?.trim() || '{}';
-      resourceRules = JSON.parse(rawResourceRules);
-      if (
-        !resourceRules ||
-        Array.isArray(resourceRules) ||
-        typeof resourceRules !== 'object'
-      ) {
-        showError(t('资源访问规则必须是 JSON 对象'));
-        return;
-      }
-    } catch (error) {
-      showError(t('资源访问规则 JSON 格式不正确'));
-      return;
-    }
+    const resourceRules = accessResourceRules || {};
 
     const options = [
       {
@@ -529,6 +673,148 @@ const SystemSetting = () => {
       },
     ];
     await updateOptions(options);
+  };
+
+  const syncAccessResourceRules = (nextRules) => {
+    setAccessResourceRules(nextRules);
+    const nextValue = serializeAccessResourceRules(nextRules);
+    setInputs((prev) => ({
+      ...prev,
+      'access_control.resource_rules': nextValue,
+    }));
+    formApiRef.current?.setValue?.('access_control.resource_rules', nextValue);
+  };
+
+  const setAccessRuleAllowed = (resourceKey, roleKey, allowed) => {
+    const nextRules = { ...(accessResourceRules || {}) };
+    const nextResourceRules = { ...(nextRules[resourceKey] || {}) };
+    nextResourceRules[roleKey] = allowed;
+    nextRules[resourceKey] = nextResourceRules;
+    syncAccessResourceRules(nextRules);
+  };
+
+  const setAccessGroupRoleAllowed = (resources, roleKey, allowed) => {
+    const nextRules = { ...(accessResourceRules || {}) };
+    resources.forEach((resource) => {
+      const nextResourceRules = { ...(nextRules[resource.key] || {}) };
+      nextResourceRules[roleKey] = allowed;
+      nextRules[resource.key] = nextResourceRules;
+    });
+    syncAccessResourceRules(nextRules);
+  };
+
+  const resetAccessResourceRules = () => {
+    syncAccessResourceRules({});
+  };
+
+  const applyAccessPreset = (presetRules) => {
+    syncAccessResourceRules({
+      ...(accessResourceRules || {}),
+      ...structuredClone(presetRules),
+    });
+  };
+
+  const renderAccessResourceMatrix = () => {
+    const customResources = Object.keys(accessResourceRules || {})
+      .filter((key) => !ACCESS_RESOURCE_KEY_SET.has(key))
+      .sort()
+      .map((key) => ({
+        key,
+        label: key,
+        description: t('自定义资源 key'),
+      }));
+    const groups =
+      customResources.length > 0
+        ? [
+            ...ACCESS_RESOURCE_GROUPS,
+            {
+              key: 'custom',
+              label: '自定义资源',
+              resources: customResources,
+            },
+          ]
+        : ACCESS_RESOURCE_GROUPS;
+
+    return (
+      <div className='flex flex-col gap-3'>
+        {groups.map((group) => (
+          <div
+            key={group.key}
+            className='overflow-x-auto rounded-md border'
+            style={{ borderColor: 'var(--semi-color-border)' }}
+          >
+            <div
+              className='grid min-w-[820px] items-center border-b px-3 py-2 text-sm font-medium'
+              style={{
+                gridTemplateColumns: 'minmax(220px, 1.3fr) repeat(5, 112px)',
+                borderColor: 'var(--semi-color-border)',
+                background: 'var(--semi-color-fill-0)',
+              }}
+            >
+              <div>{t(group.label)}</div>
+              {ACCESS_CONTROL_ROLES.map((role) => {
+                const allAllowed = group.resources.every((resource) =>
+                  accessRuleAllows(accessResourceRules, resource.key, role.key),
+                );
+                const someAllowed = group.resources.some((resource) =>
+                  accessRuleAllows(accessResourceRules, resource.key, role.key),
+                );
+                return (
+                  <Checkbox
+                    key={role.key}
+                    checked={allAllowed}
+                    indeterminate={!allAllowed && someAllowed}
+                    onChange={(event) =>
+                      setAccessGroupRoleAllowed(
+                        group.resources,
+                        role.key,
+                        event.target.checked,
+                      )
+                    }
+                  >
+                    {t(role.label)}
+                  </Checkbox>
+                );
+              })}
+            </div>
+            {group.resources.map((resource) => (
+              <div
+                key={resource.key}
+                className='grid min-w-[820px] items-center border-b px-3 py-2 text-sm last:border-b-0'
+                style={{
+                  gridTemplateColumns: 'minmax(220px, 1.3fr) repeat(5, 112px)',
+                  borderColor: 'var(--semi-color-border)',
+                }}
+              >
+                <div className='min-w-0 pr-3'>
+                  <div className='font-medium'>{t(resource.label)}</div>
+                  <div className='truncate text-xs text-gray-500'>
+                    {resource.key} · {t(resource.description)}
+                  </div>
+                </div>
+                {ACCESS_CONTROL_ROLES.map((role) => (
+                  <Checkbox
+                    key={`${resource.key}:${role.key}`}
+                    checked={accessRuleAllows(
+                      accessResourceRules,
+                      resource.key,
+                      role.key,
+                    )}
+                    onChange={(event) =>
+                      setAccessRuleAllowed(
+                        resource.key,
+                        role.key,
+                        event.target.checked,
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const handleAddEmail = () => {
@@ -1199,24 +1485,40 @@ const SystemSetting = () => {
                     )}
                   </Text>
 
-                  <Form.TextArea
-                    field='access_control.resource_rules'
-                    label={t('资源访问规则 JSON')}
-                    placeholder={JSON.stringify(
-                      DEFAULT_ACCESS_RESOURCE_RULES,
-                      null,
-                      2,
-                    )}
-                    autosize={{ minRows: 12, maxRows: 24 }}
-                    style={{
-                      fontFamily:
-                        'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                    }}
-                    extraText={t(
-                      '按资源 key 配置五类身份的可见性：guest、user、audit_admin、admin、root。字段缺失表示默认允许，显式 false 表示拒绝。常用资源 key：web、home、model_api、token、wallet、billing、usage_log、dashboard、playground、chat、personal、drawing_log、task_log、admin_channel、admin_subscription、admin_model、admin_redemption、admin_user、admin_referral、admin_setting。前端菜单会按同一规则隐藏，后端仍会拦截直达路径和接口。',
-                    )}
-                    initValue='{}'
-                  />
+                  <div style={{ marginTop: 20 }}>
+                    <div className='mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between'>
+                      <div>
+                        <Text strong>{t('资源访问矩阵')}</Text>
+                        <Text
+                          type='secondary'
+                          style={{ display: 'block', marginTop: 4 }}
+                        >
+                          {t(
+                            '勾选表示允许访问，取消勾选表示拒绝访问；分组表头可按身份批量切换。字段缺失默认允许，保存时会写入原 access_control.resource_rules 配置。',
+                          )}
+                        </Text>
+                      </div>
+                      <div className='flex flex-wrap gap-2'>
+                        <Button
+                          type='tertiary'
+                          theme='outline'
+                          onClick={() =>
+                            applyAccessPreset(DEFAULT_ACCESS_RESOURCE_RULES)
+                          }
+                        >
+                          {t('应用常用限制')}
+                        </Button>
+                        <Button
+                          type='tertiary'
+                          theme='outline'
+                          onClick={resetAccessResourceRules}
+                        >
+                          {t('全部允许')}
+                        </Button>
+                      </div>
+                    </div>
+                    {renderAccessResourceMatrix()}
+                  </div>
 
                   <Row
                     gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}

@@ -29,7 +29,7 @@ import {
   THINK_TAG_REGEX,
   MESSAGE_ROLES,
 } from '../constants/playground.constants';
-import { TABLE_COMPACT_MODES_KEY } from '../constants';
+import { TABLE_COMPACT_MODES_KEY, TABLE_VIEW_MODES_KEY } from '../constants';
 import { MOBILE_BREAKPOINT } from '../hooks/common/useIsMobile';
 import { USER_ROLES } from '../constants/roles';
 
@@ -925,6 +925,40 @@ export function setTableCompactMode(compact, tableKey = 'global') {
   const modes = readTableCompactModes();
   modes[tableKey] = compact;
   writeTableCompactModes(modes);
+}
+
+const TABLE_VIEW_MODE_VALUES = new Set(['table', 'card']);
+
+function readTableViewModes() {
+  try {
+    const json = localStorage.getItem(TABLE_VIEW_MODES_KEY);
+    return json ? JSON.parse(json) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeTableViewModes(modes) {
+  try {
+    localStorage.setItem(TABLE_VIEW_MODES_KEY, JSON.stringify(modes));
+  } catch {
+    // ignore
+  }
+}
+
+export function getTableViewMode(tableKey = 'global', fallback = 'table') {
+  const modes = readTableViewModes();
+  const mode = modes[tableKey];
+  return TABLE_VIEW_MODE_VALUES.has(mode) ? mode : fallback;
+}
+
+export function setTableViewMode(mode, tableKey = 'global') {
+  if (!TABLE_VIEW_MODE_VALUES.has(mode)) {
+    return;
+  }
+  const modes = readTableViewModes();
+  modes[tableKey] = mode;
+  writeTableViewModes(modes);
 }
 
 // -------------------------------

@@ -22,12 +22,20 @@ import {
   Button,
   Dropdown,
   Modal,
+  Tag,
   Switch,
+  Tooltip,
   Typography,
   Select,
 } from '@douyinfe/semi-ui';
+import {
+  IconEyeClosed,
+  IconEyeOpened,
+  IconSetting,
+} from '@douyinfe/semi-icons';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
-import { isAuditOnlyAdmin } from '../../../helpers';
+import TableViewModeToggle from '../../common/ui/TableViewModeToggle';
+import { isAuditOnlyAdmin, isRoot } from '../../../helpers';
 
 const ChannelsActions = ({
   enableBatchDelete,
@@ -43,6 +51,8 @@ const ChannelsActions = ({
   applyAllUpstreamUpdatesLoading,
   compactMode,
   setCompactMode,
+  viewMode,
+  setViewMode,
   idSort,
   setIdSort,
   setEnableBatchDelete,
@@ -50,6 +60,8 @@ const ChannelsActions = ({
   setEnableTagMode,
   statusFilter,
   setStatusFilter,
+  sensitiveVisible,
+  setSensitiveVisible,
   getFormValues,
   loadChannels,
   searchChannels,
@@ -57,9 +69,42 @@ const ChannelsActions = ({
   activePage,
   pageSize,
   setActivePage,
+  channelOps,
   t,
 }) => {
   const canWrite = !isAuditOnlyAdmin();
+  const canManageReliability = isRoot();
+  const retryTimes =
+    typeof channelOps?.retry_times === 'number'
+      ? channelOps.retry_times
+      : undefined;
+  const retryLabel =
+    retryTimes === undefined ? undefined : `${t('最大重试')}：${retryTimes}`;
+  const retryTag = retryLabel ? (
+    <Tooltip
+      content={
+        canManageReliability
+          ? t('查看或调整路由可靠性设置')
+          : t('当前路由最大重试次数')
+      }
+    >
+      <Tag
+        color='blue'
+        shape='circle'
+        className={`!h-7 !inline-flex !items-center !gap-1 !px-2 ${
+          canManageReliability ? 'cursor-pointer' : ''
+        }`}
+        onClick={() => {
+          if (canManageReliability) {
+            window.location.href = '/console/setting?tab=operation';
+          }
+        }}
+      >
+        <span>{retryLabel}</span>
+        {canManageReliability && <IconSetting size='small' />}
+      </Tag>
+    </Tooltip>
+  ) : null;
 
   return (
     <div className='flex flex-col gap-2'>
@@ -235,6 +280,14 @@ const ChannelsActions = ({
             setCompactMode={setCompactMode}
             t={t}
           />
+
+          <TableViewModeToggle
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            t={t}
+          />
+
+          {retryTag}
         </div>
 
         {/* 右侧：设置开关区域 */}
@@ -329,6 +382,22 @@ const ChannelsActions = ({
               <Select.Option value='disabled'>{t('已禁用')}</Select.Option>
             </Select>
           </div>
+
+          <Tooltip
+            content={sensitiveVisible ? t('隐藏敏感信息') : t('显示敏感信息')}
+          >
+            <Button
+              size='small'
+              type='tertiary'
+              theme='borderless'
+              className='shrink-0'
+              icon={sensitiveVisible ? <IconEyeOpened /> : <IconEyeClosed />}
+              onClick={() => setSensitiveVisible(!sensitiveVisible)}
+              aria-label={
+                sensitiveVisible ? t('隐藏敏感信息') : t('显示敏感信息')
+              }
+            />
+          </Tooltip>
         </div>
       </div>
     </div>

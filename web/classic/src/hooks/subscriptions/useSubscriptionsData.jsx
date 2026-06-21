@@ -21,6 +21,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../helpers';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { useTablePageSize } from '../common/useTablePageSize';
 
 export const useSubscriptionsData = () => {
   const { t } = useTranslation();
@@ -32,7 +33,7 @@ export const useSubscriptionsData = () => {
 
   // Pagination (client-side for now)
   const [activePage, setActivePage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useTablePageSize(10);
 
   // Drawer states
   const [showEdit, setShowEdit] = useState(false);

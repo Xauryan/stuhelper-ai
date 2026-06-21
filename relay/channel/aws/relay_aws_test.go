@@ -53,3 +53,25 @@ func TestDoAwsClientRequest_AppliesRuntimeHeaderOverrideToAnthropicBeta(t *testi
 	require.True(t, ok)
 	require.Equal(t, []any{"computer-use-2025-01-24"}, values)
 }
+
+func TestFormatRequestPreservesExplicitZeroAndContextManagement(t *testing.T) {
+	t.Parallel()
+
+	body := bytes.NewBufferString(`{
+		"messages":[{"role":"user","content":"hello"}],
+		"max_tokens":0,
+		"top_p":0,
+		"top_k":0,
+		"context_management":{"edits":[{"type":"clear_tool_uses_20250919"}]}
+	}`)
+
+	req, err := formatRequest(body, http.Header{})
+	require.NoError(t, err)
+	require.NotNil(t, req.MaxTokens)
+	require.Equal(t, uint(0), *req.MaxTokens)
+	require.NotNil(t, req.TopP)
+	require.Equal(t, float64(0), *req.TopP)
+	require.NotNil(t, req.TopK)
+	require.Equal(t, 0, *req.TopK)
+	require.JSONEq(t, `{"edits":[{"type":"clear_tool_uses_20250919"}]}`, string(req.ContextManagement))
+}

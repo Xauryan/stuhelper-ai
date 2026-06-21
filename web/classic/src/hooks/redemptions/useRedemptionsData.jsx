@@ -27,6 +27,7 @@ import {
 import { Modal } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { useTablePageSize } from '../common/useTablePageSize';
 
 export const useRedemptionsData = () => {
   const { t } = useTranslation();
@@ -36,7 +37,7 @@ export const useRedemptionsData = () => {
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [activePage, setActivePage] = useState(1);
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [pageSize, setPageSize] = useTablePageSize(ITEMS_PER_PAGE);
   const [tokenCount, setTokenCount] = useState(0);
   const [selectedKeys, setSelectedKeys] = useState([]);
 
@@ -301,7 +302,7 @@ export const useRedemptionsData = () => {
       .catch((reason) => {
         showError(reason);
       });
-  }, [pageSize]);
+  }, []);
 
   return {
     // Data state

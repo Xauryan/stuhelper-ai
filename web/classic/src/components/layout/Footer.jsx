@@ -174,7 +174,7 @@ const FooterBar = () => {
                     rel='noopener noreferrer'
                     className='!text-semi-color-text-1'
                   >
-                    Midjourney-Proxy
+                    MjProxy
                   </a>
                 </div>
               </div>

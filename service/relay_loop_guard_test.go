@@ -10,6 +10,7 @@ import (
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/constant"
+	"github.com/Xauryan/stuhelper-ai/dto"
 	"github.com/Xauryan/stuhelper-ai/model"
 	"github.com/Xauryan/stuhelper-ai/setting"
 	"github.com/Xauryan/stuhelper-ai/types"
@@ -96,6 +97,36 @@ func seedRelayLoopGuardChannelWithAbilities(t *testing.T, db *gorm.DB, channel m
 
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, channel.AddAbilities(nil))
+}
+
+func seedAdvancedCustomRelayLoopGuardChannel(t *testing.T, db *gorm.DB, id int, incomingPath string) {
+	t.Helper()
+
+	settings, err := common.Marshal(dto.ChannelOtherSettings{
+		AdvancedCustom: &dto.AdvancedCustomConfig{
+			Routes: []dto.AdvancedCustomRoute{
+				{
+					IncomingPath: incomingPath,
+					UpstreamPath: "https://upstream.example/v1/chat/completions",
+					Converter:    dto.AdvancedCustomConverterNone,
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	seedRelayLoopGuardChannelWithAbilities(t, db, model.Channel{
+		Id:            id,
+		Type:          constant.ChannelTypeAdvancedCustom,
+		Key:           fmt.Sprintf("key-%d", id),
+		Status:        common.ChannelStatusEnabled,
+		Name:          fmt.Sprintf("advanced-custom-%d", id),
+		Models:        "gpt-4o-mini",
+		Group:         "default",
+		Priority:      common.GetPointer(int64(0)),
+		Weight:        common.GetPointer(uint(100)),
+		OtherSettings: string(settings),
+	})
 }
 
 func newRelayLoopGuardContext() (*gin.Context, *httptest.ResponseRecorder) {
@@ -225,6 +256,73 @@ func TestAutoSelectionDBFallbackUsesNormalizedModelName(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, channel)
 	require.Equal(t, 44, channel.Id)
+	require.Equal(t, "default", selectGroup)
+}
+
+func TestSelectionFiltersAdvancedCustomChannelsByRequestPath(t *testing.T) {
+	db := setupRelayLoopGuardTestDB(t)
+	seedAdvancedCustomRelayLoopGuardChannel(t, db, 58, "/v1/messages")
+	seedRelayLoopGuardChannel(t, db, 11, "default", "gpt-4o-mini")
+
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+
+	channel, selectGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:         c,
+		TokenGroup:  "default",
+		ModelName:   "gpt-4o-mini",
+		RequestPath: "/v1/chat/completions",
+		Retry:       common.GetPointer(0),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 11, channel.Id)
+	require.Equal(t, "default", selectGroup)
+}
+
+func TestSelectionAllowsAdvancedCustomChannelForMatchingRequestPath(t *testing.T) {
+	db := setupRelayLoopGuardTestDB(t)
+	seedAdvancedCustomRelayLoopGuardChannel(t, db, 58, "/v1/chat/completions")
+
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+
+	channel, selectGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:         c,
+		TokenGroup:  "default",
+		ModelName:   "gpt-4o-mini",
+		RequestPath: "/v1/chat/completions",
+		Retry:       common.GetPointer(0),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 58, channel.Id)
+	require.Equal(t, "default", selectGroup)
+}
+
+func TestMemoryCacheSelectionFiltersAdvancedCustomChannelsByRequestPath(t *testing.T) {
+	db := setupRelayLoopGuardTestDB(t)
+	seedAdvancedCustomRelayLoopGuardChannel(t, db, 58, "/v1/messages")
+	seedRelayLoopGuardChannel(t, db, 11, "default", "gpt-4o-mini")
+	common.MemoryCacheEnabled = true
+	model.InitChannelCache()
+
+	c, _ := newRelayLoopGuardContext()
+	common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+
+	channel, selectGroup, err := CacheGetRandomSatisfiedChannel(&RetryParam{
+		Ctx:         c,
+		TokenGroup:  "default",
+		ModelName:   "gpt-4o-mini",
+		RequestPath: "/v1/chat/completions",
+		Retry:       common.GetPointer(0),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	require.Equal(t, 11, channel.Id)
 	require.Equal(t, "default", selectGroup)
 }
 

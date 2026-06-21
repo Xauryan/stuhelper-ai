@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@xauryan.com
 */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Button, Form } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
 import { isAuditOnlyAdmin } from '../../../helpers';
@@ -33,11 +33,44 @@ const ChannelsFilters = ({
   enableTagMode,
   formApi,
   groupOptions,
+  sensitiveVisible,
   loading,
   searching,
   t,
 }) => {
   const canWrite = !isAuditOnlyAdmin();
+  const searchDebounceTimerRef = useRef(null);
+  const isComposingSearchRef = useRef(false);
+
+  const clearSearchDebounceTimer = () => {
+    if (searchDebounceTimerRef.current) {
+      clearTimeout(searchDebounceTimerRef.current);
+      searchDebounceTimerRef.current = null;
+    }
+  };
+
+  const queueSearch = () => {
+    clearSearchDebounceTimer();
+    if (isComposingSearchRef.current) {
+      return;
+    }
+    searchDebounceTimerRef.current = setTimeout(() => {
+      searchChannels(enableTagMode);
+      searchDebounceTimerRef.current = null;
+    }, 500);
+  };
+
+  const handleSearchCompositionStart = () => {
+    isComposingSearchRef.current = true;
+    clearSearchDebounceTimer();
+  };
+
+  const handleSearchCompositionEnd = () => {
+    isComposingSearchRef.current = false;
+    queueSearch();
+  };
+
+  useEffect(() => clearSearchDebounceTimer, []);
 
   return (
     <div className='flex flex-col md:flex-row justify-between items-center gap-2 w-full'>
@@ -86,7 +119,7 @@ const ChannelsFilters = ({
           allowEmpty={true}
           autoComplete='off'
           layout='horizontal'
-          trigger='change'
+          trigger='blur'
           stopValidateWithError={false}
           className='flex flex-col md:flex-row items-center gap-2 w-full'
         >
@@ -98,6 +131,9 @@ const ChannelsFilters = ({
               placeholder={t('渠道ID，名称，密钥，API地址')}
               showClear
               pure
+              onChange={queueSearch}
+              onCompositionStart={handleSearchCompositionStart}
+              onCompositionEnd={handleSearchCompositionEnd}
             />
           </div>
           <div className='w-full md:w-48'>
@@ -108,6 +144,9 @@ const ChannelsFilters = ({
               placeholder={t('模型关键字')}
               showClear
               pure
+              onChange={queueSearch}
+              onCompositionStart={handleSearchCompositionStart}
+              onCompositionEnd={handleSearchCompositionEnd}
             />
           </div>
           <div className='w-full md:w-32'>
@@ -117,12 +156,16 @@ const ChannelsFilters = ({
               placeholder={t('选择分组')}
               optionList={[
                 { label: t('选择分组'), value: null },
-                ...groupOptions,
+                ...groupOptions.map((option) => ({
+                  ...option,
+                  label: sensitiveVisible ? option.label : '••••',
+                })),
               ]}
               className='w-full'
               showClear
               pure
               onChange={() => {
+                clearSearchDebounceTimer();
                 // 延迟执行搜索，让表单值先更新
                 setTimeout(() => {
                   searchChannels(enableTagMode);
@@ -135,6 +178,7 @@ const ChannelsFilters = ({
             type='tertiary'
             htmlType='submit'
             loading={loading || searching}
+            onClick={clearSearchDebounceTimer}
             className='w-full md:w-auto'
           >
             {t('查询')}
@@ -143,6 +187,8 @@ const ChannelsFilters = ({
             size='small'
             type='tertiary'
             onClick={() => {
+              clearSearchDebounceTimer();
+              isComposingSearchRef.current = false;
               if (formApi) {
                 formApi.reset();
                 // 重置后立即查询，使用setTimeout确保表单重置完成

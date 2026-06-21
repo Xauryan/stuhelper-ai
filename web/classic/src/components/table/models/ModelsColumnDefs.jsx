@@ -18,25 +18,19 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import React from 'react';
-import {
-  Button,
-  Space,
-  Tag,
-  Typography,
-  Modal,
-  Tooltip,
-} from '@douyinfe/semi-ui';
+import { Button, Space, Tag, Modal, Tooltip } from '@douyinfe/semi-ui';
 import {
   timestamp2string,
   getLobeHubIcon,
   stringToColor,
+  isAdmin,
 } from '../../../helpers';
 import {
   renderLimitedItems,
   renderDescription,
+  TruncatedTag,
+  TruncatedText,
 } from '../../common/ui/RenderUtils';
-
-const { Text } = Typography;
 
 // Render timestamp
 function renderTimestamp(timestamp) {
@@ -59,13 +53,15 @@ const renderVendorTag = (vendorId, vendorMap, t) => {
   if (!vendorId || !vendorMap[vendorId]) return '-';
   const v = vendorMap[vendorId];
   return (
-    <Tag
+    <TruncatedTag
       color='white'
       shape='circle'
       prefixIcon={getLobeHubIcon(v.icon || 'Layers', 14)}
+      maxWidth={160}
+      tooltipContent={v.name}
     >
       {v.name}
-    </Tag>
+    </TruncatedTag>
   );
 };
 
@@ -75,9 +71,16 @@ const renderGroups = (groups) => {
   return renderLimitedItems({
     items: groups,
     renderItem: (g, idx) => (
-      <Tag key={idx} size='small' shape='circle' color={stringToColor(g)}>
+      <TruncatedTag
+        key={idx}
+        size='small'
+        shape='circle'
+        color={stringToColor(g)}
+        maxWidth={120}
+        tooltipContent={g}
+      >
         {g}
-      </Tag>
+      </TruncatedTag>
     ),
   });
 };
@@ -89,9 +92,16 @@ const renderTags = (text) => {
   return renderLimitedItems({
     items: tagsArr,
     renderItem: (tag, idx) => (
-      <Tag key={idx} size='small' shape='circle' color={stringToColor(tag)}>
+      <TruncatedTag
+        key={idx}
+        size='small'
+        shape='circle'
+        color={stringToColor(tag)}
+        maxWidth={120}
+        tooltipContent={tag}
+      >
         {tag}
-      </Tag>
+      </TruncatedTag>
     ),
   });
 };
@@ -106,9 +116,16 @@ const renderEndpoints = (value) => {
       return renderLimitedItems({
         items: keys,
         renderItem: (key, idx) => (
-          <Tag key={idx} size='small' shape='circle' color={stringToColor(key)}>
+          <TruncatedTag
+            key={idx}
+            size='small'
+            shape='circle'
+            color={stringToColor(key)}
+            maxWidth={140}
+            tooltipContent={key}
+          >
             {key}
-          </Tag>
+          </TruncatedTag>
         ),
         maxDisplay: 3,
       });
@@ -118,9 +135,16 @@ const renderEndpoints = (value) => {
       return renderLimitedItems({
         items: parsed,
         renderItem: (ep, idx) => (
-          <Tag key={idx} color='white' size='small' shape='circle'>
+          <TruncatedTag
+            key={idx}
+            color='white'
+            size='small'
+            shape='circle'
+            maxWidth={140}
+            tooltipContent={ep}
+          >
             {ep}
-          </Tag>
+          </TruncatedTag>
         ),
         maxDisplay: 3,
       });
@@ -164,13 +188,31 @@ const renderQuotaTypes = (arr, t) => {
 // Render bound channels
 const renderBoundChannels = (channels) => {
   if (!channels || channels.length === 0) return '-';
+  const canViewChannelName = isAdmin();
   return renderLimitedItems({
     items: channels,
-    renderItem: (c, idx) => (
-      <Tag key={idx} color='white' size='small' shape='circle'>
-        {c.name}({c.type})
-      </Tag>
-    ),
+    renderItem: (c, idx) => {
+      const channelLabel =
+        canViewChannelName && c.name
+          ? c.name
+          : `#${c.id || c.channel_id || '-'}`;
+      const display =
+        canViewChannelName && c.name && c.type
+          ? `${channelLabel}(${c.type})`
+          : channelLabel;
+      return (
+        <TruncatedTag
+          key={idx}
+          color='white'
+          size='small'
+          shape='circle'
+          maxWidth={150}
+          tooltipContent={display}
+        >
+          {display}
+        </TruncatedTag>
+      );
+    },
   });
 };
 
@@ -294,9 +336,13 @@ export const getModelsColumns = ({
       title: t('模型名称'),
       dataIndex: 'model_name',
       render: (text) => (
-        <Text copyable onClick={(e) => e.stopPropagation()}>
+        <TruncatedText
+          copyable
+          maxWidth={260}
+          onClick={(e) => e.stopPropagation()}
+        >
           {text}
-        </Text>
+        </TruncatedText>
       ),
     },
     {

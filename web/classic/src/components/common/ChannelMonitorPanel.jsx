@@ -31,7 +31,7 @@ import {
 } from '@douyinfe/semi-ui';
 import { Activity, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { API, showError, timestamp2string } from '../../helpers';
+import { API, isAdmin, showError, timestamp2string } from '../../helpers';
 
 const { Text } = Typography;
 
@@ -74,6 +74,19 @@ const sourceTag = (source, t) => {
       {sourceLabel(source, t)}
     </Tag>
   );
+};
+
+const formatChannelId = (channelId) => {
+  const id = Number(channelId || 0);
+  return id > 0 ? `#${id}` : '-';
+};
+
+const formatChannelLabel = (record, canViewChannelName) => {
+  const idLabel = formatChannelId(record?.channel_id);
+  if (canViewChannelName && record?.channel_name) {
+    return `${record.channel_name} (${idLabel})`;
+  }
+  return idLabel;
 };
 
 const MetricBlock = ({ title, bucket, t }) => {
@@ -131,6 +144,7 @@ const MetricBlock = ({ title, bucket, t }) => {
 
 const ChannelMonitorPanel = ({ className = '', defaultWindowSeconds }) => {
   const { t } = useTranslation();
+  const canViewChannelName = isAdmin();
   const [windowSeconds, setWindowSeconds] = useState(
     defaultWindowSeconds || WINDOWS[0].seconds,
   );
@@ -140,7 +154,7 @@ const ChannelMonitorPanel = ({ className = '', defaultWindowSeconds }) => {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await API.get('/api/channel/monitor/summary', {
+      const res = await API.get('/api/log/channel_monitor/summary', {
         params: {
           window_seconds: windowSeconds,
           source: 'all',
@@ -183,7 +197,14 @@ const ChannelMonitorPanel = ({ className = '', defaultWindowSeconds }) => {
         title: t('渠道'),
         dataIndex: 'channel_name',
         width: 180,
-        render: (text, record) => text || record.channel_id || '-',
+        render: (_text, record) => {
+          const label = formatChannelLabel(record, canViewChannelName);
+          return (
+            <Tooltip content={label}>
+              <span>{label}</span>
+            </Tooltip>
+          );
+        },
       },
       {
         title: t('模型'),
@@ -238,7 +259,7 @@ const ChannelMonitorPanel = ({ className = '', defaultWindowSeconds }) => {
         ),
       },
     ],
-    [t],
+    [canViewChannelName, t],
   );
 
   return (

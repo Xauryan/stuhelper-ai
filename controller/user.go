@@ -589,7 +589,7 @@ func calculateUserPermissions(userRole int) map[string]interface{} {
 		permissions["sidebar_settings"] = false
 		permissions["sidebar_modules"] = map[string]interface{}{
 			"admin": map[string]interface{}{
-				"channel":      true,
+				"channel":      false,
 				"models":       true,
 				"subscription": true,
 				"redemption":   true,
@@ -654,7 +654,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 	} else if userRole == common.RoleAuditAdminUser {
 		defaultConfig["admin"] = map[string]interface{}{
 			"enabled":      true,
-			"channel":      true,
+			"channel":      false,
 			"models":       true,
 			"subscription": true,
 			"redemption":   true,

@@ -205,10 +205,10 @@ export default function SettingsGeneralPayment(props) {
                 field='PayMethods'
                 label={t('充值方式设置')}
                 placeholder={t(
-                  '为一个 JSON 文本，例如：[{"name":"支付宝","type":"alipay","service_fee_percent":"0.6"}]',
+                  '为一个 JSON 文本，例如：[{"name":"支付宝","type":"alipay","icon":"https://example.com/alipay.png","service_fee_percent":"0.6","min_topup":"10"}]',
                 )}
                 extraText={t(
-                  '每个支付通道可单独配置 service_fee_percent，单位为百分比；留空或不填表示 0',
+                  '每个支付通道可单独配置 service_fee_percent（百分比，留空表示 0）和 min_topup；icon 仅支持 HTTPS 图片 URL，内置支付宝/微信/Stripe 会按 type 自动显示图标',
                 )}
                 autosize
               />

@@ -122,6 +122,10 @@ func GetChannel(group string, model string, retry int) (*Channel, error) {
 }
 
 func GetChannelExcluding(group string, model string, retry int, excludeChannelIDs map[int]struct{}) (*Channel, error) {
+	return GetChannelExcludingForPath(group, model, retry, excludeChannelIDs, "")
+}
+
+func GetChannelExcludingForPath(group string, model string, retry int, excludeChannelIDs map[int]struct{}, requestPath string) (*Channel, error) {
 	var abilities []Ability
 
 	var err error = nil
@@ -166,7 +170,25 @@ func GetChannelExcluding(group string, model string, retry int, excludeChannelID
 		return nil, nil
 	}
 	err = DB.First(&channel, "id = ?", channel.Id).Error
+	if err != nil {
+		return nil, err
+	}
+	if requestPath != "" && !ChannelSupportsRequestPath(&channel, requestPath) {
+		return GetChannelExcludingForPath(group, model, retry, withExcludedChannelID(excludeChannelIDs, channel.Id), requestPath)
+	}
 	return &channel, err
+}
+
+func withExcludedChannelID(excludeChannelIDs map[int]struct{}, channelID int) map[int]struct{} {
+	if channelID <= 0 {
+		return excludeChannelIDs
+	}
+	updated := make(map[int]struct{}, len(excludeChannelIDs)+1)
+	for id := range excludeChannelIDs {
+		updated[id] = struct{}{}
+	}
+	updated[channelID] = struct{}{}
+	return updated
 }
 
 func (channel *Channel) AddAbilities(tx *gorm.DB) error {

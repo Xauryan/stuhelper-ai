@@ -70,6 +70,233 @@ func formatUserLogs(logs []*Log, startIdx int) {
 	}
 }
 
+func formatAuditAdminLogs(logs []*Log, startIdx int, channelNames map[int]string) {
+	for i := range logs {
+		logs[i].ChannelName = ""
+		sanitizeAuditAdminChannelText(logs[i], channelNames)
+		sanitizeLogOtherForAuditAdmin(logs[i])
+	}
+}
+
+func sanitizeAuditAdminChannelText(log *Log, channelNames map[int]string) {
+	if log == nil {
+		return
+	}
+	if log.ChannelId > 0 {
+		hints := auditAdminLogChannelNameHints(log)
+		if channelNames != nil {
+			hints = append(hints, channelNames[log.ChannelId])
+		}
+		log.Content = replaceChannelIdentifierHints(log.Content, log.ChannelId, hints...)
+	}
+	otherMap, err := common.StrToMap(log.Other)
+	if err != nil || otherMap == nil {
+		return
+	}
+	action, _ := opActionFromOther(otherMap).(string)
+	if strings.HasPrefix(action, "channel.") {
+		log.Content = auditAdminChannelContent(action, otherMap, log.ChannelId)
+	}
+}
+
+func auditAdminLogChannelNameHints(log *Log) []string {
+	if log == nil || strings.TrimSpace(log.Other) == "" {
+		return nil
+	}
+	otherMap, err := common.StrToMap(log.Other)
+	if err != nil || otherMap == nil {
+		return nil
+	}
+	hints := make([]string, 0, 2)
+	if channelName, ok := otherMap["channel_name"].(string); ok {
+		hints = append(hints, channelName)
+	}
+	if adminInfo, ok := otherMap["admin_info"].(map[string]interface{}); ok {
+		if channelName, ok := adminInfo["channel_name"].(string); ok {
+			hints = append(hints, channelName)
+		}
+	}
+	if op, ok := otherMap["op"].(map[string]interface{}); ok {
+		if params, ok := op["params"].(map[string]interface{}); ok {
+			if name, ok := params["name"].(string); ok {
+				hints = append(hints, name)
+			}
+		}
+	}
+	return hints
+}
+
+func auditAdminChannelContent(action string, otherMap map[string]interface{}, fallbackChannelID int) string {
+	params := map[string]interface{}{}
+	if op, ok := otherMap["op"].(map[string]interface{}); ok {
+		if rawParams, ok := op["params"].(map[string]interface{}); ok {
+			params = rawParams
+		}
+	}
+	channelID := auditAdminIntParam(params, "id", fallbackChannelID)
+	sourceID := auditAdminIntParam(params, "sourceId", 0)
+	count := auditAdminIntParam(params, "count", 0)
+	switch action {
+	case "channel.create":
+		if count > 0 {
+			return fmt.Sprintf("Created %d channel(s)", count)
+		}
+	case "channel.update":
+		return fmt.Sprintf("Updated channel %s", auditAdminChannelLabel(channelID))
+	case "channel.delete":
+		return fmt.Sprintf("Deleted channel %s", auditAdminChannelLabel(channelID))
+	case "channel.key_view":
+		return fmt.Sprintf("Viewed channel key %s", auditAdminChannelLabel(channelID))
+	case "channel.copy":
+		return fmt.Sprintf("Copied channel %s to %s", auditAdminChannelLabel(sourceID), auditAdminChannelLabel(channelID))
+	case "channel.delete_batch":
+		if count > 0 {
+			return fmt.Sprintf("Batch deleted %d channel(s)", count)
+		}
+	case "channel.delete_disabled":
+		if count > 0 {
+			return fmt.Sprintf("Deleted %d disabled channel(s)", count)
+		}
+	case "channel.tag_disable":
+		return "Disabled channels by tag"
+	case "channel.tag_enable":
+		return "Enabled channels by tag"
+	case "channel.tag_edit":
+		return "Edited channels by tag"
+	case "channel.tag_batch_set":
+		if count > 0 {
+			return fmt.Sprintf("Batch set tag for %d channel(s)", count)
+		}
+		return "Batch set channel tag"
+	case "channel.multi_key_manage":
+		return fmt.Sprintf("Managed multi-key channel %s", auditAdminChannelLabel(channelID))
+	case "channel.upstream_apply":
+		return fmt.Sprintf("Applied upstream model changes to channel %s", auditAdminChannelLabel(channelID))
+	case "channel.upstream_apply_all":
+		if count > 0 {
+			return fmt.Sprintf("Applied upstream model changes to %d channel(s)", count)
+		}
+	}
+	if channelID > 0 {
+		return fmt.Sprintf("%s %s", action, auditAdminChannelLabel(channelID))
+	}
+	return action
+}
+
+func auditAdminChannelLabel(channelID int) string {
+	if channelID <= 0 {
+		return "#-"
+	}
+	return fmt.Sprintf("#%d", channelID)
+}
+
+func auditAdminIntParam(params map[string]interface{}, key string, fallback int) int {
+	if params == nil {
+		return fallback
+	}
+	raw, ok := params[key]
+	if !ok || raw == nil {
+		return fallback
+	}
+	switch value := raw.(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	case string:
+		var parsed int
+		if _, err := fmt.Sscanf(strings.TrimSpace(value), "%d", &parsed); err == nil {
+			return parsed
+		}
+	}
+	return fallback
+}
+
+func replaceChannelIdentifierHints(value string, channelID int, hints ...string) string {
+	if value == "" || channelID <= 0 {
+		return value
+	}
+	replacement := auditAdminChannelLabel(channelID)
+	for _, hint := range hints {
+		hint = strings.TrimSpace(hint)
+		if hint == "" || hint == replacement {
+			continue
+		}
+		value = strings.ReplaceAll(value, hint, replacement)
+	}
+	return value
+}
+
+func sanitizeLogOtherForAuditAdmin(log *Log) {
+	if log == nil || strings.TrimSpace(log.Other) == "" {
+		return
+	}
+	otherMap, err := common.StrToMap(log.Other)
+	if err != nil || otherMap == nil {
+		return
+	}
+	removeAuditAdminChannelFields(otherMap)
+	if adminInfo, ok := otherMap["admin_info"].(map[string]interface{}); ok {
+		removeAuditAdminChannelFields(adminInfo)
+	}
+	if op, ok := otherMap["op"].(map[string]interface{}); ok {
+		if params, ok := op["params"].(map[string]interface{}); ok {
+			sanitizeAuditAdminChannelParams(op["action"], params)
+			if len(params) == 0 {
+				delete(op, "params")
+			}
+		}
+	}
+	if auditInfo, ok := otherMap["audit_info"].(map[string]interface{}); ok {
+		if params, ok := auditInfo["params"].(map[string]interface{}); ok {
+			sanitizeAuditAdminChannelParams(opActionFromOther(otherMap), params)
+			if len(params) == 0 {
+				delete(auditInfo, "params")
+			}
+		}
+	}
+	log.Other = common.MapToJsonStr(otherMap)
+}
+
+func opActionFromOther(otherMap map[string]interface{}) interface{} {
+	if op, ok := otherMap["op"].(map[string]interface{}); ok {
+		return op["action"]
+	}
+	return nil
+}
+
+func removeAuditAdminChannelFields(values map[string]interface{}) {
+	for _, key := range []string{
+		"channel_name",
+		"channel_affinity",
+	} {
+		delete(values, key)
+	}
+}
+
+func sanitizeAuditAdminChannelParams(actionValue interface{}, params map[string]interface{}) {
+	action, _ := actionValue.(string)
+	if !strings.HasPrefix(action, "channel.") {
+		return
+	}
+	allowed := map[string]struct{}{
+		"id":             {},
+		"sourceId":       {},
+		"count":          {},
+		"changed_fields": {},
+		"action":         {},
+		"status":         {},
+		"success":        {},
+	}
+	for key := range params {
+		if _, ok := allowed[key]; !ok {
+			delete(params, key)
+		}
+	}
+}
+
 func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
 	formatUserLogs(logs, 0)
@@ -324,7 +551,18 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	}
 	if common.DataExportEnabled {
 		gopool.Go(func() {
-			LogQuotaData(userId, username, params.ModelName, params.Quota, common.GetTimestamp(), params.PromptTokens+params.CompletionTokens)
+			LogQuotaData(QuotaDataLogParams{
+				UserID:    userId,
+				Username:  username,
+				ModelName: params.ModelName,
+				Quota:     params.Quota,
+				CreatedAt: common.GetTimestamp(),
+				TokenUsed: params.PromptTokens + params.CompletionTokens,
+				UseGroup:  params.Group,
+				TokenID:   params.TokenId,
+				ChannelID: params.ChannelId,
+				NodeName:  common.NodeName,
+			})
 		})
 	}
 }
@@ -372,7 +610,7 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	}
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, includeChannelNames bool) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB
@@ -416,44 +654,47 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 		return nil, 0, err
 	}
 
-	channelIds := types.NewSet[int]()
-	for _, log := range logs {
-		if log.ChannelId != 0 {
-			channelIds.Add(log.ChannelId)
+	if includeChannelNames {
+		channelIds := types.NewSet[int]()
+		for _, log := range logs {
+			if log.ChannelId != 0 {
+				channelIds.Add(log.ChannelId)
+			}
 		}
-	}
-
-	if channelIds.Len() > 0 {
-		var channels []struct {
-			Id   int    `gorm:"column:id"`
-			Name string `gorm:"column:name"`
-		}
-		if common.MemoryCacheEnabled {
-			// Cache get channel
-			for _, channelId := range channelIds.Items() {
-				if cacheChannel, err := CacheGetChannel(channelId); err == nil {
-					channels = append(channels, struct {
-						Id   int    `gorm:"column:id"`
-						Name string `gorm:"column:name"`
-					}{
-						Id:   channelId,
-						Name: cacheChannel.Name,
-					})
+		if channelIds.Len() > 0 {
+			var channels []struct {
+				Id   int    `gorm:"column:id"`
+				Name string `gorm:"column:name"`
+			}
+			if common.MemoryCacheEnabled {
+				// Cache get channel
+				for _, channelId := range channelIds.Items() {
+					if cacheChannel, err := CacheGetChannel(channelId); err == nil {
+						channels = append(channels, struct {
+							Id   int    `gorm:"column:id"`
+							Name string `gorm:"column:name"`
+						}{
+							Id:   channelId,
+							Name: cacheChannel.Name,
+						})
+					}
+				}
+			} else {
+				// Bulk query channels from DB
+				if err = DB.Table("channels").Select("id, name").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
+					return logs, total, err
 				}
 			}
-		} else {
-			// Bulk query channels from DB
-			if err = DB.Table("channels").Select("id, name").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
-				return logs, total, err
+			channelMap := make(map[int]string, len(channels))
+			for _, channel := range channels {
+				channelMap[channel.Id] = channel.Name
+			}
+			for i := range logs {
+				logs[i].ChannelName = channelMap[logs[i].ChannelId]
 			}
 		}
-		channelMap := make(map[int]string, len(channels))
-		for _, channel := range channels {
-			channelMap[channel.Id] = channel.Name
-		}
-		for i := range logs {
-			logs[i].ChannelName = channelMap[logs[i].ChannelId]
-		}
+	} else {
+		formatAuditAdminLogs(logs, startIdx, loadChannelNamesForLogs(logs))
 	}
 
 	return logs, total, err

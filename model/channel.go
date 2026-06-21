@@ -1016,7 +1016,32 @@ func (channel *Channel) ValidateSettings() error {
 			return err
 		}
 	}
+	otherSettings := dto.ChannelOtherSettings{}
+	if strings.TrimSpace(channel.OtherSettings) != "" {
+		if err := common.UnmarshalJsonStr(channel.OtherSettings, &otherSettings); err != nil {
+			return err
+		}
+	}
+	if channel.Type == constant.ChannelTypeAdvancedCustom && otherSettings.AdvancedCustom == nil {
+		return fmt.Errorf("advanced_custom is required")
+	}
+	if otherSettings.AdvancedCustom != nil {
+		if err := otherSettings.AdvancedCustom.Validate(); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func ChannelSupportsRequestPath(channel *Channel, requestPath string) bool {
+	if channel == nil {
+		return false
+	}
+	if channel.Type != constant.ChannelTypeAdvancedCustom {
+		return true
+	}
+	config := channel.GetOtherSettings().AdvancedCustom
+	return config != nil && config.SupportsPath(requestPath)
 }
 
 func (channel *Channel) GetSetting() dto.ChannelSettings {

@@ -34,6 +34,8 @@ const TokensTable = (tokensData) => {
     pageSize,
     tokenCount,
     compactMode,
+    visibleColumns,
+    COLUMN_KEYS,
     handlePageChange,
     handlePageSizeChange,
     rowSelection,
@@ -69,6 +71,7 @@ const TokensTable = (tokensData) => {
       setShowEdit,
       refresh,
       groupRatios,
+      COLUMN_KEYS,
     });
   }, [
     t,
@@ -84,20 +87,25 @@ const TokensTable = (tokensData) => {
     setShowEdit,
     refresh,
     groupRatios,
+    COLUMN_KEYS,
   ]);
+
+  const visibleColumnsList = useMemo(() => {
+    return columns.filter((column) => visibleColumns[column.key]);
+  }, [columns, visibleColumns]);
 
   // Handle compact mode by removing fixed positioning
   const tableColumns = useMemo(() => {
     return compactMode
-      ? columns.map((col) => {
+      ? visibleColumnsList.map((col) => {
           if (col.dataIndex === 'operate') {
             const { fixed, ...rest } = col;
             return rest;
           }
           return col;
         })
-      : columns;
-  }, [compactMode, columns]);
+      : visibleColumnsList;
+  }, [compactMode, visibleColumnsList]);
 
   return (
     <CardTable

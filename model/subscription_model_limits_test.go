@@ -304,6 +304,8 @@ func TestPurchaseSubscriptionWithBalanceDeductsQuotaAndCreatesSubscriptionOrder(
 	assert.Equal(t, "order", sub.Source)
 	assert.Equal(t, "vip", sub.UpgradeGroup)
 	assert.Equal(t, "default", sub.PrevUserGroup)
+	require.NotNil(t, sub.AllowWalletOverflow)
+	assert.True(t, *sub.AllowWalletOverflow)
 
 	var order SubscriptionOrder
 	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3008, plan.Id).First(&order).Error)
@@ -323,6 +325,71 @@ func TestPurchaseSubscriptionWithBalanceDeductsQuotaAndCreatesSubscriptionOrder(
 	var commissionCount int64
 	require.NoError(t, DB.Model(&ReferralCommission{}).Count(&commissionCount).Error)
 	assert.EqualValues(t, 0, commissionCount)
+}
+
+func TestCreateUserSubscriptionSnapshotsWalletOverflowAndDowngradeGroup(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, DB.Create(&User{
+		Id:       3019,
+		Username: "subscription-policy-snapshot-user",
+		Status:   common.UserStatusEnabled,
+		Group:    "default",
+	}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1019, 100, false, "")
+	plan.UpgradeGroup = "vip"
+	plan.DowngradeGroup = "trial"
+	plan.AllowWalletOverflow = common.GetPointer(false)
+	require.NoError(t, DB.Save(plan).Error)
+	InvalidateSubscriptionPlanCache(plan.Id)
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		_, err := CreateUserSubscriptionFromPlanTx(tx, 3019, plan, "admin")
+		return err
+	})
+	require.NoError(t, err)
+
+	var sub UserSubscription
+	require.NoError(t, DB.Where("user_id = ? AND plan_id = ?", 3019, plan.Id).First(&sub).Error)
+	assert.Equal(t, "vip", sub.UpgradeGroup)
+	assert.Equal(t, "trial", sub.DowngradeGroup)
+	require.NotNil(t, sub.AllowWalletOverflow)
+	assert.False(t, *sub.AllowWalletOverflow)
+}
+
+func TestExpireDueSubscriptionsUsesExplicitDowngradeGroup(t *testing.T) {
+	truncateTables(t)
+
+	now := common.GetTimestamp()
+	require.NoError(t, DB.Create(&User{
+		Id:       3020,
+		Username: "subscription-explicit-downgrade-user",
+		Status:   common.UserStatusEnabled,
+		Group:    "vip",
+	}).Error)
+	plan := insertSubscriptionPlanForModelLimitTest(t, 1020, 100, false, "")
+	plan.UpgradeGroup = "vip"
+	plan.DowngradeGroup = "trial"
+	require.NoError(t, DB.Save(plan).Error)
+	require.NoError(t, DB.Create(&UserSubscription{
+		UserId:         3020,
+		PlanId:         plan.Id,
+		AmountTotal:    100,
+		AmountUsed:     0,
+		StartTime:      now - 3600,
+		EndTime:        now - 10,
+		Status:         "active",
+		Source:         "admin",
+		UpgradeGroup:   "vip",
+		PrevUserGroup:  "default",
+		DowngradeGroup: "trial",
+	}).Error)
+
+	expired, err := ExpireDueSubscriptions(20)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, expired)
+	assert.Equal(t, "trial", getUserGroupForPaymentGuardTest(t, 3020))
 }
 
 func TestTopUpListIncludesSubscriptionPlanTitle(t *testing.T) {

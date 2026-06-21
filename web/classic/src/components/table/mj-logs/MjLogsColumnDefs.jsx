@@ -295,8 +295,9 @@ const renderTimestamp = (timestampInSeconds) => {
   const hours = ('0' + date.getHours()).slice(-2);
   const minutes = ('0' + date.getMinutes()).slice(-2);
   const seconds = ('0' + date.getSeconds()).slice(-2);
+  const milliseconds = String(date.getMilliseconds()).padStart(3, '0');
 
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
 };
 
 function renderDuration(submit_time, finishTime, t) {

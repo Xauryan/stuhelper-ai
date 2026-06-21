@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -87,6 +89,12 @@ func buildChannelListQuery(group string, statusFilter int, typeFilter int) *gorm
 		query = query.Where("type = ?", typeFilter)
 	}
 	return query
+}
+
+func GetChannelOps(c *gin.Context) {
+	common.ApiSuccess(c, gin.H{
+		"retry_times": common.RetryTimes,
+	})
 }
 
 func clearAuditChannelDetail(channel *model.Channel) {
@@ -930,13 +938,33 @@ type PatchChannel struct {
 	KeyMode      *string `json:"key_mode"` // 多key模式下密钥覆盖或者追加
 }
 
+func patchChannelPayloadHasField(body []byte, field string) bool {
+	if len(body) == 0 {
+		return false
+	}
+	var payload map[string]json.RawMessage
+	if err := common.Unmarshal(body, &payload); err != nil {
+		return false
+	}
+	_, ok := payload[field]
+	return ok
+}
+
 func UpdateChannel(c *gin.Context) {
 	channel := PatchChannel{}
-	err := c.ShouldBindJSON(&channel)
+	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	hasModelsField := patchChannelPayloadHasField(body, "models")
+	c.Request.Body = io.NopCloser(bytes.NewReader(body))
+	err = c.ShouldBindJSON(&channel)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	explicitEmptyModels := hasModelsField && channel.Models == ""
 
 	// 使用统一的校验函数
 	if err := validateChannel(&channel.Channel, false); err != nil {
@@ -1048,6 +1076,18 @@ func UpdateChannel(c *gin.Context) {
 	if err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	if explicitEmptyModels {
+		err = model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Update("models", "").Error
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		channel.Models = ""
+		if err = channel.UpdateAbilities(nil); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	model.InitChannelCache()
 	service.ResetProxyClientCache()

@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { useTablePageSize } from '../common/useTablePageSize';
 
 export const useUsersData = () => {
   const { t } = useTranslation();
@@ -31,7 +32,7 @@ export const useUsersData = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState(1);
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [pageSize, setPageSize] = useTablePageSize(ITEMS_PER_PAGE);
   const [searching, setSearching] = useState(false);
   const [groupOptions, setGroupOptions] = useState([]);
   const [userCount, setUserCount] = useState(0);
@@ -201,7 +202,6 @@ export const useUsersData = () => {
 
   // Handle page size change
   const handlePageSizeChange = async (size) => {
-    localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
     loadUsers(activePage, size)

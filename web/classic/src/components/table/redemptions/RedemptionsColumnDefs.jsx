@@ -26,6 +26,7 @@ import {
   REDEMPTION_STATUS_MAP,
   REDEMPTION_ACTIONS,
 } from '../../../constants/redemption.constants';
+import { TruncatedText } from '../../common/ui/RenderUtils';
 
 /**
  * Check if redemption code is expired
@@ -96,6 +97,7 @@ export const getRedemptionsColumns = ({
     {
       title: t('名称'),
       dataIndex: 'name',
+      render: (text) => <TruncatedText maxWidth={180}>{text}</TruncatedText>,
     },
     {
       title: t('状态'),

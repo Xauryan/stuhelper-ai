@@ -106,9 +106,11 @@ const AddEditSubscriptionModal = ({
     sort_order: 0,
     recommended: false,
     allow_balance_pay: true,
+    allow_wallet_overflow: true,
     max_purchase_per_user: 0,
     total_amount: 0,
     upgrade_group: '',
+    downgrade_group: '',
     stripe_price_id: '',
     creem_product_id: '',
     model_limits: [],
@@ -133,11 +135,13 @@ const AddEditSubscriptionModal = ({
       sort_order: Number(p.sort_order || 0),
       recommended: p.recommended === true,
       allow_balance_pay: p.allow_balance_pay !== false,
+      allow_wallet_overflow: p.allow_wallet_overflow !== false,
       max_purchase_per_user: Number(p.max_purchase_per_user || 0),
       total_amount: Number(
         quotaToDisplayAmount(p.total_amount || 0).toFixed(2),
       ),
       upgrade_group: p.upgrade_group || '',
+      downgrade_group: p.downgrade_group || '',
       stripe_price_id: p.stripe_price_id || '',
       creem_product_id: p.creem_product_id || '',
       model_limits: getSubscriptionModelLimits(p),
@@ -226,6 +230,7 @@ const AddEditSubscriptionModal = ({
           max_purchase_per_user: Number(values.max_purchase_per_user || 0),
           total_amount: displayAmountToQuota(values.total_amount),
           upgrade_group: values.upgrade_group || '',
+          downgrade_group: values.downgrade_group || '',
           model_limits_enabled: modelLimits.length > 0,
           model_limits: modelLimits,
         },
@@ -368,6 +373,9 @@ const AddEditSubscriptionModal = ({
                         min={0}
                         precision={2}
                         rules={[{ required: true, message: t('请输入金额') }]}
+                        extraText={t(
+                          '用户购买该套餐需支付的金额，具体币种由支付渠道决定',
+                        )}
                         style={{ width: '100%' }}
                       />
                     </Col>
@@ -399,6 +407,28 @@ const AddEditSubscriptionModal = ({
                         )}
                       >
                         <Select.Option value=''>{t('不升级')}</Select.Option>
+                        {(groupOptions || []).map((g) => (
+                          <Select.Option key={g} value={g}>
+                            {g}
+                          </Select.Option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+
+                    <Col span={12}>
+                      <Form.Select
+                        field='downgrade_group'
+                        label={t('降级分组')}
+                        showClear
+                        loading={groupLoading}
+                        placeholder={t('降级到购买前分组')}
+                        extraText={t(
+                          '订阅过期、作废或删除后优先降级到该分组；留空则回退到购买前分组。',
+                        )}
+                      >
+                        <Select.Option value=''>
+                          {t('降级到购买前分组')}
+                        </Select.Option>
                         {(groupOptions || []).map((g) => (
                           <Select.Option key={g} value={g}>
                             {g}
@@ -456,6 +486,14 @@ const AddEditSubscriptionModal = ({
                       <Form.Switch
                         field='allow_balance_pay'
                         label={t('允许余额支付')}
+                        size='large'
+                      />
+                    </Col>
+
+                    <Col span={12}>
+                      <Form.Switch
+                        field='allow_wallet_overflow'
+                        label={t('额度耗尽后允许钱包余额')}
                         size='large'
                       />
                     </Col>

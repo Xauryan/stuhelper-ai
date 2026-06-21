@@ -75,9 +75,17 @@ const UserInfoModal = ({
       closable
       maskClosable
       width={600}
+      bodyStyle={{ padding: 0 }}
     >
       {userInfoData && (
-        <div style={{ padding: 20 }}>
+        <div
+          style={{
+            padding: 20,
+            maxHeight: 'calc(100vh - 180px)',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+          }}
+        >
           {/* 基本信息 */}
           <div style={rowStyle}>
             <div style={colStyle}>

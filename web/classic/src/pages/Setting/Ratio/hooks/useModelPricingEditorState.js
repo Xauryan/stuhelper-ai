@@ -56,6 +56,9 @@ const EMPTY_MODEL = {
 };
 
 const NUMERIC_INPUT_REGEX = /^(\d+(\.\d*)?|\.\d*)?$/;
+const PRICING_DISPLAY_DECIMALS = 12;
+const PRICING_SNAP_DECIMALS = 8;
+const PRICING_SNAP_EPSILON = 1e-12;
 
 export const hasValue = (value) =>
   value !== '' && value !== null && value !== undefined && value !== false;
@@ -76,12 +79,35 @@ const toNumberOrNull = (value) => {
   return Number.isFinite(num) ? num : null;
 };
 
+const roundToDecimals = (value, decimals) => {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+};
+
+const snapFloatDrift = (value) => {
+  const tolerance = Math.max(
+    PRICING_SNAP_EPSILON,
+    Math.abs(value) * Number.EPSILON * 8,
+  );
+
+  for (let decimals = 0; decimals <= PRICING_SNAP_DECIMALS; decimals += 1) {
+    const rounded = roundToDecimals(value, decimals);
+    if (Math.abs(value - rounded) <= tolerance) {
+      return rounded;
+    }
+  }
+
+  return value;
+};
+
 const formatNumber = (value) => {
   const num = toNumberOrNull(value);
   if (num === null) {
     return '';
   }
-  return parseFloat(num.toFixed(12)).toString();
+  return parseFloat(
+    snapFloatDrift(num).toFixed(PRICING_DISPLAY_DECIMALS),
+  ).toString();
 };
 
 const toNormalizedNumber = (value) => {

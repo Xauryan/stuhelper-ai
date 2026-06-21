@@ -162,7 +162,7 @@ const Home = () => {
             <iframe
               ref={iframeRef}
               src={homePageRawContent}
-              className='w-full h-full border-none'
+              className='w-full h-screen border-none'
               onLoad={postIframePreferences}
               title={t('Custom homepage')}
             />

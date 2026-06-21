@@ -176,9 +176,9 @@ const EditTokenModal = (props) => {
       } else {
         data.model_limits = [];
       }
-      data.remain_amount = Number(
-        quotaToDisplayAmount(data.remain_quota || 0).toFixed(6),
-      );
+      data.remain_amount = data.unlimited_quota
+        ? 0
+        : Number(quotaToDisplayAmount(data.remain_quota || 0).toFixed(6));
       data.group = data.group || DEFAULT_TOKEN_GROUP;
       data.cross_group_retry =
         data.group === DEFAULT_TOKEN_GROUP ? !!data.cross_group_retry : false;
@@ -192,17 +192,9 @@ const EditTokenModal = (props) => {
   };
 
   useEffect(() => {
-    if (formApiRef.current) {
-      if (!isEdit) {
-        formApiRef.current.setValues(getInitValues());
-      }
-    }
-    loadModels();
-    loadGroups();
-  }, [props.editingToken.id]);
-
-  useEffect(() => {
     if (props.visiable) {
+      loadModels();
+      loadGroups();
       if (isEdit) {
         loadToken();
       } else {

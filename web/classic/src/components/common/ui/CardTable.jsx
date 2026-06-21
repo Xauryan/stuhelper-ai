@@ -45,6 +45,9 @@ const CardTable = ({
   loading = false,
   rowKey = 'key',
   hidePagination = false,
+  renderMobileCard,
+  cardMode = false,
+  cardGridClassName = 'grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3',
   ...tableProps
 }) => {
   const isMobile = useIsMobile();
@@ -57,7 +60,21 @@ const CardTable = ({
     return record[rowKey] !== undefined ? record[rowKey] : index;
   };
 
-  if (!isMobile) {
+  const renderCardNode = (record, index) => {
+    if (!renderMobileCard) {
+      return <MobileRowCard record={record} index={index} />;
+    }
+
+    return renderMobileCard({
+      record,
+      index,
+      columns,
+      tableProps,
+      rowKey: getRowKey(record, index),
+    });
+  };
+
+  if (!isMobile && !cardMode) {
     const finalTableProps = hidePagination
       ? { ...tableProps, pagination: false }
       : tableProps;
@@ -73,7 +90,35 @@ const CardTable = ({
     );
   }
 
-  if (showSkeleton) {
+  if (!isMobile && cardMode && showSkeleton) {
+    return (
+      <div className={cardGridClassName}>
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <Card key={i} className='!rounded-2xl shadow-sm'>
+            <Skeleton
+              loading={true}
+              active
+              placeholder={
+                <div className='p-2'>
+                  <Skeleton.Title active style={{ width: '60%', height: 18 }} />
+                  <Skeleton.Title
+                    active
+                    style={{ width: '90%', height: 14, marginTop: 16 }}
+                  />
+                  <Skeleton.Title
+                    active
+                    style={{ width: '70%', height: 14, marginTop: 10 }}
+                  />
+                </div>
+              }
+            ></Skeleton>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  if (isMobile && showSkeleton) {
     const visibleCols = columns.filter((col) => {
       if (tableProps?.visibleColumns && col.key) {
         return tableProps.visibleColumns[col.key];
@@ -170,7 +215,7 @@ const CardTable = ({
               <span className='font-medium text-gray-600 mr-2 whitespace-nowrap select-none'>
                 {title}
               </span>
-              <div className='flex-1 break-all flex justify-end items-center gap-1'>
+              <div className='flex-1 min-w-0 break-all flex justify-end items-center gap-1 overflow-hidden'>
                 {cellContent !== undefined && cellContent !== null
                   ? cellContent
                   : '-'}
@@ -213,14 +258,29 @@ const CardTable = ({
     );
   }
 
+  if (!isMobile && cardMode) {
+    return (
+      <div className={cardGridClassName}>
+        {dataSource.map((record, index) => (
+          <React.Fragment key={getRowKey(record, index)}>
+            {renderCardNode(record, index)}
+          </React.Fragment>
+        ))}
+        {!hidePagination && tableProps.pagination && dataSource.length > 0 && (
+          <div className='col-span-full mt-2 flex justify-center'>
+            <Pagination {...tableProps.pagination} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className='flex flex-col gap-2'>
       {dataSource.map((record, index) => (
-        <MobileRowCard
-          key={getRowKey(record, index)}
-          record={record}
-          index={index}
-        />
+        <React.Fragment key={getRowKey(record, index)}>
+          {renderCardNode(record, index)}
+        </React.Fragment>
       ))}
       {!hidePagination && tableProps.pagination && dataSource.length > 0 && (
         <div className='mt-2 flex justify-center'>
@@ -237,6 +297,9 @@ CardTable.propTypes = {
   loading: PropTypes.bool,
   rowKey: PropTypes.oneOfType([PropTypes.string, PropTypes.func]),
   hidePagination: PropTypes.bool,
+  renderMobileCard: PropTypes.func,
+  cardMode: PropTypes.bool,
+  cardGridClassName: PropTypes.string,
 };
 
 export default CardTable;

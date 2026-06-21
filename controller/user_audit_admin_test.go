@@ -207,7 +207,7 @@ func TestRootManageUserPromotesAndDemotesThroughAuditAdmin(t *testing.T) {
 	sidebarModules := map[string]map[string]bool{}
 	require.NoError(t, common.UnmarshalJsonStr(promotedSetting.SidebarModules, &sidebarModules))
 	require.Contains(t, sidebarModules, "admin")
-	require.True(t, sidebarModules["admin"]["channel"])
+	require.False(t, sidebarModules["admin"]["channel"])
 	require.True(t, sidebarModules["admin"]["referral"])
 	require.False(t, sidebarModules["admin"]["setting"])
 	require.NotContains(t, sidebarModules["admin"], "deployment")

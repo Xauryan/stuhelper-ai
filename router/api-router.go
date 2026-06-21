@@ -247,12 +247,13 @@ func SetApiRouter(router *gin.Engine) {
 			ratioSyncRoute.POST("/fetch", controller.FetchUpstreamRatios)
 		}
 		channelRoute := apiRouter.Group("/channel")
-		channelRoute.Use(middleware.AuditAdminAuth())
+		channelRoute.Use(middleware.AdminAuth())
 		{
 			channelRoute.GET("/", controller.GetAllChannels)
 			channelRoute.GET("/search", controller.SearchChannels)
 			channelRoute.GET("/models", controller.ChannelListModels)
 			channelRoute.GET("/models_enabled", controller.EnabledListModels)
+			channelRoute.GET("/ops", controller.GetChannelOps)
 			channelRoute.GET("/test", middleware.RequireAdminRole(), controller.TestAllChannels)
 			channelRoute.GET("/test/:id", middleware.RequireAdminRole(), controller.TestChannel)
 			channelRoute.GET("/monitor/summary", controller.GetChannelMonitorSummary)
@@ -289,6 +290,8 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/:id/codex/oauth/complete", middleware.RequireAdminRole(), controller.CompleteCodexOAuthForChannel)
 			channelRoute.POST("/:id/codex/refresh", middleware.RequireAdminRole(), controller.RefreshCodexChannelCredential)
 			channelRoute.GET("/:id/codex/usage", middleware.RequireAdminRole(), controller.GetCodexChannelUsage)
+			channelRoute.GET("/:id/codex/usage/reset-credits", middleware.RequireAdminRole(), controller.GetCodexChannelRateLimitResetCredits)
+			channelRoute.POST("/:id/codex/usage/reset", middleware.RequireAdminRole(), controller.ResetCodexChannelUsage)
 		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())
@@ -331,6 +334,7 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/stat", middleware.AuditAdminAuth(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AuditAdminAuth(), controller.GetChannelAffinityUsageCacheStats)
+		logRoute.GET("/channel_monitor/summary", middleware.AuditAdminAuth(), controller.GetChannelMonitorSummary)
 		logRoute.GET("/search", middleware.AuditAdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
@@ -339,6 +343,8 @@ func SetApiRouter(router *gin.Engine) {
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)
 		dataRoute.GET("/users", middleware.AdminAuth(), controller.GetQuotaDatesByUser)
 		dataRoute.GET("/self", middleware.UserAuth(), controller.GetUserQuotaDates)
+		dataRoute.GET("/flow", middleware.AdminAuth(), controller.GetAllFlowQuotaDates)
+		dataRoute.GET("/flow/self", middleware.UserAuth(), controller.GetUserFlowQuotaDates)
 
 		logRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
 		{
@@ -351,7 +357,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 
 		prefillGroupRoute := apiRouter.Group("/prefill_group")
-		prefillGroupRoute.Use(middleware.AuditAdminAuth())
+		prefillGroupRoute.Use(middleware.AdminAuth())
 		{
 			prefillGroupRoute.GET("/", controller.GetPrefillGroups)
 			prefillGroupRoute.POST("/", middleware.RequireAdminRole(), controller.CreatePrefillGroup)

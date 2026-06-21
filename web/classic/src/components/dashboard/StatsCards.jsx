@@ -46,20 +46,25 @@ const StatsCards = ({
               {group.items.map((item, itemIdx) => (
                 <div
                   key={itemIdx}
-                  className='flex items-center justify-between cursor-pointer'
+                  className='flex min-w-0 items-center justify-between cursor-pointer gap-3'
                   onClick={item.onClick}
                 >
-                  <div className='flex items-center'>
+                  <div className='flex min-w-0 items-center'>
                     <Avatar
-                      className='mr-3'
+                      className='mr-3 shrink-0'
                       size='small'
                       color={item.avatarColor}
                     >
                       {item.icon}
                     </Avatar>
-                    <div>
-                      <div className='text-xs text-gray-500'>{item.title}</div>
-                      <div className='text-lg font-semibold'>
+                    <div className='min-w-0'>
+                      <div className='truncate text-xs text-gray-500'>
+                        {item.title}
+                      </div>
+                      <div
+                        className='max-w-full truncate text-lg font-semibold tabular-nums'
+                        title={item.fullValue || item.value}
+                      >
                         <Skeleton
                           loading={loading}
                           active
@@ -95,7 +100,7 @@ const StatsCards = ({
                   ) : (
                     (loading ||
                       (item.trendData && item.trendData.length > 0)) && (
-                      <div className='w-24 h-10'>
+                      <div className='w-24 h-10 shrink-0'>
                         <VChart
                           spec={getTrendSpec(item.trendData, item.trendColor)}
                           option={CHART_CONFIG}

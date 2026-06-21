@@ -31,10 +31,10 @@ import {
 } from '@douyinfe/semi-ui';
 import {
   timestamp2string,
-  renderGroup,
   renderQuota,
   getChannelIcon,
   renderQuotaWithAmount,
+  stringToColor,
   showSuccess,
   showError,
   showInfo,
@@ -50,6 +50,9 @@ import {
   IconAlertTriangle,
 } from '@douyinfe/semi-icons';
 import { FaRandom } from 'react-icons/fa';
+import { TruncatedTag, TruncatedText } from '../../common/ui/RenderUtils';
+
+const SENSITIVE_MASK = '••••';
 
 // Render functions
 const renderType = (type, record = {}, t) => {
@@ -78,9 +81,15 @@ const renderType = (type, record = {}, t) => {
   }
 
   const typeTag = (
-    <Tag color={type2label[type]?.color} shape='circle' prefixIcon={icon}>
+    <TruncatedTag
+      color={type2label[type]?.color}
+      shape='circle'
+      prefixIcon={icon}
+      maxWidth={170}
+      tooltipContent={type2label[type]?.label}
+    >
       {type2label[type]?.label}
-    </Tag>
+    </TruncatedTag>
   );
 
   return typeTag;
@@ -292,6 +301,10 @@ const renderResponseTime = (responseTime, t) => {
   }
 };
 
+const renderSensitiveMask = () => (
+  <span className='font-mono text-semi-color-text-2'>{SENSITIVE_MASK}</span>
+);
+
 const isRequestPassThroughEnabled = (record) => {
   if (!record || record.children !== undefined) {
     return false;
@@ -367,12 +380,14 @@ export const getChannelsColumns = ({
   openUpstreamUpdateModal,
   detectChannelUpstreamUpdates,
   canWrite = true,
+  sensitiveVisible = true,
 }) => {
   const columns = [
     {
       key: COLUMN_KEYS.ID,
       title: t('ID'),
       dataIndex: 'id',
+      render: (text) => (sensitiveVisible ? text : renderSensitiveMask()),
     },
     {
       key: COLUMN_KEYS.NAME,
@@ -388,47 +403,49 @@ export const getChannelsColumns = ({
           upstreamUpdateMeta.supported &&
           upstreamUpdateMeta.enabled &&
           (pendingAddCount > 0 || pendingRemoveCount > 0);
-        const nameNode =
-          record.remark && record.remark.trim() !== '' ? (
-            <Tooltip
-              content={
-                <div className='flex flex-col gap-2 max-w-xs'>
-                  <div className='text-sm'>{record.remark}</div>
-                  <Button
-                    size='small'
-                    type='primary'
-                    theme='outline'
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigator.clipboard
-                        .writeText(record.remark)
-                        .then(() => {
-                          showSuccess(t('复制成功'));
-                        })
-                        .catch(() => {
-                          showError(t('复制失败'));
-                        });
-                    }}
-                  >
-                    {t('复制')}
-                  </Button>
-                </div>
-              }
-              trigger='hover'
-              position='topLeft'
-            >
-              <span>{text}</span>
-            </Tooltip>
-          ) : (
-            <span>{text}</span>
-          );
+        const displayName = sensitiveVisible ? text : SENSITIVE_MASK;
+        const canShowRemark =
+          sensitiveVisible && record.remark && record.remark.trim() !== '';
+        const nameNode = canShowRemark ? (
+          <Tooltip
+            content={
+              <div className='flex flex-col gap-2 max-w-xs'>
+                <div className='text-sm'>{record.remark}</div>
+                <Button
+                  size='small'
+                  type='primary'
+                  theme='outline'
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard
+                      .writeText(record.remark)
+                      .then(() => {
+                        showSuccess(t('复制成功'));
+                      })
+                      .catch(() => {
+                        showError(t('复制失败'));
+                      });
+                  }}
+                >
+                  {t('复制')}
+                </Button>
+              </div>
+            }
+            trigger='hover'
+            position='topLeft'
+          >
+            <TruncatedText maxWidth={220}>{displayName}</TruncatedText>
+          </Tooltip>
+        ) : (
+          <TruncatedText maxWidth={220}>{displayName}</TruncatedText>
+        );
 
         if (!passThroughEnabled && !showUpstreamUpdateTag) {
           return nameNode;
         }
 
         return (
-          <Space spacing={6} align='center'>
+          <Space spacing={6} align='center' style={{ maxWidth: 330 }}>
             {nameNode}
             {passThroughEnabled && (
               <Tooltip
@@ -503,7 +520,7 @@ export const getChannelsColumns = ({
       dataIndex: 'group',
       render: (text, record, index) => (
         <div>
-          <Space spacing={2}>
+          <Space spacing={2} wrap style={{ maxWidth: 260, minWidth: 0 }}>
             {text
               ?.split(',')
               .sort((a, b) => {
@@ -511,7 +528,17 @@ export const getChannelsColumns = ({
                 if (b === 'default') return 1;
                 return a.localeCompare(b);
               })
-              .map((item, index) => renderGroup(item))}
+              .map((item) => (
+                <TruncatedTag
+                  key={item}
+                  color={sensitiveVisible ? stringToColor(item) : 'white'}
+                  shape='circle'
+                  maxWidth={120}
+                  tooltipContent={sensitiveVisible ? item : SENSITIVE_MASK}
+                >
+                  {sensitiveVisible ? item : SENSITIVE_MASK}
+                </TruncatedTag>
+              ))}
           </Space>
         </div>
       ),
@@ -591,17 +618,21 @@ export const getChannelsColumns = ({
               <Space spacing={1}>
                 <Tooltip content={t('已用额度')}>
                   <Tag color='white' type='ghost' shape='circle'>
-                    {renderQuota(record.used_quota)}
+                    {sensitiveVisible
+                      ? renderQuota(record.used_quota)
+                      : SENSITIVE_MASK}
                   </Tag>
                 </Tooltip>
                 <Tooltip
                   content={
                     record.type === 57
                       ? t('查看 Codex 帐号信息与用量')
-                      : t('剩余额度') +
-                        ': ' +
-                        renderQuotaWithAmount(record.balance) +
-                        t('，点击更新')
+                      : sensitiveVisible
+                        ? t('剩余额度') +
+                          ': ' +
+                          renderQuotaWithAmount(record.balance) +
+                          t('，点击更新')
+                        : t('剩余额度') + ': ' + SENSITIVE_MASK
                   }
                 >
                   <Tag
@@ -612,8 +643,12 @@ export const getChannelsColumns = ({
                     onClick={() => updateChannelBalance(record)}
                   >
                     {record.type === 57
-                      ? t('帐号信息')
-                      : renderQuotaWithAmount(record.balance)}
+                      ? sensitiveVisible
+                        ? t('帐号信息')
+                        : SENSITIVE_MASK
+                      : sensitiveVisible
+                        ? renderQuotaWithAmount(record.balance)
+                        : SENSITIVE_MASK}
                   </Tag>
                 </Tooltip>
               </Space>
@@ -623,7 +658,9 @@ export const getChannelsColumns = ({
           return (
             <Tooltip content={t('已用额度')}>
               <Tag color='white' type='ghost' shape='circle'>
-                {renderQuota(record.used_quota)}
+                {sensitiveVisible
+                  ? renderQuota(record.used_quota)
+                  : SENSITIVE_MASK}
               </Tag>
             </Tooltip>
           );

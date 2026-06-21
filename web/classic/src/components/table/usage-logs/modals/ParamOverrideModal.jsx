@@ -125,8 +125,17 @@ const ParamOverrideModal = ({
       closable
       maskClosable
       width={640}
+      bodyStyle={{ padding: 0 }}
     >
-      <div style={{ padding: '8px 20px 20px' }}>
+      <div
+        style={{
+          padding: '8px 20px 20px',
+          maxHeight: 'calc(100vh - 180px)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         <div
           style={{
             display: 'flex',
@@ -136,7 +145,7 @@ const ParamOverrideModal = ({
             marginBottom: 10,
           }}
         >
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ marginBottom: 4 }}>
               <Text style={{ fontWeight: 600 }}>
                 {t('{{count}} 项操作', { count: lines.length })}
@@ -149,20 +158,36 @@ const ParamOverrideModal = ({
                 gap: 8,
                 fontSize: 12,
                 color: 'var(--semi-color-text-2)',
+                minWidth: 0,
               }}
             >
               {paramOverrideTarget?.modelName ? (
-                <Text type='tertiary' size='small'>
+                <Text
+                  type='tertiary'
+                  size='small'
+                  ellipsis={{ showTooltip: true }}
+                  style={{ maxWidth: 220 }}
+                >
                   {paramOverrideTarget.modelName}
                 </Text>
               ) : null}
               {paramOverrideTarget?.requestId ? (
-                <Text type='tertiary' size='small'>
+                <Text
+                  type='tertiary'
+                  size='small'
+                  ellipsis={{ showTooltip: true }}
+                  style={{ maxWidth: 240 }}
+                >
                   {t('Request ID')}: {paramOverrideTarget.requestId}
                 </Text>
               ) : null}
               {paramOverrideTarget?.requestPath ? (
-                <Text type='tertiary' size='small'>
+                <Text
+                  type='tertiary'
+                  size='small'
+                  ellipsis={{ showTooltip: true }}
+                  style={{ maxWidth: 260 }}
+                >
                   {t('请求路径')}: {paramOverrideTarget.requestPath}
                 </Text>
               ) : null}
@@ -194,8 +219,10 @@ const ParamOverrideModal = ({
               display: 'flex',
               flexDirection: 'column',
               gap: 8,
-              maxHeight: '56vh',
+              flex: 1,
+              minHeight: 0,
               overflowY: 'auto',
+              overflowX: 'hidden',
               paddingRight: 2,
             }}
           >

@@ -42,10 +42,18 @@ const PricingTable = ({
   displayPrice,
   searchValue,
   showRatio,
+  performanceSummaryMap,
   compactMode = false,
   openModelDetail,
   t,
 }) => {
+  const showPerformance = useMemo(
+    () =>
+      Object.keys(performanceSummaryMap || {}).length > 0 ||
+      filteredModels.some((model) => model.performance_summary),
+    [filteredModels, performanceSummaryMap],
+  );
+
   const columns = useMemo(() => {
     return getPricingTableColumns({
       t,
@@ -59,6 +67,7 @@ const PricingTable = ({
       tokenUnit,
       displayPrice,
       showRatio,
+      showPerformance,
     });
   }, [
     t,
@@ -72,6 +81,7 @@ const PricingTable = ({
     tokenUnit,
     displayPrice,
     showRatio,
+    showPerformance,
   ]);
 
   // 更新列定义中的 searchValue

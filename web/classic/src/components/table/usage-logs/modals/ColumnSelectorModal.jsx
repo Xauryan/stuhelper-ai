@@ -33,6 +33,8 @@ const ColumnSelectorModal = ({
   COLUMN_KEYS,
   isAdminUser,
   canViewUserDetail,
+  canViewChannelDetail,
+  sensitiveVisible,
   copyText,
   showUserInfoFunc,
   t,
@@ -53,7 +55,9 @@ const ColumnSelectorModal = ({
     showUserInfoFunc,
     isAdminUser,
     canViewUserDetail,
+    canViewChannelDetail,
     billingDisplayMode,
+    sensitiveVisible,
   });
 
   return (

@@ -47,7 +47,10 @@ import {
 } from 'lucide-react';
 import { IconGift } from '@douyinfe/semi-icons';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { getCurrencyConfig } from '../../helpers/render';
+import {
+  getCurrencyConfig,
+  normalizeHttpsImageUrl,
+} from '../../helpers/render';
 import { buildRechargeAmountDisplay } from './rechargeAmountDisplay';
 import {
   getInitialRechargeTabKey,
@@ -361,6 +364,9 @@ const RechargeCard = ({
                               (!enableSelfServeTopUp && isSelfServe) ||
                               minTopupVal > Number(topUpCount || 0);
 
+                            const iconUrl = normalizeHttpsImageUrl(
+                              payMethod.icon,
+                            );
                             const buttonEl = (
                               <Button
                                 key={payMethod.type}
@@ -382,9 +388,9 @@ const RechargeCard = ({
                                     <SiWechat size={18} color='#07C160' />
                                   ) : payMethod.type === 'stripe' ? (
                                     <SiStripe size={18} color='#635BFF' />
-                                  ) : payMethod.icon ? (
+                                  ) : iconUrl ? (
                                     <img
-                                      src={payMethod.icon}
+                                      src={iconUrl}
                                       alt={payMethod.name}
                                       style={{
                                         width: 18,
@@ -559,7 +565,7 @@ const RechargeCard = ({
                       <Card
                         key={index}
                         onClick={() => creemPreTopUp(product)}
-                        className='cursor-pointer !rounded-2xl transition-all hover:shadow-md border-gray-200 hover:border-gray-300'
+                        className='cursor-pointer !rounded-2xl transition-colors border-gray-200 hover:border-gray-300'
                         bodyStyle={{ textAlign: 'center', padding: '16px' }}
                       >
                         <div className='font-medium text-lg mb-2'>

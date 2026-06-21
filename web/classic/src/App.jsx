@@ -45,7 +45,7 @@ import TopUp from './pages/TopUp';
 import Log from './pages/Log';
 import Chat from './pages/Chat';
 import Chat2Link from './pages/Chat2Link';
-import Midjourney from './pages/Midjourney';
+import MjProxy from './pages/Midjourney';
 import Pricing from './pages/Pricing';
 import Rankings from './pages/Rankings';
 import Task from './pages/Task';
@@ -155,9 +155,9 @@ function App() {
         <Route
           path='/console/channel'
           element={
-            <AuditAdminRoute>
+            <AdminRoute>
               <Channel />
-            </AuditAdminRoute>
+            </AdminRoute>
           }
         />
         <Route
@@ -339,7 +339,7 @@ function App() {
           element={
             <PrivateRoute>
               <Suspense fallback={<Loading></Loading>} key={location.pathname}>
-                <Midjourney />
+                <MjProxy />
               </Suspense>
             </PrivateRoute>
           }

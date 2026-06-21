@@ -39,7 +39,7 @@ import {
   Minimax,
   Wenxin,
   Spark,
-  Midjourney,
+  Midjourney as MjProxyIcon,
   Hunyuan,
   Cohere,
   Cloudflare,
@@ -79,6 +79,7 @@ import {
   CircleUser,
   Package,
   CalendarClock,
+  Route,
 } from 'lucide-react';
 import {
   SiAtlassian,
@@ -251,8 +252,8 @@ export const getModelCategories = (() => {
         filter: (model) => model.model_name.toLowerCase().includes('spark'),
       },
       midjourney: {
-        label: 'Midjourney',
-        icon: <Midjourney />,
+        label: 'MjProxy',
+        icon: <MjProxyIcon />,
         filter: (model) => model.model_name.toLowerCase().includes('mj_'),
       },
       tencent: {
@@ -333,9 +334,9 @@ export function getChannelIcon(channelType) {
     case 3: // Azure OpenAI
     case 57: // Codex
       return <OpenAI size={iconSize} />;
-    case 2: // Midjourney Proxy
-    case 5: // Midjourney Proxy Plus
-      return <Midjourney size={iconSize} />;
+    case 2: // MjProxy
+    case 5: // MjProxyPlus
+      return <MjProxyIcon size={iconSize} />;
     case 36: // Suno API
       return <Suno size={iconSize} />;
     case 4: // Ollama
@@ -402,6 +403,8 @@ export function getChannelIcon(channelType) {
       return <Doubao.Color size={iconSize} />;
     case 56: // Replicate
       return <Replicate size={iconSize} />;
+    case 58: // Advanced Custom
+      return <Route size={iconSize} />;
     case 8: // 自定义渠道
     case 22: // 知识库：FastGPT
       return <FastGPT.Color size={iconSize} />;
@@ -528,6 +531,22 @@ const oauthProviderIconMap = {
 
 function isHttpUrl(value) {
   return /^https?:\/\//i.test(value || '');
+}
+
+export function normalizeHttpsImageUrl(raw) {
+  if (!raw) return null;
+  const value = String(raw).trim();
+  if (!/^https:\/\//i.test(value)) return null;
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password) {
+      return null;
+    }
+    return url.href;
+  } catch {
+    return null;
+  }
 }
 
 function isSimpleEmoji(value) {
@@ -740,16 +759,19 @@ export function renderModelTag(modelName, options = {}) {
     size = 'default',
     shape = 'circle',
     onClick,
+    prefixIcon,
     suffixIcon,
   } = options;
 
   const categories = getModelCategories(i18next.t);
-  let icon = null;
+  let icon = prefixIcon || null;
 
-  for (const [key, category] of Object.entries(categories)) {
-    if (key !== 'all' && category.filter({ model_name: modelName })) {
-      icon = category.icon;
-      break;
+  if (!icon) {
+    for (const [key, category] of Object.entries(categories)) {
+      if (key !== 'all' && category.filter({ model_name: modelName })) {
+        icon = category.icon;
+        break;
+      }
     }
   }
 
@@ -981,15 +1003,20 @@ export const renderGroupOption = (item) => {
 };
 
 export function renderNumber(num) {
-  if (num >= 1000000000) {
-    return (num / 1000000000).toFixed(1) + 'B';
-  } else if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
-  } else if (num >= 10000) {
-    return (num / 1000).toFixed(1) + 'k';
-  } else {
-    return num;
+  const value = Number(num);
+  if (!Number.isFinite(value)) {
+    return num ?? 0;
   }
+  const locale = i18next.resolvedLanguage || i18next.language || undefined;
+  if (Math.abs(value) >= 10000) {
+    return new Intl.NumberFormat(locale, {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(value);
+  }
+  return new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 export function renderQuotaNumberWithDigit(num, digits = 2) {

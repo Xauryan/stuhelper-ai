@@ -40,7 +40,10 @@ import {
   showSuccess,
   renderQuota,
 } from '../../helpers';
-import { getCurrencyConfig } from '../../helpers/render';
+import {
+  getCurrencyConfig,
+  normalizeHttpsImageUrl,
+} from '../../helpers/render';
 import { CreditCard, RefreshCw, Sparkles } from 'lucide-react';
 import { SiAlipay, SiStripe, SiWechat } from 'react-icons/si';
 import SubscriptionPurchaseModal from './modals/SubscriptionPurchaseModal';
@@ -353,10 +356,11 @@ const SubscriptionPlansCard = ({
     if (method?.type === 'balance') {
       return <CreditCard size={18} color='var(--semi-color-primary)' />;
     }
-    if (method?.icon) {
+    const iconUrl = normalizeHttpsImageUrl(method?.icon);
+    if (iconUrl) {
       return (
         <img
-          src={method.icon}
+          src={iconUrl}
           alt={method.name}
           style={{ width: 18, height: 18, objectFit: 'contain' }}
         />
@@ -1172,7 +1176,7 @@ const SubscriptionPlansCard = ({
                 return (
                   <Card
                     key={plan?.id}
-                    className={`!rounded-xl transition-all hover:shadow-lg w-full h-full ${
+                    className={`!rounded-xl transition-colors w-full h-full ${
                       isRecommended ? 'ring-2 ring-purple-500' : ''
                     } ${isSelected ? 'border-primary' : ''}`}
                     style={{

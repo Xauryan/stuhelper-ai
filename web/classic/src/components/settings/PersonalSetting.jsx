@@ -48,6 +48,11 @@ import ChangePasswordModal from './personal/modals/ChangePasswordModal';
 import SecureVerificationModal from '../common/modals/SecureVerificationModal';
 import { useSecureVerification } from '../../hooks/common/useSecureVerification';
 
+const NOTIFICATION_TYPES = new Set(['email', 'webhook', 'bark', 'gotify']);
+
+const normalizeNotificationType = (value) =>
+  NOTIFICATION_TYPES.has(value) ? value : 'email';
+
 const PersonalSetting = () => {
   const [userState, userDispatch] = useContext(UserContext);
   let navigate = useNavigate();
@@ -183,7 +188,7 @@ const PersonalSetting = () => {
     if (userState?.user?.setting) {
       const settings = JSON.parse(userState.user.setting);
       setNotificationSettings({
-        warningType: settings.notify_type || 'email',
+        warningType: normalizeNotificationType(settings.notify_type),
         warningThreshold: settings.quota_warning_threshold || 500000,
         webhookUrl: settings.webhook_url || '',
         webhookSecret: settings.webhook_secret || '',
@@ -509,7 +514,9 @@ const PersonalSetting = () => {
   const saveNotificationSettings = async () => {
     try {
       const res = await API.put('/api/user/setting', {
-        notify_type: notificationSettings.warningType,
+        notify_type: normalizeNotificationType(
+          notificationSettings.warningType,
+        ),
         quota_warning_threshold: parseFloat(
           notificationSettings.warningThreshold,
         ),

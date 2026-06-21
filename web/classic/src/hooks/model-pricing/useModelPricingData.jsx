@@ -19,7 +19,14 @@ For commercial licensing, please contact support@xauryan.com
 
 import { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { API, copy, showError, showInfo, showSuccess } from '../../helpers';
+import {
+  API,
+  copy,
+  hasPerformanceSummary,
+  showError,
+  showInfo,
+  showSuccess,
+} from '../../helpers';
 import { Modal } from '@douyinfe/semi-ui';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
@@ -47,6 +54,8 @@ export const useModelPricingData = () => {
   const [models, setModels] = useState([]);
   const [vendorsMap, setVendorsMap] = useState({});
   const [loading, setLoading] = useState(true);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [performanceSummaryMap, setPerformanceSummaryMap] = useState({});
   const [groupRatio, setGroupRatio] = useState({});
   const [usableGroup, setUsableGroup] = useState({});
   const [endpointMap, setEndpointMap] = useState({});
@@ -192,11 +201,22 @@ export const useModelPricingData = () => {
     return `$${priceInUSD.toFixed(3)}`;
   };
 
-  const setModelsFormat = (models, groupRatio, vendorMap) => {
+  const mergePerformanceSummary = (models, summaryMap) => {
+    if (!Array.isArray(models) || !summaryMap) {
+      return models;
+    }
+    return models.map((item) => ({
+      ...item,
+      performance_summary: summaryMap[item.model_name] || null,
+    }));
+  };
+
+  const setModelsFormat = (models, groupRatio, vendorMap, summaryMap = {}) => {
     for (let i = 0; i < models.length; i++) {
       const m = models[i];
       m.key = m.model_name;
       m.group_ratio = groupRatio[m.model_name];
+      m.performance_summary = summaryMap[m.model_name] || null;
 
       if (m.vendor_id && vendorMap[m.vendor_id]) {
         const vendor = vendorMap[m.vendor_id];
@@ -225,39 +245,76 @@ export const useModelPricingData = () => {
     setModels(models);
   };
 
+  const loadPerformanceSummary = async () => {
+    setPerformanceLoading(true);
+    try {
+      const res = await API.get('/api/perf-metrics/summary', {
+        params: { hours: 24 },
+      });
+      const { success, data } = res.data || {};
+      if (!success || !Array.isArray(data?.models)) {
+        setPerformanceSummaryMap({});
+        return {};
+      }
+      const summaryMap = {};
+      data.models.forEach((item) => {
+        if (item?.model_name && hasPerformanceSummary(item)) {
+          summaryMap[item.model_name] = item;
+        }
+      });
+      setPerformanceSummaryMap(summaryMap);
+      return summaryMap;
+    } catch (error) {
+      console.debug('Failed to fetch model performance summary:', error);
+      setPerformanceSummaryMap({});
+      return {};
+    } finally {
+      setPerformanceLoading(false);
+    }
+  };
+
   const loadPricing = async () => {
     setLoading(true);
-    let url = '/api/pricing';
-    const res = await API.get(url);
-    const {
-      success,
-      message,
-      data,
-      vendors,
-      group_ratio,
-      usable_group,
-      supported_endpoint,
-      auto_groups,
-    } = res.data;
-    if (success) {
-      setGroupRatio(group_ratio);
-      setUsableGroup(usable_group);
-      setSelectedGroup('all');
-      // 构建供应商 Map 方便查找
-      const vendorMap = {};
-      if (Array.isArray(vendors)) {
-        vendors.forEach((v) => {
-          vendorMap[v.id] = v;
-        });
+    try {
+      let url = '/api/pricing';
+      const [pricingResult, summaryMap] = await Promise.all([
+        API.get(url),
+        loadPerformanceSummary(),
+      ]);
+      const res = pricingResult;
+      const {
+        success,
+        message,
+        data,
+        vendors,
+        group_ratio,
+        usable_group,
+        supported_endpoint,
+        auto_groups,
+      } = res.data;
+      if (success) {
+        setGroupRatio(group_ratio);
+        setUsableGroup(usable_group);
+        setSelectedGroup('all');
+        // 构建供应商 Map 方便查找
+        const vendorMap = {};
+        if (Array.isArray(vendors)) {
+          vendors.forEach((v) => {
+            vendorMap[v.id] = v;
+          });
+        }
+        setVendorsMap(vendorMap);
+        setEndpointMap(supported_endpoint || {});
+        setAutoGroups(auto_groups || []);
+        setModelsFormat(data, group_ratio, vendorMap, summaryMap);
+      } else {
+        showError(message);
       }
-      setVendorsMap(vendorMap);
-      setEndpointMap(supported_endpoint || {});
-      setAutoGroups(auto_groups || []);
-      setModelsFormat(data, group_ratio, vendorMap);
-    } else {
-      showError(message);
+    } catch (error) {
+      showError(error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const refresh = async () => {
@@ -319,6 +376,12 @@ export const useModelPricingData = () => {
     refresh().then();
   }, []);
 
+  useEffect(() => {
+    setModels((currentModels) =>
+      mergePerformanceSummary(currentModels, performanceSummaryMap),
+    );
+  }, [performanceSummaryMap]);
+
   // 当筛选条件变化时重置到第一页
   useEffect(() => {
     setCurrentPage(1);
@@ -370,6 +433,8 @@ export const useModelPricingData = () => {
     setTokenUnit,
     models,
     loading,
+    performanceLoading,
+    performanceSummaryMap,
     groupRatio,
     usableGroup,
     endpointMap,

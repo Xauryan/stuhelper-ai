@@ -42,6 +42,7 @@ import {
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { useTablePageSize } from '../common/useTablePageSize';
 import ParamOverrideEntry from '../../components/table/usage-logs/components/ParamOverrideEntry';
 import { getBusinessLogExpandedDetailText } from '../../components/table/usage-logs/usageLogDisplayRules.mjs';
 
@@ -74,12 +75,13 @@ export const useLogsData = () => {
   const [loadingStat, setLoadingStat] = useState(false);
   const [activePage, setActivePage] = useState(1);
   const [logCount, setLogCount] = useState(0);
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [pageSize, setPageSize] = useTablePageSize(ITEMS_PER_PAGE);
   const [logType, setLogType] = useState(0);
 
   // User and admin
   const isAdminUser = isAdmin();
   const canReadAllLogs = isAuditAdmin();
+  const canViewChannelDetail = isAdminUser;
   // Role-specific storage key to prevent different roles from overwriting each other
   const STORAGE_KEY = canReadAllLogs
     ? 'logs-table-columns-admin'
@@ -174,6 +176,7 @@ export const useLogsData = () => {
   const [billingDisplayMode, setBillingDisplayMode] = useState(
     getInitialBillingDisplayMode,
   );
+  const [sensitiveVisible, setSensitiveVisible] = useState(isAdminUser);
 
   // Compact mode
   const [compactMode, setCompactMode] = useTableCompactMode('logs');
@@ -588,11 +591,27 @@ export const useLogsData = () => {
       }
       return String(value);
     };
-    const renderAuditParams = (params) => {
+    const auditParamVisibleForCurrentRole = (action, key) => {
+      if (!action?.startsWith?.('channel.') || canViewChannelDetail) {
+        return true;
+      }
+      return [
+        'id',
+        'sourceId',
+        'count',
+        'changed_fields',
+        'action',
+        'status',
+        'success',
+      ].includes(key);
+    };
+    const renderAuditParams = (params, action = '') => {
       if (!params || typeof params !== 'object') {
         return null;
       }
-      const entries = Object.entries(params);
+      const entries = Object.entries(params).filter(([key]) =>
+        auditParamVisibleForCurrentRole(action, key),
+      );
       if (entries.length === 0) {
         return null;
       }
@@ -652,7 +671,7 @@ export const useLogsData = () => {
       if (canReadAllLogs && (logs[i].type === 0 || logs[i].type === 2)) {
         expandDataLocal.push({
           key: t('渠道信息'),
-          value: `${logs[i].channel} - ${logs[i].channel_name || '[未知]'}`,
+          value: `#${logs[i].channel}`,
         });
       }
       if (logs[i].request_id) {
@@ -666,7 +685,7 @@ export const useLogsData = () => {
           key: t('审计操作'),
           value: auditActionLabel(other.op.action),
         });
-        const auditParams = renderAuditParams(other.op.params);
+        const auditParams = renderAuditParams(other.op.params, other.op.action);
         if (auditParams) {
           expandDataLocal.push({
             key: t('审计参数'),
@@ -1081,7 +1100,10 @@ export const useLogsData = () => {
             value: auditInfo.success ? t('成功') : t('失败'),
           });
         }
-        const routeParams = renderAuditParams(auditInfo.params);
+        const routeParams = renderAuditParams(
+          auditInfo.params,
+          other?.op?.action,
+        );
         if (routeParams) {
           expandDataLocal.push({
             key: t('路由参数'),
@@ -1202,10 +1224,9 @@ export const useLogsData = () => {
   };
 
   const handlePageSizeChange = async (size) => {
-    localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
-    loadLogs(activePage, size)
+    loadLogs(1, size)
       .then()
       .catch((reason) => {
         showError(reason);
@@ -1231,10 +1252,7 @@ export const useLogsData = () => {
 
   // Initialize data
   useEffect(() => {
-    const localPageSize =
-      parseInt(localStorage.getItem('page-size')) || ITEMS_PER_PAGE;
-    setPageSize(localPageSize);
-    loadLogs(activePage, localPageSize)
+    loadLogs(activePage, pageSize)
       .then()
       .catch((reason) => {
         showError(reason);
@@ -1269,6 +1287,7 @@ export const useLogsData = () => {
     stat,
     isAdminUser: canReadAllLogs,
     canViewUserDetail: isAdminUser,
+    canViewChannelDetail,
 
     // Form state
     formApi,
@@ -1282,6 +1301,8 @@ export const useLogsData = () => {
     setShowColumnSelector,
     billingDisplayMode,
     setBillingDisplayMode,
+    sensitiveVisible,
+    setSensitiveVisible,
     handleColumnVisibilityChange,
     handleSelectAll,
     initDefaultColumns,

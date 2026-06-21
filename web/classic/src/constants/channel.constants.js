@@ -22,12 +22,12 @@ export const CHANNEL_OPTIONS = [
   {
     value: 2,
     color: 'light-blue',
-    label: 'Midjourney Proxy',
+    label: 'MjProxy',
   },
   {
     value: 5,
     color: 'blue',
-    label: 'Midjourney Proxy Plus',
+    label: 'MjProxyPlus',
   },
   {
     value: 36,
@@ -188,6 +188,11 @@ export const CHANNEL_OPTIONS = [
     value: 57,
     color: 'blue',
     label: 'ChatGPT Subscription (Codex)',
+  },
+  {
+    value: 58,
+    color: 'cyan',
+    label: 'Advanced Custom',
   },
 ];
 

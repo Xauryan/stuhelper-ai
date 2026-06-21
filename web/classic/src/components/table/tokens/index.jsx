@@ -39,6 +39,7 @@ import TokensFilters from './TokensFilters';
 import TokensDescription from './TokensDescription';
 import EditTokenModal from './modals/EditTokenModal';
 import CCSwitchModal from './modals/CCSwitchModal';
+import ColumnSelectorModal from './modals/ColumnSelectorModal';
 import { useTokensData } from '../../../hooks/tokens/useTokensData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
@@ -366,6 +367,7 @@ function TokensPage() {
     searchTokens,
     loading,
     searching,
+    setShowColumnSelector,
 
     // Description state
     compactMode,
@@ -390,6 +392,8 @@ function TokensPage() {
         tokenKey={ccSwitchKey}
         modelOptions={modelOptions}
       />
+
+      <ColumnSelectorModal {...tokensData} />
 
       <CardPro
         type='type1'
@@ -418,6 +422,7 @@ function TokensPage() {
                 searchTokens={searchTokens}
                 loading={loading}
                 searching={searching}
+                setShowColumnSelector={setShowColumnSelector}
                 t={t}
               />
             </div>

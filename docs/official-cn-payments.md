@@ -268,11 +268,14 @@ AppID、商户号、商户证书序列号、APIv3 密钥、商户私钥和平台
 
 支付手续费按支付通道独立配置，不再提供全局
 `payment_setting.service_fee_percent`。易支付在 `PayMethods` 的每个通道对象
-中配置 `service_fee_percent`；Waffo 在 `WaffoPayMethods` 的每个子支付方式中
-配置 `service_fee_percent`；官方支付宝和官方微信分别使用
+中配置 `service_fee_percent`，并可同时配置 `min_topup` 最低充值金额和 `icon`
+图标；Waffo 在 `WaffoPayMethods` 的每个子支付方式中配置
+`service_fee_percent`；官方支付宝和官方微信分别使用
 `AlipayOfficialServiceFeePercent` 和 `WechatPayOfficialServiceFeePercent`。
-单位均为百分比，留空或未配置表示 `0`。Waffo Pancake 不作为本地在线充值通道
-暴露，历史账单只保留支付方式识别和展示。
+手续费单位均为百分比，留空或未配置表示 `0`。`PayMethods.icon` 只接受
+HTTPS 图片 URL；支付宝、微信和 Stripe 等内置类型会按 `type` 自动显示内置图标，
+自定义方式在没有安全图片 URL 时回退到银行卡图标。Waffo Pancake 不作为本地在线
+充值通道暴露，历史账单只保留支付方式识别和展示。
 原来的充值价格仍表示有效支付金额的单价，例如原来用 `1.006` 元/美金表达
 0.6% 手续费时，现在可以改为充值价格 `1`、对应支付通道手续费 `0.6`。系统先按
 充值价格、用户分组倍率和预设折扣计算有效支付金额并向上保留两位小数，再按该

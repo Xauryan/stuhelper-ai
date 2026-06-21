@@ -25,6 +25,7 @@ import {
   formatOfficialPaymentOrderValidity,
   normalizeOfficialPaymentOrderTimeoutSeconds,
 } from '../wechatOfficialPaymentStatus.mjs';
+import { normalizeHttpsImageUrl } from '../../../helpers/render';
 
 const { Text } = Typography;
 
@@ -129,6 +130,7 @@ const PaymentConfirmModal = ({
                     (method) => method.type === payWay,
                   );
                   if (payMethod) {
+                    const iconUrl = normalizeHttpsImageUrl(payMethod.icon);
                     return (
                       <>
                         {payMethod.type === 'alipay' ||
@@ -151,9 +153,9 @@ const PaymentConfirmModal = ({
                             size={16}
                             color='#635BFF'
                           />
-                        ) : payMethod.icon ? (
+                        ) : iconUrl ? (
                           <img
-                            src={payMethod.icon}
+                            src={iconUrl}
                             alt={payMethod.name}
                             className='mr-2'
                             style={{

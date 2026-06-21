@@ -27,6 +27,14 @@ type listModelsResponse struct {
 	Object  string             `json:"object"`
 }
 
+type modelMetaListResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Items []model.Model `json:"items"`
+		Total int64         `json:"total"`
+	} `json:"data"`
+}
+
 func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
@@ -281,4 +289,72 @@ func TestListModelsUsesTokenAutoGroupPriority(t *testing.T) {
 
 	ids := decodeListModelsResponse(t, recorder)
 	require.Contains(t, ids, "zz-backup-only-model")
+}
+
+func decodeModelMetaListResponse(t *testing.T, recorder *httptest.ResponseRecorder) modelMetaListResponse {
+	t.Helper()
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	var payload modelMetaListResponse
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.True(t, payload.Success, recorder.Body.String())
+	return payload
+}
+
+func performModelsMetaListRequest(t *testing.T, role int) *httptest.ResponseRecorder {
+	t.Helper()
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Set("role", role)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/models/?p=1&page_size=20", nil)
+	GetAllModelsMeta(ctx)
+	return recorder
+}
+
+func TestAuditAdminModelsMetaBoundChannelsUseChannelNumbersOnly(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&model.Channel{
+		Id:     11,
+		Type:   constant.ChannelTypeOpenAI,
+		Key:    "sk-private",
+		Name:   "private-channel-name",
+		Status: common.ChannelStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "default", Model: "gpt-4o", ChannelId: 11, Enabled: true},
+		{Group: "default", Model: "gpt-4o-mini", ChannelId: 11, Enabled: true},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Model{
+		{ModelName: "gpt-4o", NameRule: model.NameRuleExact, Status: 1},
+		{ModelName: "gpt", NameRule: model.NameRulePrefix, Status: 1},
+	}).Error)
+	model.RefreshPricing()
+
+	auditRecorder := performModelsMetaListRequest(t, common.RoleAuditAdminUser)
+	require.NotContains(t, auditRecorder.Body.String(), "private-channel-name")
+	require.Contains(t, auditRecorder.Body.String(), `"id":11`)
+	auditPayload := decodeModelMetaListResponse(t, auditRecorder)
+	require.Len(t, auditPayload.Data.Items, 2)
+	for _, item := range auditPayload.Data.Items {
+		require.NotEmpty(t, item.BoundChannels)
+		for _, channel := range item.BoundChannels {
+			require.Equal(t, 11, channel.ID)
+			require.Zero(t, channel.Type)
+			require.Empty(t, channel.Name)
+		}
+	}
+
+	adminRecorder := performModelsMetaListRequest(t, common.RoleAdminUser)
+	require.Contains(t, adminRecorder.Body.String(), "private-channel-name")
+	adminPayload := decodeModelMetaListResponse(t, adminRecorder)
+	require.Len(t, adminPayload.Data.Items, 2)
+	for _, item := range adminPayload.Data.Items {
+		require.NotEmpty(t, item.BoundChannels)
+		for _, channel := range item.BoundChannels {
+			require.Equal(t, 11, channel.ID)
+			require.Equal(t, constant.ChannelTypeOpenAI, channel.Type)
+			require.Equal(t, "private-channel-name", channel.Name)
+		}
+	}
 }

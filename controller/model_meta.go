@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,7 +22,7 @@ func GetAllModelsMeta(c *gin.Context) {
 		return
 	}
 	// 批量填充附加字段，提升列表接口性能
-	enrichModels(modelsMeta)
+	enrichModels(modelsMeta, c.GetInt("role") >= common.RoleAdminUser)
 	var total int64
 	model.DB.Model(&model.Model{}).Count(&total)
 
@@ -54,7 +53,7 @@ func SearchModelsMeta(c *gin.Context) {
 		return
 	}
 	// 批量填充附加字段，提升列表接口性能
-	enrichModels(modelsMeta)
+	enrichModels(modelsMeta, c.GetInt("role") >= common.RoleAdminUser)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(modelsMeta)
 	common.ApiSuccess(c, pageInfo)
@@ -73,7 +72,7 @@ func GetModelMeta(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	enrichModels([]*model.Model{&m})
+	enrichModels([]*model.Model{&m}, true)
 	common.ApiSuccess(c, &m)
 }
 
@@ -160,8 +159,9 @@ func DeleteModelMeta(c *gin.Context) {
 	common.ApiSuccess(c, nil)
 }
 
-// enrichModels 批量填充附加信息：端点、渠道、分组、计费类型，避免 N+1 查询
-func enrichModels(models []*model.Model) {
+// enrichModels 批量填充附加信息：端点、渠道、分组、计费类型，避免 N+1 查询。
+// includeChannelNames 为 false 时仅返回渠道数字 ID，避免审计管理员通过模型列表反查具体渠道。
+func enrichModels(models []*model.Model, includeChannelNames bool) {
 	if len(models) == 0 {
 		return
 	}
@@ -192,11 +192,11 @@ func enrichModels(models []*model.Model) {
 			mm := models[idx]
 			if mm.Endpoints == "" {
 				eps := model.GetModelSupportEndpointTypes(mm.ModelName)
-				if b, err := json.Marshal(eps); err == nil {
+				if b, err := common.Marshal(eps); err == nil {
 					mm.Endpoints = string(b)
 				}
 			}
-			mm.BoundChannels = chs
+			mm.BoundChannels = modelChannelsForRole(chs, includeChannelNames)
 			mm.EnableGroups = model.GetModelEnableGroups(mm.ModelName)
 			mm.QuotaTypes = model.GetModelQuotaTypes(mm.ModelName)
 		}
@@ -282,7 +282,7 @@ func enrichModels(models []*model.Model) {
 			for et := range es {
 				eps = append(eps, et)
 			}
-			if b, err := json.Marshal(eps); err == nil {
+			if b, err := common.Marshal(eps); err == nil {
 				mm.Endpoints = string(b)
 			}
 		}
@@ -311,7 +311,7 @@ func enrichModels(models []*model.Model) {
 		channelSet := make(map[string]model.BoundChannel)
 		for _, n := range names {
 			for _, ch := range matchedChannelsByModel[n] {
-				key := ch.Name + "_" + strconv.Itoa(ch.Type)
+				key := strconv.Itoa(ch.ID) + "_" + strconv.Itoa(ch.Type)
 				channelSet[key] = ch
 			}
 		}
@@ -320,11 +320,24 @@ func enrichModels(models []*model.Model) {
 			for _, ch := range channelSet {
 				chs = append(chs, ch)
 			}
-			mm.BoundChannels = chs
+			mm.BoundChannels = modelChannelsForRole(chs, includeChannelNames)
 		}
 
 		// 匹配信息
 		mm.MatchedModels = names
 		mm.MatchedCount = len(names)
 	}
+}
+
+func modelChannelsForRole(channels []model.BoundChannel, includeChannelNames bool) []model.BoundChannel {
+	if includeChannelNames || len(channels) == 0 {
+		return channels
+	}
+	sanitized := make([]model.BoundChannel, 0, len(channels))
+	for _, ch := range channels {
+		ch.Name = ""
+		ch.Type = 0
+		sanitized = append(sanitized, ch)
+	}
+	return sanitized
 }

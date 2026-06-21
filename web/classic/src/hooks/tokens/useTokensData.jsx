@@ -29,6 +29,7 @@ import {
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { useTablePageSize } from '../common/useTablePageSize';
 import {
   fetchTokenKey as fetchTokenKeyById,
   fetchTokenKeysBatch,
@@ -39,13 +40,55 @@ import {
 export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
   const { t } = useTranslation();
 
+  const COLUMN_KEYS = {
+    NAME: 'name',
+    STATUS: 'status',
+    QUOTA_USAGE: 'quota_usage',
+    GROUP: 'group',
+    TOKEN_KEY: 'token_key',
+    MODEL_LIMITS: 'model_limits',
+    ALLOW_IPS: 'allow_ips',
+    CREATED_TIME: 'created_time',
+    ACCESSED_TIME: 'accessed_time',
+    EXPIRED_TIME: 'expired_time',
+    OPERATE: 'operate',
+  };
+
+  const getDefaultColumnVisibility = () => ({
+    [COLUMN_KEYS.NAME]: true,
+    [COLUMN_KEYS.STATUS]: true,
+    [COLUMN_KEYS.QUOTA_USAGE]: true,
+    [COLUMN_KEYS.GROUP]: true,
+    [COLUMN_KEYS.TOKEN_KEY]: true,
+    [COLUMN_KEYS.MODEL_LIMITS]: true,
+    [COLUMN_KEYS.ALLOW_IPS]: true,
+    [COLUMN_KEYS.CREATED_TIME]: true,
+    [COLUMN_KEYS.ACCESSED_TIME]: true,
+    [COLUMN_KEYS.EXPIRED_TIME]: true,
+    [COLUMN_KEYS.OPERATE]: true,
+  });
+
+  const getInitialVisibleColumns = () => {
+    const defaults = getDefaultColumnVisibility();
+    try {
+      const savedColumns = localStorage.getItem('tokens-table-columns');
+      if (!savedColumns) {
+        return defaults;
+      }
+      return { ...defaults, ...JSON.parse(savedColumns) };
+    } catch (e) {
+      console.error('Failed to parse saved token column preferences', e);
+      return defaults;
+    }
+  };
+
   // Basic state
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [groupRatios, setGroupRatios] = useState({});
   const [activePage, setActivePage] = useState(1);
   const [tokenCount, setTokenCount] = useState(0);
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [pageSize, setPageSize] = useTablePageSize(ITEMS_PER_PAGE);
   const [searching, setSearching] = useState(false);
   const [searchMode, setSearchMode] = useState(false); // 是否处于搜索结果视图
 
@@ -60,6 +103,10 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
 
   // UI state
   const [compactMode, setCompactMode] = useTableCompactMode('tokens');
+  const [visibleColumns, setVisibleColumns] = useState(
+    getInitialVisibleColumns,
+  );
+  const [showColumnSelector, setShowColumnSelector] = useState(false);
   const [showKeys, setShowKeys] = useState({});
   const [resolvedTokenKeys, setResolvedTokenKeys] = useState({});
   const [loadingTokenKeys, setLoadingTokenKeys] = useState({});
@@ -80,6 +127,33 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
       searchToken: formValues.searchToken || '',
     };
   };
+
+  const initDefaultColumns = () => {
+    const defaults = getDefaultColumnVisibility();
+    setVisibleColumns(defaults);
+    localStorage.setItem('tokens-table-columns', JSON.stringify(defaults));
+  };
+
+  const handleColumnVisibilityChange = (columnKey, checked) => {
+    setVisibleColumns((prev) => ({ ...prev, [columnKey]: checked }));
+  };
+
+  const handleSelectAll = (checked) => {
+    const updatedColumns = {};
+    Object.values(COLUMN_KEYS).forEach((key) => {
+      updatedColumns[key] = checked;
+    });
+    setVisibleColumns(updatedColumns);
+  };
+
+  useEffect(() => {
+    if (Object.keys(visibleColumns).length > 0) {
+      localStorage.setItem(
+        'tokens-table-columns',
+        JSON.stringify(visibleColumns),
+      );
+    }
+  }, [visibleColumns]);
 
   // Close edit modal
   const closeEdit = () => {
@@ -484,6 +558,12 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     // UI state
     compactMode,
     setCompactMode,
+    visibleColumns,
+    showColumnSelector,
+    setShowColumnSelector,
+    handleColumnVisibilityChange,
+    handleSelectAll,
+    initDefaultColumns,
     showKeys,
     setShowKeys,
     resolvedTokenKeys,
@@ -514,6 +594,7 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     batchDeleteTokens,
     batchCopyTokens,
     syncPageData,
+    COLUMN_KEYS,
 
     // Translation
     t,

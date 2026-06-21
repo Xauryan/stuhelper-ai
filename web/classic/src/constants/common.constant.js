@@ -22,6 +22,7 @@ export const ITEMS_PER_PAGE = 10; // this value must keep same as the one define
 export const DEFAULT_ENDPOINT = '/api/pricing';
 
 export const TABLE_COMPACT_MODES_KEY = 'table_compact_modes';
+export const TABLE_VIEW_MODES_KEY = 'table_view_modes';
 
 export const API_ENDPOINTS = [
   '/v1/chat/completions',

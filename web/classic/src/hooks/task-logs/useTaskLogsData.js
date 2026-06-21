@@ -31,6 +31,7 @@ import {
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { useTablePageSize } from '../common/useTablePageSize';
 
 export const useTaskLogsData = () => {
   const { t } = useTranslation();
@@ -56,7 +57,7 @@ export const useTaskLogsData = () => {
   const [loading, setLoading] = useState(false);
   const [activePage, setActivePage] = useState(1);
   const [logCount, setLogCount] = useState(0);
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [pageSize, setPageSize] = useTablePageSize(ITEMS_PER_PAGE);
 
   // User and admin
   const canReadAllTaskLogs = isAuditAdmin();
@@ -253,7 +254,7 @@ export const useTaskLogsData = () => {
   };
 
   const handlePageSizeChange = async (size) => {
-    localStorage.setItem('task-page-size', size + '');
+    setPageSize(size);
     await loadLogs(1, size);
   };
 
@@ -305,10 +306,7 @@ export const useTaskLogsData = () => {
 
   // Initialize data
   useEffect(() => {
-    const localPageSize =
-      parseInt(localStorage.getItem('task-page-size')) || ITEMS_PER_PAGE;
-    setPageSize(localPageSize);
-    loadLogs(1, localPageSize).then();
+    loadLogs(1, pageSize).then();
   }, []);
 
   return {

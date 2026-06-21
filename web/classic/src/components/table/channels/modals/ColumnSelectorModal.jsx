@@ -47,6 +47,7 @@ const ColumnSelectorModal = ({
   refresh,
   activePage,
   channels,
+  sensitiveVisible,
 }) => {
   const canWrite = !isAuditOnlyAdmin();
 
@@ -70,6 +71,7 @@ const ColumnSelectorModal = ({
     activePage,
     channels,
     canWrite,
+    sensitiveVisible,
   });
 
   return (

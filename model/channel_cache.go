@@ -113,21 +113,25 @@ func GetRandomSatisfiedChannel(group string, model string, retry int) (*Channel,
 }
 
 func GetRandomSatisfiedChannelExcluding(group string, model string, retry int, excludeChannelIDs map[int]struct{}) (*Channel, error) {
+	return GetRandomSatisfiedChannelExcludingForPath(group, model, retry, excludeChannelIDs, "")
+}
+
+func GetRandomSatisfiedChannelExcludingForPath(group string, model string, retry int, excludeChannelIDs map[int]struct{}, requestPath string) (*Channel, error) {
 	// if memory cache is disabled, get channel directly from database
 	if !common.MemoryCacheEnabled {
-		return GetChannelExcluding(group, model, retry, excludeChannelIDs)
+		return GetChannelExcludingForPath(group, model, retry, excludeChannelIDs, requestPath)
 	}
 
 	channelSyncLock.RLock()
 	defer channelSyncLock.RUnlock()
 
 	// First, try to find channels with the exact model name.
-	channels := filterExcludedChannelIDs(group2model2channels[group][model], excludeChannelIDs)
+	channels := filterChannelsForRequestPath(filterExcludedChannelIDs(group2model2channels[group][model], excludeChannelIDs), requestPath)
 
 	// If no channels found, try to find channels with the normalized model name.
 	if len(channels) == 0 {
 		normalizedModel := ratio_setting.FormatMatchingModelName(model)
-		channels = filterExcludedChannelIDs(group2model2channels[group][normalizedModel], excludeChannelIDs)
+		channels = filterChannelsForRequestPath(filterExcludedChannelIDs(group2model2channels[group][normalizedModel], excludeChannelIDs), requestPath)
 	}
 
 	if len(channels) == 0 {
@@ -225,6 +229,24 @@ func filterExcludedChannelIDs(channels []int, excludeChannelIDs map[int]struct{}
 	filtered := make([]int, 0, len(channels))
 	for _, channelID := range channels {
 		if _, excluded := excludeChannelIDs[channelID]; !excluded {
+			filtered = append(filtered, channelID)
+		}
+	}
+	return filtered
+}
+
+func filterChannelsForRequestPath(channels []int, requestPath string) []int {
+	if len(channels) == 0 || requestPath == "" {
+		return channels
+	}
+	filtered := make([]int, 0, len(channels))
+	for _, channelID := range channels {
+		channel, ok := channelsIDM[channelID]
+		if !ok {
+			filtered = append(filtered, channelID)
+			continue
+		}
+		if ChannelSupportsRequestPath(channel, requestPath) {
 			filtered = append(filtered, channelID)
 		}
 	}

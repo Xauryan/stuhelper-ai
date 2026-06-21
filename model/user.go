@@ -152,7 +152,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 		// 审计管理员只能访问指定管理列表，不能进入系统设置。
 		defaultConfig["admin"] = map[string]interface{}{
 			"enabled":      true,
-			"channel":      true,
+			"channel":      false,
 			"models":       true,
 			"subscription": true,
 			"redemption":   true,
@@ -396,8 +396,12 @@ func HardDeleteUserById(id int) error {
 	if id == 0 {
 		return errors.New("id 为空！")
 	}
-	err := DB.Unscoped().Delete(&User{}, "id = ?", id).Error
-	return err
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := deleteUserOAuthBindingsByUserId(tx, id); err != nil {
+			return err
+		}
+		return tx.Unscoped().Delete(&User{}, "id = ?", id).Error
+	})
 }
 
 func inviteUser(inviterId int) (err error) {
@@ -678,8 +682,12 @@ func (user *User) HardDelete() error {
 	if user.Id == 0 {
 		return errors.New("id 为空！")
 	}
-	err := DB.Unscoped().Delete(user).Error
-	return err
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := deleteUserOAuthBindingsByUserId(tx, user.Id); err != nil {
+			return err
+		}
+		return tx.Unscoped().Delete(user).Error
+	})
 }
 
 // ValidateAndFill check password & user status

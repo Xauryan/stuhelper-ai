@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/Xauryan/stuhelper-ai/common"
+	"github.com/Xauryan/stuhelper-ai/middleware"
 	"github.com/Xauryan/stuhelper-ai/model"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
@@ -19,8 +20,6 @@ import (
 
 func setupChannelAuditAdminControllerTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-
-	initChannelAuditAdminColumnNames(t)
 
 	originalRedisEnabled := common.RedisEnabled
 	originalUsingSQLite := common.UsingSQLite
@@ -34,13 +33,14 @@ func setupChannelAuditAdminControllerTestDB(t *testing.T) *gorm.DB {
 	common.UsingSQLite = true
 	common.UsingMySQL = false
 	common.UsingPostgreSQL = false
+	initModelListColumnNames(t)
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
 	model.DB = db
 	model.LOG_DB = db
-	require.NoError(t, db.AutoMigrate(&model.Channel{}))
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.User{}, &model.Log{}))
 
 	t.Cleanup(func() {
 		sqlDB, err := db.DB()
@@ -58,148 +58,97 @@ func setupChannelAuditAdminControllerTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func initChannelAuditAdminColumnNames(t *testing.T) {
-	t.Helper()
-
-	originalIsMasterNode := common.IsMasterNode
-	originalSQLitePath := common.SQLitePath
-	originalUsingSQLite := common.UsingSQLite
-	originalUsingMySQL := common.UsingMySQL
-	originalUsingPostgreSQL := common.UsingPostgreSQL
-	originalDB := model.DB
-	originalLogDB := model.LOG_DB
-	originalSQLDSN, hadSQLDSN := os.LookupEnv("SQL_DSN")
-	defer func() {
-		common.IsMasterNode = originalIsMasterNode
-		common.SQLitePath = originalSQLitePath
-		common.UsingSQLite = originalUsingSQLite
-		common.UsingMySQL = originalUsingMySQL
-		common.UsingPostgreSQL = originalUsingPostgreSQL
-		model.DB = originalDB
-		model.LOG_DB = originalLogDB
-		if hadSQLDSN {
-			require.NoError(t, os.Setenv("SQL_DSN", originalSQLDSN))
-		} else {
-			require.NoError(t, os.Unsetenv("SQL_DSN"))
+func setChannelAuditAdminTestSession(role int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session := sessions.Default(c)
+		session.Set("id", 123)
+		session.Set("username", "channel-audit-test")
+		session.Set("role", role)
+		session.Set("status", common.UserStatusEnabled)
+		session.Set("group", "default")
+		if err := session.Save(); err != nil {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
 		}
-	}()
-
-	common.IsMasterNode = false
-	common.SQLitePath = fmt.Sprintf("file:%s_init?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
-	common.UsingSQLite = false
-	common.UsingMySQL = false
-	common.UsingPostgreSQL = false
-	require.NoError(t, os.Setenv("SQL_DSN", "local"))
-
-	require.NoError(t, model.InitDB())
-	if model.DB != nil {
-		sqlDB, err := model.DB.DB()
-		if err == nil {
-			_ = sqlDB.Close()
-		}
+		c.Request.Header.Set("StuHelper-AI-User", "123")
+		c.Next()
 	}
 }
 
-func ptrStringForChannelAuditAdminControllerTest(v string) *string {
-	return &v
+func setupChannelAuditAdminTestRouter(t *testing.T, role int) *gin.Engine {
+	t.Helper()
+	db := setupChannelAuditAdminControllerTestDB(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:          123,
+		Username:    "channel-audit-test",
+		Password:    "password",
+		DisplayName: "Channel Audit Test",
+		Role:        role,
+		Status:      common.UserStatusEnabled,
+		Group:       "default",
+	}).Error)
+	require.NoError(t, db.Create(&model.Channel{
+		Id:     11,
+		Type:   1,
+		Name:   "private-channel-name",
+		Key:    "sk-secret",
+		Status: common.ChannelStatusEnabled,
+		Models: "gpt-4o",
+		Group:  "default",
+	}).Error)
+
+	server := gin.New()
+	server.Use(sessions.Sessions("session", cookie.NewStore([]byte("test-secret"))))
+	server.Use(setChannelAuditAdminTestSession(role))
+	channelRoute := server.Group("/api/channel")
+	channelRoute.Use(middleware.AdminAuth())
+	{
+		channelRoute.GET("/", GetAllChannels)
+		channelRoute.GET("/search", SearchChannels)
+		channelRoute.GET("/models", ChannelListModels)
+		channelRoute.GET("/models_enabled", EnabledListModels)
+		channelRoute.GET("/ops", GetChannelOps)
+		channelRoute.GET("/monitor/summary", GetChannelMonitorSummary)
+	}
+	return server
 }
 
-func performChannelAuditAdminSearch(t *testing.T, role int, keyword string) *httptest.ResponseRecorder {
-	t.Helper()
+func TestAuditAdminCannotAccessChannelManagement(t *testing.T) {
+	common.GlobalApiRateLimitEnable = false
+	server := setupChannelAuditAdminTestRouter(t, common.RoleAuditAdminUser)
+
+	for _, path := range []string{
+		"/api/channel/?p=1&page_size=20",
+		"/api/channel/search?keyword=private-channel-name&p=1&page_size=20",
+		"/api/channel/models",
+		"/api/channel/models_enabled",
+		"/api/channel/ops",
+		"/api/channel/monitor/summary",
+	} {
+		t.Run(path, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			server.ServeHTTP(recorder, req)
+
+			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+			require.Contains(t, recorder.Body.String(), `"success":false`)
+			require.Contains(t, recorder.Body.String(), "auth.insufficient_privilege")
+			require.NotContains(t, recorder.Body.String(), "private-channel-name")
+			require.NotContains(t, recorder.Body.String(), "sk-secret")
+		})
+	}
+}
+
+func TestAdminCanAccessChannelManagement(t *testing.T) {
+	common.GlobalApiRateLimitEnable = false
+	server := setupChannelAuditAdminTestRouter(t, common.RoleAdminUser)
 
 	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Set("role", role)
-	requestURL := "/?keyword=" + url.QueryEscape(keyword) + "&p=1&page_size=20"
-	ctx.Request = httptest.NewRequest(http.MethodGet, requestURL, nil)
-	SearchChannels(ctx)
-	return recorder
-}
+	req := httptest.NewRequest(http.MethodGet, "/api/channel/?p=1&page_size=20", nil)
+	server.ServeHTTP(recorder, req)
 
-func decodeChannelAuditAdminControllerResponse(t *testing.T, recorder *httptest.ResponseRecorder) map[string]interface{} {
-	t.Helper()
-
-	var response map[string]interface{}
-	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
-	return response
-}
-
-func TestAuditAdminChannelSearchCannotMatchHiddenSecrets(t *testing.T) {
-	db := setupChannelAuditAdminControllerTestDB(t)
-
-	secretBaseURL := "https://secret-channel.example"
-	require.NoError(t, db.Create(&model.Channel{
-		Type:           1,
-		Key:            "sk-secret-channel-key",
-		Name:           "public-channel",
-		Status:         common.ChannelStatusEnabled,
-		BaseURL:        &secretBaseURL,
-		Models:         "gpt-4o",
-		Group:          "default",
-		Other:          "secret-other",
-		Setting:        ptrStringForChannelAuditAdminControllerTest("secret-setting"),
-		HeaderOverride: ptrStringForChannelAuditAdminControllerTest(`{"X-Secret":"value"}`),
-		Remark:         ptrStringForChannelAuditAdminControllerTest("secret remark"),
-	}).Error)
-
-	for _, keyword := range []string{"sk-secret-channel-key", "secret-channel.example"} {
-		recorder := performChannelAuditAdminSearch(t, common.RoleAuditAdminUser, keyword)
-		require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
-		response := decodeChannelAuditAdminControllerResponse(t, recorder)
-		require.Equal(t, true, response["success"])
-		data := response["data"].(map[string]interface{})
-		require.Zero(t, int(data["total"].(float64)))
-	}
-
-	adminRecorder := performChannelAuditAdminSearch(t, common.RoleAdminUser, "sk-secret-channel-key")
-	require.Equal(t, http.StatusOK, adminRecorder.Code, adminRecorder.Body.String())
-	adminResponse := decodeChannelAuditAdminControllerResponse(t, adminRecorder)
-	require.Equal(t, true, adminResponse["success"])
-	adminData := adminResponse["data"].(map[string]interface{})
-	require.Equal(t, 1, int(adminData["total"].(float64)))
-}
-
-func TestAuditAdminChannelSearchResultsHideSensitiveFields(t *testing.T) {
-	db := setupChannelAuditAdminControllerTestDB(t)
-
-	secretBaseURL := "https://secret-channel.example"
-	require.NoError(t, db.Create(&model.Channel{
-		Type:              1,
-		Key:               "sk-secret-channel-key",
-		Name:              "public-search-name",
-		Status:            common.ChannelStatusEnabled,
-		BaseURL:           &secretBaseURL,
-		Models:            "gpt-4o",
-		Group:             "default",
-		Other:             "secret-other",
-		OtherInfo:         "secret-other-info",
-		ModelMapping:      ptrStringForChannelAuditAdminControllerTest(`{"a":"b"}`),
-		StatusCodeMapping: ptrStringForChannelAuditAdminControllerTest(`{"401":"500"}`),
-		Setting:           ptrStringForChannelAuditAdminControllerTest("secret-setting"),
-		ParamOverride:     ptrStringForChannelAuditAdminControllerTest(`{"temperature":0}`),
-		HeaderOverride:    ptrStringForChannelAuditAdminControllerTest(`{"X-Secret":"value"}`),
-		Remark:            ptrStringForChannelAuditAdminControllerTest("secret remark"),
-		OtherSettings:     "secret-settings",
-	}).Error)
-
-	recorder := performChannelAuditAdminSearch(t, common.RoleAuditAdminUser, "public-search-name")
 	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
-	response := decodeChannelAuditAdminControllerResponse(t, recorder)
-	require.Equal(t, true, response["success"])
-	data := response["data"].(map[string]interface{})
-	require.Equal(t, 1, int(data["total"].(float64)))
-	items := data["items"].([]interface{})
-	require.Len(t, items, 1)
-	item := items[0].(map[string]interface{})
-	require.Empty(t, item["key"])
-	require.Nil(t, item["base_url"])
-	require.Empty(t, item["other"])
-	require.Empty(t, item["other_info"])
-	require.Nil(t, item["model_mapping"])
-	require.Nil(t, item["status_code_mapping"])
-	require.Nil(t, item["setting"])
-	require.Nil(t, item["param_override"])
-	require.Nil(t, item["header_override"])
-	require.Nil(t, item["remark"])
-	require.Empty(t, item["settings"])
+	require.Contains(t, recorder.Body.String(), `"success":true`)
+	require.Contains(t, recorder.Body.String(), "private-channel-name")
+	require.NotContains(t, recorder.Body.String(), "sk-secret")
 }

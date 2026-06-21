@@ -27,6 +27,7 @@ import ModelBasicInfo from './components/ModelBasicInfo';
 import ModelEndpoints from './components/ModelEndpoints';
 import ModelPricingTable from './components/ModelPricingTable';
 import DynamicPricingBreakdown from './components/DynamicPricingBreakdown';
+import { ModelPerformanceSection } from '../common/PerformanceMetrics';
 
 const { Text } = Typography;
 
@@ -84,6 +85,13 @@ const ModelDetailSideSheet = ({
               <ModelBasicInfo
                 modelData={modelData}
                 vendorsMap={vendorsMap}
+                t={t}
+              />
+            </div>
+            <Divider margin={16} />
+            <div style={{ padding: '0 24px' }}>
+              <ModelPerformanceSection
+                perf={modelData.performance_summary}
                 t={t}
               />
             </div>

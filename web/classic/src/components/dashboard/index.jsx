@@ -139,6 +139,7 @@ const Dashboard = () => {
         dashboardCharts.updateChartData(data);
       }
     });
+    await dashboardData.loadFlowQuotaData();
     await loadUserData();
     await dashboardData.loadUptimeData();
   };
@@ -148,6 +149,7 @@ const Dashboard = () => {
     if (data && data.length > 0) {
       dashboardCharts.updateChartData(data);
     }
+    await dashboardData.loadFlowQuotaData();
     await loadUserData();
   };
 
@@ -211,7 +213,7 @@ const Dashboard = () => {
         CHART_CONFIG={CHART_CONFIG}
       />
 
-      {dashboardData.isAdminUser && <ChannelMonitorPanel />}
+      {dashboardData.canViewChannelMonitor && <ChannelMonitorPanel />}
 
       {/* API信息和图表面板 */}
       <div className='mb-4'>
@@ -227,6 +229,9 @@ const Dashboard = () => {
             spec_rank_bar={dashboardCharts.spec_rank_bar}
             spec_user_rank={dashboardCharts.spec_user_rank}
             spec_user_trend={dashboardCharts.spec_user_trend}
+            flowData={dashboardData.flowData}
+            flowLoading={dashboardData.flowLoading}
+            flowRole={dashboardData.flowRole}
             isAdminUser={dashboardData.isAdminUser}
             CARD_PROPS={CARD_PROPS}
             CHART_CONFIG={CHART_CONFIG}

@@ -207,8 +207,16 @@ const ChannelAffinityUsageCacheModal = ({
       closable
       maskClosable
       width={640}
+      bodyStyle={{ padding: 0 }}
     >
-      <div style={{ padding: 16 }}>
+      <div
+        style={{
+          padding: 16,
+          maxHeight: 'calc(100vh - 180px)',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+        }}
+      >
         <div style={{ marginBottom: 12 }}>
           <Text type='tertiary' size='small'>
             {t(
@@ -227,7 +235,14 @@ const ChannelAffinityUsageCacheModal = ({
         </div>
         <Spin spinning={loading} tip={t('加载中...')}>
           {stats && rows.length > 0 ? (
-            <Descriptions data={rows} />
+            <Descriptions
+              data={rows}
+              valueStyle={{
+                wordBreak: 'break-word',
+                overflowWrap: 'anywhere',
+              }}
+              itemKeyStyle={{ whiteSpace: 'nowrap' }}
+            />
           ) : (
             <div style={{ padding: '24px 0' }}>
               <Text type='tertiary' size='small'>

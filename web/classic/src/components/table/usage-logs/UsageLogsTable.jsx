@@ -44,7 +44,9 @@ const LogsTable = (logsData) => {
     hasExpandableRows,
     isAdminUser,
     canViewUserDetail,
+    canViewChannelDetail,
     billingDisplayMode,
+    sensitiveVisible,
     t,
     COLUMN_KEYS,
   } = logsData;
@@ -59,7 +61,9 @@ const LogsTable = (logsData) => {
       openChannelAffinityUsageCacheModal,
       isAdminUser,
       canViewUserDetail,
+      canViewChannelDetail,
       billingDisplayMode,
+      sensitiveVisible,
     });
   }, [
     t,
@@ -69,7 +73,9 @@ const LogsTable = (logsData) => {
     openChannelAffinityUsageCacheModal,
     isAdminUser,
     canViewUserDetail,
+    canViewChannelDetail,
     billingDisplayMode,
+    sensitiveVisible,
   ]);
 
   // Filter columns based on visibility settings
@@ -93,12 +99,23 @@ const LogsTable = (logsData) => {
         style={{
           fontSize: 15,
           lineHeight: 1.8,
+          maxWidth: '100%',
+          overflowX: 'auto',
         }}
       >
         <Descriptions
           data={expandData[record.key]}
-          valueStyle={{ fontSize: 15, lineHeight: 1.8 }}
-          itemKeyStyle={{ fontSize: 15, lineHeight: 1.8 }}
+          valueStyle={{
+            fontSize: 15,
+            lineHeight: 1.8,
+            wordBreak: 'break-word',
+            overflowWrap: 'anywhere',
+          }}
+          itemKeyStyle={{
+            fontSize: 15,
+            lineHeight: 1.8,
+            whiteSpace: 'nowrap',
+          }}
         />
       </div>
     );

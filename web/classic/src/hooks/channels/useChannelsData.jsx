@@ -36,10 +36,63 @@ import {
 } from '../../constants';
 import { useIsMobile } from '../common/useIsMobile';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { useTablePageSize } from '../common/useTablePageSize';
+import { TABLE_VIEW_MODES, useTableViewMode } from '../common/useTableViewMode';
 import { useChannelUpstreamUpdates } from './useChannelUpstreamUpdates';
 import { parseUpstreamUpdateMeta } from './upstreamUpdateUtils';
 import { Modal, Button } from '@douyinfe/semi-ui';
 import { openCodexUsageModal } from '../../components/table/channels/modals/CodexUsageModal';
+
+const getChannelTestResponseTimeMs = (time) => {
+  const seconds = Number(time);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return undefined;
+  }
+  return Math.round(seconds * 1000);
+};
+
+const createChannelTestPatch = (testResult) => {
+  const responseTime = getChannelTestResponseTimeMs(testResult?.time);
+  if (responseTime === undefined) {
+    return undefined;
+  }
+  const completedAt =
+    typeof testResult.timestamp === 'number'
+      ? testResult.timestamp
+      : Date.now();
+  return {
+    response_time: responseTime,
+    test_time: Math.floor(completedAt / 1000),
+  };
+};
+
+const getLatestChannelTestPatch = (results) => {
+  return results.reduce((latest, result) => {
+    const patch = createChannelTestPatch(result);
+    if (!patch) {
+      return latest;
+    }
+    const completedAt =
+      typeof result.timestamp === 'number' ? result.timestamp : 0;
+    if (!latest || completedAt >= latest.completedAt) {
+      return { patch, completedAt };
+    }
+    return latest;
+  }, undefined)?.patch;
+};
+
+const CHANNEL_COLUMN_KEYS = {
+  ID: 'id',
+  NAME: 'name',
+  GROUP: 'group',
+  TYPE: 'type',
+  STATUS: 'status',
+  RESPONSE_TIME: 'response_time',
+  BALANCE: 'balance',
+  PRIORITY: 'priority',
+  WEIGHT: 'weight',
+  OPERATE: 'operate',
+};
 
 export const useChannelsData = () => {
   const { t } = useTranslation();
@@ -52,7 +105,7 @@ export const useChannelsData = () => {
   const [activePage, setActivePage] = useState(1);
   const [idSort, setIdSort] = useState(false);
   const [searching, setSearching] = useState(false);
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [pageSize, setPageSize] = useTablePageSize(ITEMS_PER_PAGE);
   const [channelCount, setChannelCount] = useState(0);
   const [groupOptions, setGroupOptions] = useState([]);
 
@@ -67,6 +120,11 @@ export const useChannelsData = () => {
   const [showBatchSetTag, setShowBatchSetTag] = useState(false);
   const [batchSetTagValue, setBatchSetTagValue] = useState('');
   const [compactMode, setCompactMode] = useTableCompactMode('channels');
+  const [viewMode, setViewMode] = useTableViewMode(
+    'channels',
+    TABLE_VIEW_MODES.TABLE,
+  );
+  const [sensitiveVisible, setSensitiveVisible] = useState(true);
 
   // Column visibility states
   const [visibleColumns, setVisibleColumns] = useState({});
@@ -89,11 +147,14 @@ export const useChannelsData = () => {
   const [testingModels, setTestingModels] = useState(new Set());
   const [selectedModelKeys, setSelectedModelKeys] = useState([]);
   const [isBatchTesting, setIsBatchTesting] = useState(false);
+  const [batchStopRequested, setBatchStopRequested] = useState(false);
+  const [batchTestProgress, setBatchTestProgress] = useState(null);
   const [modelTablePage, setModelTablePage] = useState(1);
   const [selectedEndpointType, setSelectedEndpointType] = useState('');
   const [isStreamTest, setIsStreamTest] = useState(false);
   const [globalPassThroughEnabled, setGlobalPassThroughEnabled] =
     useState(false);
+  const [channelOps, setChannelOps] = useState(null);
 
   const fetchGlobalPassThroughEnabled = async () => {
     try {
@@ -110,6 +171,18 @@ export const useChannelsData = () => {
       }
     } catch (error) {
       setGlobalPassThroughEnabled(false);
+    }
+  };
+
+  const fetchChannelOps = async () => {
+    try {
+      const res = await API.get('/api/channel/ops');
+      const { success, data } = res?.data || {};
+      if (success) {
+        setChannelOps(data || null);
+      }
+    } catch (error) {
+      setChannelOps(null);
     }
   };
 
@@ -132,25 +205,12 @@ export const useChannelsData = () => {
     searchModel: '',
   };
 
-  // Column keys
-  const COLUMN_KEYS = {
-    ID: 'id',
-    NAME: 'name',
-    GROUP: 'group',
-    TYPE: 'type',
-    STATUS: 'status',
-    RESPONSE_TIME: 'response_time',
-    BALANCE: 'balance',
-    PRIORITY: 'priority',
-    WEIGHT: 'weight',
-    OPERATE: 'operate',
-  };
+  const COLUMN_KEYS = CHANNEL_COLUMN_KEYS;
 
   // Initialize from localStorage
   useEffect(() => {
     const localIdSort = localStorage.getItem('id-sort') === 'true';
-    const localPageSize =
-      parseInt(localStorage.getItem('page-size')) || ITEMS_PER_PAGE;
+    const localPageSize = pageSize;
     const localEnableTagMode =
       localStorage.getItem('enable-tag-mode') === 'true';
     const localEnableBatchDelete =
@@ -170,6 +230,7 @@ export const useChannelsData = () => {
         showError(reason);
       });
     fetchGroups().then();
+    fetchChannelOps().then();
     if (canWrite) {
       loadChannelModels().then();
       fetchGlobalPassThroughEnabled().then();
@@ -400,6 +461,7 @@ export const useChannelsData = () => {
   ) => {
     const { searchKeyword, searchGroup, searchModel } = getFormValues();
     setSearching(true);
+    let reqId;
     try {
       if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
         await loadChannels(
@@ -413,11 +475,19 @@ export const useChannelsData = () => {
         return;
       }
 
+      reqId = ++requestCounter.current;
       const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
       const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
       const res = await API.get(
-        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}`,
+        `/api/channel/search?keyword=${encodeURIComponent(
+          searchKeyword,
+        )}&group=${encodeURIComponent(searchGroup)}&model=${encodeURIComponent(
+          searchModel,
+        )}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}`,
       );
+      if (res === undefined || reqId !== requestCounter.current) {
+        return;
+      }
       const { success, message, data } = res.data;
       if (success) {
         const { items = [], total = 0, type_counts = {} } = data;
@@ -433,7 +503,9 @@ export const useChannelsData = () => {
         showError(message);
       }
     } finally {
-      setSearching(false);
+      if (!reqId || reqId === requestCounter.current) {
+        setSearching(false);
+      }
     }
   };
 
@@ -552,7 +624,6 @@ export const useChannelsData = () => {
   };
 
   const handlePageSizeChange = async (size) => {
-    localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
     const { searchKeyword, searchGroup, searchModel } = getFormValues();
@@ -629,6 +700,79 @@ export const useChannelsData = () => {
 
     if (updated) {
       setChannels(newChannels);
+    }
+  };
+
+  const updateChannelTestStatus = (channelId, patch) => {
+    if (!patch) {
+      return;
+    }
+
+    updateChannelProperty(channelId, (channel) => {
+      channel.response_time = patch.response_time;
+      channel.test_time = patch.test_time;
+    });
+    setCurrentTestChannel((channel) =>
+      channel && channel.id === channelId ? { ...channel, ...patch } : channel,
+    );
+  };
+
+  const deleteFailedModels = async (record, failedModels) => {
+    if (!record || !Array.isArray(failedModels) || failedModels.length === 0) {
+      showInfo(t('暂无失败模型'));
+      return false;
+    }
+
+    const failedSet = new Set(failedModels);
+    const remainingModels = String(record.models || '')
+      .split(',')
+      .map((model) => model.trim())
+      .filter(Boolean)
+      .filter((model) => !failedSet.has(model));
+
+    try {
+      const res = await API.put('/api/channel/', {
+        id: record.id,
+        models: remainingModels.join(','),
+      });
+      const { success, message, data } = res.data || {};
+      if (!success) {
+        showError(message || t('删除失败模型失败'));
+        return false;
+      }
+
+      updateChannelProperty(record.id, (channel) => {
+        channel.models = data?.models ?? remainingModels.join(',');
+      });
+      setCurrentTestChannel((channel) =>
+        channel && channel.id === record.id
+          ? { ...channel, models: data?.models ?? remainingModels.join(',') }
+          : channel,
+      );
+      setSelectedModelKeys((keys) =>
+        keys.filter((model) => !failedSet.has(model)),
+      );
+      setModelTestResults((prev) => {
+        const next = { ...prev };
+        failedModels.forEach((model) => {
+          delete next[`${record.id}-${model}`];
+        });
+        return next;
+      });
+      showSuccess(
+        t('已删除 ${count} 个失败模型').replace(
+          '${count}',
+          failedModels.length,
+        ),
+      );
+      return true;
+    } catch (error) {
+      showError(
+        error?.response?.data?.message ||
+          error?.message ||
+          t('删除失败模型失败'),
+      );
+      return false;
     }
   };
 
@@ -775,6 +919,7 @@ export const useChannelsData = () => {
       openCodexUsageModal({
         t,
         record,
+        sensitiveVisible,
         onCopy: async (text) => {
           const ok = await copy(text);
           if (ok) showSuccess(t('已复制'));
@@ -792,7 +937,10 @@ export const useChannelsData = () => {
         channel.balance_updated_time = Date.now() / 1000;
       });
       showInfo(
-        t('通道 ${name} 余额更新成功！').replace('${name}', record.name),
+        t('通道 ${name} 余额更新成功！').replace(
+          '${name}',
+          sensitiveVisible ? record.name : '••••',
+        ),
       );
     } else {
       showError(message);
@@ -885,6 +1033,7 @@ export const useChannelsData = () => {
   ) => {
     const silent = options?.silent === true;
     const batchMode = options?.batch === true;
+    const refreshList = options?.refreshList !== false;
     const testKey = `${record.id}-${model}`;
 
     // 检查是否应该停止批量测试
@@ -908,43 +1057,35 @@ export const useChannelsData = () => {
       }
       const res = await API.get(url);
 
-      // 检查是否在请求期间被停止
-      if (
-        shouldStopBatchTestingRef.current &&
-        (batchMode || batchTestingActiveRef.current)
-      ) {
-        return Promise.resolve();
-      }
-
       const { success, message, time, error_code } = res.data;
+      const timeSeconds = Number.isFinite(Number(time)) ? Number(time) : 0;
+      const testResult = {
+        success,
+        message,
+        time: timeSeconds,
+        timestamp: Date.now(),
+        errorCode: error_code || null,
+      };
 
       // 更新测试结果
       setModelTestResults((prev) => ({
         ...prev,
-        [testKey]: {
-          success,
-          message,
-          time: time || 0,
-          timestamp: Date.now(),
-          errorCode: error_code || null,
-        },
+        [testKey]: testResult,
       }));
 
-      if (success) {
-        // 更新渠道响应时间
-        updateChannelProperty(record.id, (channel) => {
-          channel.response_time = time * 1000;
-          channel.test_time = Date.now() / 1000;
-        });
+      if (refreshList) {
+        updateChannelTestStatus(record.id, createChannelTestPatch(testResult));
+      }
 
+      if (success) {
         if (silent) {
-          return;
+          return testResult;
         }
         if (!model || model === '') {
           showInfo(
             t('通道 ${name} 测试成功，耗时 ${time.toFixed(2)} 秒。')
               .replace('${name}', record.name)
-              .replace('${time.toFixed(2)}', time.toFixed(2)),
+              .replace('${time.toFixed(2)}', timeSeconds.toFixed(2)),
           );
         } else {
           showInfo(
@@ -953,30 +1094,48 @@ export const useChannelsData = () => {
             )
               .replace('${name}', record.name)
               .replace('${model}', model)
-              .replace('${time.toFixed(2)}', time.toFixed(2)),
+              .replace('${time.toFixed(2)}', timeSeconds.toFixed(2)),
           );
         }
       } else {
         if (!silent) {
-          showError(message);
+          showError(
+            t('通道 ${name} 模型 ${model} 测试失败：${message}')
+              .replace('${name}', record.name)
+              .replace('${model}', model || t('默认模型'))
+              .replace(
+                '${message}',
+                error_code
+                  ? `${message || t('测试失败')} (${error_code})`
+                  : message || t('测试失败'),
+              ),
+          );
         }
       }
+      return testResult;
     } catch (error) {
       // 处理网络错误
       const testKey = `${record.id}-${model}`;
+      const testResult = {
+        success: false,
+        message: error.message || t('网络错误'),
+        time: 0,
+        timestamp: Date.now(),
+        errorCode: null,
+      };
       setModelTestResults((prev) => ({
         ...prev,
-        [testKey]: {
-          success: false,
-          message: error.message || t('网络错误'),
-          time: 0,
-          timestamp: Date.now(),
-          errorCode: null,
-        },
+        [testKey]: testResult,
       }));
       if (!silent) {
-        showError(error.message || t('测试失败'));
+        showError(
+          t('通道 ${name} 模型 ${model} 测试失败：${message}')
+            .replace('${name}', record.name)
+            .replace('${model}', model || t('默认模型'))
+            .replace('${message}', error.message || t('测试失败')),
+        );
       }
+      return testResult;
     } finally {
       // 从正在测试的模型集合中移除
       setTestingModels((prev) => {
@@ -1010,6 +1169,13 @@ export const useChannelsData = () => {
     }
 
     setIsBatchTesting(true);
+    setBatchStopRequested(false);
+    setBatchTestProgress({
+      total: models.length,
+      completed: 0,
+      success: 0,
+      failed: 0,
+    });
     batchTestingActiveRef.current = true;
     shouldStopBatchTestingRef.current = false; // 重置停止标志
 
@@ -1033,7 +1199,29 @@ export const useChannelsData = () => {
 
       // 提高并发数量以加快测试速度，参考旧版的并发限制
       const concurrencyLimit = 5;
-      const results = [];
+      const completedResults = [];
+      let completedCount = 0;
+      let successCount = 0;
+      let failCount = 0;
+
+      const recordBatchProgress = (testResult) => {
+        if (!testResult) {
+          return;
+        }
+        completedResults.push(testResult);
+        completedCount += 1;
+        if (testResult?.success) {
+          successCount += 1;
+        } else {
+          failCount += 1;
+        }
+        setBatchTestProgress({
+          total: models.length,
+          completed: completedCount,
+          success: successCount,
+          failed: failCount,
+        });
+      };
 
       for (let i = 0; i < models.length; i += concurrencyLimit) {
         // 检查是否应该停止
@@ -1049,11 +1237,15 @@ export const useChannelsData = () => {
             model,
             selectedEndpointType,
             isStreamTest,
-            { silent: true, batch: true },
+            { silent: true, batch: true, refreshList: false },
           ),
         );
         const batchResults = await Promise.allSettled(batchPromises);
-        results.push(...batchResults);
+        batchResults.forEach((result) => {
+          recordBatchProgress(
+            result.status === 'fulfilled' ? result.value : undefined,
+          );
+        });
 
         // 再次检查是否应该停止
         if (shouldStopBatchTestingRef.current) {
@@ -1067,31 +1259,48 @@ export const useChannelsData = () => {
         }
       }
 
-      if (!shouldStopBatchTestingRef.current) {
+      if (shouldStopBatchTestingRef.current) {
+        showInfo(
+          t(
+            '批量测试已停止，已完成 ${completed}/${total} 个模型，成功 ${success} 个，失败 ${fail} 个。',
+          )
+            .replace('${completed}', completedCount)
+            .replace('${total}', models.length)
+            .replace('${success}', successCount)
+            .replace('${fail}', failCount),
+        );
+      } else {
         // 等待一小段时间确保所有结果都已更新
         await new Promise((resolve) => setTimeout(resolve, 300));
 
         // 使用当前状态重新计算结果统计
         setModelTestResults((currentResults) => {
-          let successCount = 0;
-          let failCount = 0;
+          let finalSuccessCount = 0;
+          let finalFailCount = 0;
 
           models.forEach((model) => {
             const testKey = `${currentTestChannel.id}-${model}`;
             const result = currentResults[testKey];
             if (result && result.success) {
-              successCount++;
+              finalSuccessCount++;
             } else {
-              failCount++;
+              finalFailCount++;
             }
+          });
+
+          setBatchTestProgress({
+            total: models.length,
+            completed: models.length,
+            success: finalSuccessCount,
+            failed: finalFailCount,
           });
 
           // 显示完成消息
           setTimeout(() => {
             showSuccess(
               t('批量测试完成！成功: ${success}, 失败: ${fail}, 总计: ${total}')
-                .replace('${success}', successCount)
-                .replace('${fail}', failCount)
+                .replace('${success}', finalSuccessCount)
+                .replace('${fail}', finalFailCount)
                 .replace('${total}', models.length),
             );
           }, 100);
@@ -1099,10 +1308,15 @@ export const useChannelsData = () => {
           return currentResults; // 不修改状态，只是为了获取最新值
         });
       }
+      updateChannelTestStatus(
+        currentTestChannel.id,
+        getLatestChannelTestPatch(completedResults),
+      );
     } catch (error) {
       showError(t('批量测试过程中发生错误: ') + error.message);
     } finally {
       setIsBatchTesting(false);
+      setBatchStopRequested(false);
       batchTestingActiveRef.current = false;
     }
   };
@@ -1110,9 +1324,8 @@ export const useChannelsData = () => {
   // 停止批量测试
   const stopBatchTesting = () => {
     shouldStopBatchTestingRef.current = true;
-    setIsBatchTesting(false);
-    setTestingModels(new Set());
-    showInfo(t('已停止批量测试'));
+    setBatchStopRequested(true);
+    showInfo(t('正在停止批量测试，已发出的请求会先完成。'));
   };
 
   // 清空测试结果
@@ -1132,6 +1345,8 @@ export const useChannelsData = () => {
     setShowModelTestModal(false);
     setModelSearchKeyword('');
     setIsBatchTesting(false);
+    setBatchStopRequested(false);
+    setBatchTestProgress(null);
     setTestingModels(new Set());
     setSelectedModelKeys([]);
     setModelTablePage(1);
@@ -1180,6 +1395,8 @@ export const useChannelsData = () => {
     enableBatchDelete,
     statusFilter,
     compactMode,
+    viewMode,
+    sensitiveVisible,
     globalPassThroughEnabled,
 
     // UI states
@@ -1223,6 +1440,8 @@ export const useChannelsData = () => {
     selectedModelKeys,
     setSelectedModelKeys,
     isBatchTesting,
+    batchStopRequested,
+    batchTestProgress,
     modelTablePage,
     setModelTablePage,
     selectedEndpointType,
@@ -1257,6 +1476,7 @@ export const useChannelsData = () => {
     handlePageSizeChange,
     copySelectedChannel,
     updateChannelProperty,
+    deleteFailedModels,
     submitTagEdit,
     closeEdit,
     handleRow,
@@ -1270,6 +1490,7 @@ export const useChannelsData = () => {
     checkOllamaVersion,
     testChannel,
     batchTestModels,
+    stopBatchTesting,
     handleCloseModal,
     getFormValues,
 
@@ -1285,6 +1506,8 @@ export const useChannelsData = () => {
     setEnableBatchDelete,
     setStatusFilter,
     setCompactMode,
+    setViewMode,
+    setSensitiveVisible,
     setActivePage,
   };
 };

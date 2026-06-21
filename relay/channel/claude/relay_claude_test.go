@@ -314,6 +314,44 @@ func TestRequestOpenAI2ClaudeMessage_IgnoresUnsupportedFileContent(t *testing.T)
 	require.Equal(t, "see attachment", *content[0].Text)
 }
 
+func TestRequestOpenAI2ClaudeMessage_PreservesToolUseWithEmptyArguments(t *testing.T) {
+	message := dto.Message{
+		Role: "assistant",
+	}
+	message.SetToolCalls([]dto.ToolCallRequest{
+		{
+			ID:   "call_empty_args",
+			Type: "function",
+			Function: dto.FunctionRequest{
+				Name:      "lookup",
+				Arguments: "",
+			},
+		},
+	})
+	request := dto.GeneralOpenAIRequest{
+		Model: "claude-3-5-sonnet",
+		Messages: []dto.Message{
+			{
+				Role:    "user",
+				Content: "hello",
+			},
+			message,
+		},
+	}
+
+	claudeRequest, err := RequestOpenAI2ClaudeMessage(nil, request)
+	require.NoError(t, err)
+	require.Len(t, claudeRequest.Messages, 2)
+
+	content, ok := claudeRequest.Messages[1].Content.([]dto.ClaudeMediaMessage)
+	require.True(t, ok)
+	require.Len(t, content, 2)
+	require.Equal(t, "tool_use", content[1].Type)
+	require.Equal(t, "call_empty_args", content[1].Id)
+	require.Equal(t, "lookup", content[1].Name)
+	require.Equal(t, map[string]any{}, content[1].Input)
+}
+
 func TestRequestOpenAI2ClaudeMessage_ClaudeOpus48HighUsesAdaptiveThinking(t *testing.T) {
 	request := dto.GeneralOpenAIRequest{
 		Model:       "claude-opus-4-8-high",

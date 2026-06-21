@@ -57,6 +57,8 @@ const colors = [
   'yellow',
 ];
 
+const SENSITIVE_MASK = '••••';
+
 function formatRatio(ratio) {
   if (ratio === undefined || ratio === null) {
     return '-';
@@ -67,21 +69,21 @@ function formatRatio(ratio) {
   return String(ratio);
 }
 
-function buildChannelAffinityTooltip(affinity, t) {
+function buildChannelAffinityTooltip(affinity, t, sensitiveVisible = true) {
   if (!affinity) {
     return null;
   }
 
   const keySource = affinity.key_source || '-';
   const keyPath = affinity.key_path || affinity.key_key || '-';
-  const keyHint = affinity.key_hint || '';
+  const keyHint = sensitiveVisible ? affinity.key_hint || '' : SENSITIVE_MASK;
   const keyFp = affinity.key_fp ? `#${affinity.key_fp}` : '';
   const keyText = `${keySource}:${keyPath}${keyFp}`;
 
   const lines = [
     t('渠道亲和性'),
     `${t('规则')}：${affinity.rule_name || '-'}`,
-    `${t('分组')}：${affinity.selected_group || '-'}`,
+    `${t('分组')}：${sensitiveVisible ? affinity.selected_group || '-' : SENSITIVE_MASK}`,
     `${t('Key')}：${keyText}`,
     ...(keyHint ? [`${t('Key 摘要')}：${keyHint}`] : []),
   ];
@@ -424,6 +426,21 @@ function renderCompactDetailSummary(summarySegments) {
   );
 }
 
+function formatChannelNumber(channelId) {
+  const id = Number(channelId || 0);
+  return id > 0 ? `#${id}` : '-';
+}
+
+function formatChannelPath(channels) {
+  if (!Array.isArray(channels) || channels.length === 0) {
+    return '';
+  }
+  return channels
+    .map((channel) => formatChannelNumber(channel))
+    .filter((channel) => channel !== '-')
+    .join('->');
+}
+
 function getAuditActionLabel(action, t) {
   switch (action) {
     case 'login':
@@ -621,7 +638,9 @@ export const getLogsColumns = ({
   openChannelAffinityUsageCacheModal,
   isAdminUser,
   canViewUserDetail,
+  canViewChannelDetail = canViewUserDetail,
   billingDisplayMode = 'price',
+  sensitiveVisible = true,
 }) => {
   return [
     {
@@ -650,7 +669,8 @@ export const getLogsColumns = ({
             Array.isArray(adminInfo.use_channel) &&
             adminInfo.use_channel.length > 0
           ) {
-            content = t('渠道') + `：${adminInfo.use_channel.join('->')}`;
+            content =
+              t('渠道') + `：${formatChannelPath(adminInfo.use_channel)}`;
           }
           if (adminInfo.channel_affinity) {
             affinity = adminInfo.channel_affinity;
@@ -658,27 +678,37 @@ export const getLogsColumns = ({
           }
         }
 
-        return isAdminUser && isModelBillingLog(record) ? (
+        return isModelBillingLog(record) && text ? (
           <Space>
             <span style={{ position: 'relative', display: 'inline-block' }}>
-              <Tooltip content={record.channel_name || t('未知渠道')}>
+              <Tooltip
+                content={
+                  sensitiveVisible && canViewChannelDetail
+                    ? record.channel_name || t('未知渠道')
+                    : formatChannelNumber(text)
+                }
+              >
                 <span>
                   <Tag
                     color={colors[parseInt(text) % colors.length]}
                     shape='circle'
                   >
-                    {text}
+                    {formatChannelNumber(text)}
                   </Tag>
                 </span>
               </Tooltip>
-              {showMarker && (
+              {canViewChannelDetail && showMarker && (
                 <Tooltip
                   content={
                     <div style={{ lineHeight: 1.6 }}>
-                      <div>{content}</div>
+                      <div>{sensitiveVisible ? content : SENSITIVE_MASK}</div>
                       {affinity ? (
                         <div style={{ marginTop: 6 }}>
-                          {buildChannelAffinityTooltip(affinity, t)}
+                          {buildChannelAffinityTooltip(
+                            affinity,
+                            t,
+                            sensitiveVisible,
+                          )}
                         </div>
                       ) : null}
                     </div>
@@ -737,9 +767,11 @@ export const getLogsColumns = ({
                 }
               }}
             >
-              {typeof text === 'string' && text.slice(0, 1)}
+              {sensitiveVisible && typeof text === 'string'
+                ? text.slice(0, 1)
+                : '•'}
             </Avatar>
-            {text}
+            {sensitiveVisible ? text : SENSITIVE_MASK}
           </div>
         ) : (
           <></>
@@ -761,7 +793,7 @@ export const getLogsColumns = ({
               }}
             >
               {' '}
-              {t(text)}{' '}
+              {sensitiveVisible ? t(text) : SENSITIVE_MASK}{' '}
             </Tag>
           </div>
         ) : (
@@ -775,6 +807,17 @@ export const getLogsColumns = ({
       dataIndex: 'group',
       render: (text, record, index) => {
         if (isModelBillingLog(record)) {
+          if (!sensitiveVisible) {
+            const other = getLogOther(record.other);
+            if (record.group || other?.group !== undefined) {
+              return (
+                <Tag color='white' shape='circle'>
+                  {SENSITIVE_MASK}
+                </Tag>
+              );
+            }
+            return <></>;
+          }
           if (record.group) {
             return <>{renderGroup(record.group)}</>;
           } else {
@@ -959,7 +1002,7 @@ export const getLogsColumns = ({
       dataIndex: 'ip',
       render: (text, record, index) => {
         return shouldShowLogIp(record, isAdminUser) ? (
-          <Tooltip content={text}>
+          <Tooltip content={sensitiveVisible ? text : SENSITIVE_MASK}>
             <span>
               <Tag
                 color='orange'
@@ -968,7 +1011,7 @@ export const getLogsColumns = ({
                   copyText(event, text);
                 }}
               >
-                {text}
+                {sensitiveVisible ? text : SENSITIVE_MASK}
               </Tag>
             </span>
           </Tooltip>
@@ -998,12 +1041,16 @@ export const getLogsColumns = ({
               other.admin_info.use_channel !== ''
             ) {
               let useChannel = other.admin_info.use_channel;
-              let useChannelStr = useChannel.join('->');
+              let useChannelStr = formatChannelPath(useChannel);
               content = t('渠道') + `：${useChannelStr}`;
             }
           }
         }
-        return isAdminUser ? <div>{content}</div> : <></>;
+        return isAdminUser || canViewChannelDetail ? (
+          <div>{sensitiveVisible ? content : SENSITIVE_MASK}</div>
+        ) : (
+          <div>{content}</div>
+        );
       },
     },
     {

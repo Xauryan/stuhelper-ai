@@ -32,6 +32,7 @@ import {
 import { renderQuota } from '../../../helpers';
 import { convertUSDToCurrency } from '../../../helpers/render';
 import { getSubscriptionModelLimits } from '../../../helpers/subscription';
+import { TruncatedText } from '../../common/ui/RenderUtils';
 
 const { Text } = Typography;
 
@@ -93,6 +94,14 @@ const renderPlanTitle = (text, record, t) => {
         )}
         <Text type='tertiary'>{t('升级分组')}</Text>
         <Text>{plan?.upgrade_group ? plan.upgrade_group : t('不升级')}</Text>
+        <Text type='tertiary'>{t('降级分组')}</Text>
+        <Text>
+          {plan?.downgrade_group ? plan.downgrade_group : t('购买前分组')}
+        </Text>
+        <Text type='tertiary'>{t('钱包兜底')}</Text>
+        <Text>
+          {plan?.allow_wallet_overflow === false ? t('禁用') : t('启用')}
+        </Text>
         <Text type='tertiary'>{t('购买上限')}</Text>
         <Text>
           {plan?.max_purchase_per_user > 0
@@ -225,8 +234,38 @@ const renderUpgradeGroup = (text, record, t) => {
   const group = record?.plan?.upgrade_group || '';
   return (
     <Text type={group ? 'secondary' : 'tertiary'}>
-      {group ? group : t('不升级')}
+      {group ? (
+        <TruncatedText maxWidth={110}>{group}</TruncatedText>
+      ) : (
+        t('不升级')
+      )}
     </Text>
+  );
+};
+
+const renderDowngradeGroup = (text, record, t) => {
+  const group = record?.plan?.downgrade_group || '';
+  return (
+    <Text type={group ? 'secondary' : 'tertiary'}>
+      {group ? (
+        <TruncatedText maxWidth={120}>{group}</TruncatedText>
+      ) : (
+        t('购买前分组')
+      )}
+    </Text>
+  );
+};
+
+const renderWalletOverflow = (text, record, t) => {
+  const allowed = record?.plan?.allow_wallet_overflow !== false;
+  return allowed ? (
+    <Tag color='green' shape='circle'>
+      {t('启用')}
+    </Tag>
+  ) : (
+    <Tag color='red' shape='circle'>
+      {t('禁用')}
+    </Tag>
   );
 };
 
@@ -417,6 +456,16 @@ export const getSubscriptionsColumns = ({
       title: t('升级分组'),
       width: 100,
       render: (text, record) => renderUpgradeGroup(text, record, t),
+    },
+    {
+      title: t('降级分组'),
+      width: 110,
+      render: (text, record) => renderDowngradeGroup(text, record, t),
+    },
+    {
+      title: t('钱包兜底'),
+      width: 90,
+      render: (text, record) => renderWalletOverflow(text, record, t),
     },
     {
       title: t('操作'),

@@ -311,6 +311,9 @@ func migrateDB() error {
 			return err
 		}
 	}
+	if err := backfillSubscriptionWalletOverflowDefault(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -396,6 +399,9 @@ func migrateDBFast() error {
 		if err := DB.AutoMigrate(&SubscriptionPlan{}); err != nil {
 			return err
 		}
+	}
+	if err := backfillSubscriptionWalletOverflowDefault(); err != nil {
+		return err
 	}
 	common.SysLog("database migrated")
 	return nil
@@ -590,10 +596,12 @@ func ensureSubscriptionPlanTableSQLite() error {
 ` + "`sort_order`" + ` integer DEFAULT 0,
 ` + "`recommended`" + ` numeric DEFAULT 0,
 ` + "`allow_balance_pay`" + ` numeric DEFAULT 1,
+` + "`allow_wallet_overflow`" + ` numeric DEFAULT 1,
 ` + "`stripe_price_id`" + ` varchar(128) DEFAULT '',
 ` + "`creem_product_id`" + ` varchar(128) DEFAULT '',
 ` + "`max_purchase_per_user`" + ` integer DEFAULT 0,
 ` + "`upgrade_group`" + ` varchar(64) DEFAULT '',
+` + "`downgrade_group`" + ` varchar(64) DEFAULT '',
 ` + "`total_amount`" + ` bigint NOT NULL DEFAULT 0,
 ` + "`quota_reset_period`" + ` varchar(16) DEFAULT 'never',
 ` + "`quota_reset_custom_seconds`" + ` bigint DEFAULT 0,
@@ -627,10 +635,12 @@ PRIMARY KEY (` + "`id`" + `)
 		{Name: "sort_order", DDL: "`sort_order` integer DEFAULT 0"},
 		{Name: "recommended", DDL: "`recommended` numeric DEFAULT 0"},
 		{Name: "allow_balance_pay", DDL: "`allow_balance_pay` numeric DEFAULT 1"},
+		{Name: "allow_wallet_overflow", DDL: "`allow_wallet_overflow` numeric DEFAULT 1"},
 		{Name: "stripe_price_id", DDL: "`stripe_price_id` varchar(128) DEFAULT ''"},
 		{Name: "creem_product_id", DDL: "`creem_product_id` varchar(128) DEFAULT ''"},
 		{Name: "max_purchase_per_user", DDL: "`max_purchase_per_user` integer DEFAULT 0"},
 		{Name: "upgrade_group", DDL: "`upgrade_group` varchar(64) DEFAULT ''"},
+		{Name: "downgrade_group", DDL: "`downgrade_group` varchar(64) DEFAULT ''"},
 		{Name: "total_amount", DDL: "`total_amount` bigint NOT NULL DEFAULT 0"},
 		{Name: "quota_reset_period", DDL: "`quota_reset_period` varchar(16) DEFAULT 'never'"},
 		{Name: "quota_reset_custom_seconds", DDL: "`quota_reset_custom_seconds` bigint DEFAULT 0"},
@@ -648,6 +658,15 @@ PRIMARY KEY (` + "`id`" + `)
 		}
 	}
 	return nil
+}
+
+func backfillSubscriptionWalletOverflowDefault() error {
+	if DB == nil || !DB.Migrator().HasColumn(&UserSubscription{}, "allow_wallet_overflow") {
+		return nil
+	}
+	return DB.Model(&UserSubscription{}).
+		Where("allow_wallet_overflow IS NULL").
+		Update("allow_wallet_overflow", commonTrueVal).Error
 }
 
 // migrateTokenModelLimitsToText migrates model_limits column from varchar(1024) to text

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@xauryan.com
 */
 
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Empty } from '@douyinfe/semi-ui';
 import CardTable from '../../common/ui/CardTable';
 import {
@@ -26,6 +26,8 @@ import {
 } from '@douyinfe/semi-illustrations';
 import { getChannelsColumns } from './ChannelsColumnDefs';
 import { isAuditOnlyAdmin } from '../../../helpers';
+import ChannelMobileCard from './ChannelMobileCard';
+import { TABLE_VIEW_MODES } from '../../../hooks/common/useTableViewMode';
 
 const ChannelsTable = (channelsData) => {
   const {
@@ -37,7 +39,9 @@ const ChannelsTable = (channelsData) => {
     channelCount,
     enableBatchDelete,
     compactMode,
+    viewMode,
     visibleColumns,
+    sensitiveVisible,
     setSelectedChannels,
     handlePageChange,
     handlePageSizeChange,
@@ -93,6 +97,7 @@ const ChannelsTable = (channelsData) => {
       openUpstreamUpdateModal,
       detectChannelUpstreamUpdates,
       canWrite,
+      sensitiveVisible,
     });
   }, [
     t,
@@ -118,6 +123,7 @@ const ChannelsTable = (channelsData) => {
     openUpstreamUpdateModal,
     detectChannelUpstreamUpdates,
     canWrite,
+    sensitiveVisible,
   ]);
 
   // Filter columns based on visibility settings
@@ -135,10 +141,26 @@ const ChannelsTable = (channelsData) => {
       : visibleColumnsList;
   }, [compactMode, visibleColumnsList]);
 
+  const renderMobileCard = useCallback(
+    ({ record, index, columns }) => (
+      <ChannelMobileCard
+        record={record}
+        index={index}
+        columns={columns}
+        columnKeys={COLUMN_KEYS}
+        t={t}
+      />
+    ),
+    [COLUMN_KEYS, t],
+  );
+
   return (
     <CardTable
       columns={tableColumns}
       dataSource={channels}
+      renderMobileCard={renderMobileCard}
+      cardMode={viewMode === TABLE_VIEW_MODES.CARD}
+      cardGridClassName='grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3'
       scroll={compactMode ? undefined : { x: 'max-content' }}
       pagination={{
         currentPage: activePage,

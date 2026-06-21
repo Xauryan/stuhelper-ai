@@ -20,7 +20,15 @@ For commercial licensing, please contact support@xauryan.com
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { API, isAdmin, showError, timestamp2string } from '../../helpers';
+import {
+  API,
+  getCurrentUserRole,
+  isAdmin,
+  isAuditAdmin,
+  showError,
+  timestamp2string,
+} from '../../helpers';
+import { USER_ROLES } from '../../constants/roles';
 import { getDefaultTime, getInitialTimestamp } from '../../helpers/dashboard';
 import { TIME_OPTIONS } from '../../constants/dashboard.constants';
 import { useIsMobile } from '../common/useIsMobile';
@@ -60,6 +68,8 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
   const [pieData, setPieData] = useState([{ type: 'null', value: '0' }]);
   const [lineData, setLineData] = useState([]);
   const [modelColors, setModelColors] = useState({});
+  const [flowData, setFlowData] = useState([]);
+  const [flowLoading, setFlowLoading] = useState(false);
 
   // ========== 图表状态 ==========
   const [activeChartTab, setActiveChartTab] = useState('1');
@@ -84,6 +94,13 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
   // ========== 常量 ==========
   const now = new Date();
   const isAdminUser = isAdmin();
+  const canViewChannelMonitor = isAuditAdmin();
+  const flowRole = useMemo(() => {
+    const role = getCurrentUserRole();
+    if (role >= USER_ROLES.ROOT) return 'root';
+    if (role >= USER_ROLES.ADMIN) return 'admin';
+    return 'user';
+  }, []);
 
   // ========== Panel enable flags ==========
   const apiInfoEnabled = statusState?.status?.api_info_enabled ?? true;
@@ -234,6 +251,40 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     }
   }, [inputs, isAdminUser]);
 
+  const loadFlowQuotaData = useCallback(async () => {
+    setFlowLoading(true);
+    try {
+      const { start_timestamp, end_timestamp, username } = inputs;
+      const localStartTimestamp = Date.parse(start_timestamp) / 1000;
+      const localEndTimestamp = Date.parse(end_timestamp) / 1000;
+      const baseUrl = isAdminUser ? '/api/data/flow' : '/api/data/flow/self';
+      const search = new URLSearchParams({
+        start_timestamp: String(localStartTimestamp),
+        end_timestamp: String(localEndTimestamp),
+        default_time: dataExportDefaultTime,
+      });
+      if (isAdminUser && username) {
+        search.set('username', username);
+      }
+      const res = await API.get(`${baseUrl}?${search.toString()}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        const rows = data || [];
+        setFlowData(rows);
+        return rows;
+      }
+      showError(message);
+      setFlowData([]);
+      return [];
+    } catch (err) {
+      console.error(err);
+      setFlowData([]);
+      return [];
+    } finally {
+      setFlowLoading(false);
+    }
+  }, [inputs, isAdminUser, dataExportDefaultTime]);
+
   const getUserData = useCallback(async () => {
     let res = await API.get(`/api/user/self`);
     const { success, message, data } = res.data;
@@ -246,9 +297,10 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
 
   const refresh = useCallback(async () => {
     const data = await loadQuotaData();
+    await loadFlowQuotaData();
     await loadUptimeData();
     return data;
-  }, [loadQuotaData, loadUptimeData]);
+  }, [loadQuotaData, loadFlowQuotaData, loadUptimeData]);
 
   const handleSearchConfirm = useCallback(
     async (updateChartDataCallback) => {
@@ -300,6 +352,8 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     setLineData,
     modelColors,
     setModelColors,
+    flowData,
+    flowLoading,
 
     // 图表状态
     activeChartTab,
@@ -320,6 +374,8 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     performanceMetrics,
     getGreeting,
     isAdminUser,
+    canViewChannelMonitor,
+    flowRole,
     hasApiInfoPanel,
     hasInfoPanels,
     apiInfoEnabled,
@@ -332,6 +388,7 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     showSearchModal,
     handleCloseModal,
     loadQuotaData,
+    loadFlowQuotaData,
     loadUserQuotaData,
     loadUptimeData,
     getUserData,

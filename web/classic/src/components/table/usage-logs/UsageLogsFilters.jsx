@@ -32,8 +32,11 @@ const LogsFilters = ({
   setLogType,
   loading,
   isAdminUser,
+  sensitiveVisible,
   t,
 }) => {
+  const sensitiveInputType = sensitiveVisible ? 'text' : 'password';
+
   return (
     <Form
       initValues={formInitValues}
@@ -46,9 +49,9 @@ const LogsFilters = ({
       stopValidateWithError={false}
     >
       <div className='flex flex-col gap-2'>
-        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2'>
+        <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2'>
           {/* 时间选择器 */}
-          <div className='col-span-1 lg:col-span-2'>
+          <div className='col-span-1 md:col-span-2'>
             <Form.DatePicker
               field='dateRange'
               className='w-full'
@@ -68,6 +71,7 @@ const LogsFilters = ({
           {/* 其他搜索字段 */}
           <Form.Input
             field='token_name'
+            type={sensitiveInputType}
             prefix={<IconSearch />}
             placeholder={t('令牌名称')}
             showClear
@@ -86,6 +90,7 @@ const LogsFilters = ({
 
           <Form.Input
             field='group'
+            type={sensitiveInputType}
             prefix={<IconSearch />}
             placeholder={t('分组')}
             showClear
@@ -114,6 +119,7 @@ const LogsFilters = ({
               />
               <Form.Input
                 field='username'
+                type={sensitiveInputType}
                 prefix={<IconSearch />}
                 placeholder={t('用户名称')}
                 showClear
@@ -125,13 +131,13 @@ const LogsFilters = ({
         </div>
 
         {/* 操作按钮区域 */}
-        <div className='flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3'>
+        <div className='flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3'>
           {/* 日志类型选择器 */}
-          <div className='w-full sm:w-auto'>
+          <div className='w-full lg:w-auto'>
             <Form.Select
               field='logType'
               placeholder={t('日志类型')}
-              className='w-full sm:w-auto min-w-[120px]'
+              className='w-full lg:w-auto min-w-[120px]'
               showClear
               pure
               onChange={() => {
@@ -153,12 +159,13 @@ const LogsFilters = ({
             </Form.Select>
           </div>
 
-          <div className='flex gap-2 w-full sm:w-auto justify-end'>
+          <div className='flex flex-wrap gap-2 w-full lg:w-auto justify-start lg:justify-end'>
             <Button
               type='tertiary'
               htmlType='submit'
               loading={loading}
               size='small'
+              className='flex-1 sm:flex-none'
             >
               {t('查询')}
             </Button>
@@ -174,6 +181,7 @@ const LogsFilters = ({
                 }
               }}
               size='small'
+              className='flex-1 sm:flex-none'
             >
               {t('重置')}
             </Button>
@@ -181,6 +189,7 @@ const LogsFilters = ({
               type='tertiary'
               onClick={() => setShowColumnSelector(true)}
               size='small'
+              className='flex-1 sm:flex-none'
             >
               {t('列设置')}
             </Button>

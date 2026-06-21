@@ -21,6 +21,7 @@ func GetChannelMonitorSummary(c *gin.Context) {
 		ModelName:     c.Query("model_name"),
 		Group:         c.Query("group"),
 		ErrorLimit:    errorLimit,
+		IncludeNames:  c.GetInt("role") >= common.RoleAdminUser,
 	})
 	if err != nil {
 		common.ApiError(c, err)

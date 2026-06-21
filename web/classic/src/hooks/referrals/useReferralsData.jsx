@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { API, showError } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { useTablePageSize } from '../common/useTablePageSize';
 
 export const REFERRAL_REWARD_STATUS = {
   ALL: '',
@@ -35,7 +36,7 @@ export const useReferralsData = () => {
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [activePage, setActivePage] = useState(1);
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [pageSize, setPageSize] = useTablePageSize(ITEMS_PER_PAGE);
   const [recordCount, setRecordCount] = useState(0);
   const [formApi, setFormApi] = useState(null);
   const [compactMode, setCompactMode] = useTableCompactMode('referrals');

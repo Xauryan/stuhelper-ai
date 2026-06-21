@@ -35,7 +35,6 @@ import {
 } from '@douyinfe/semi-ui';
 import {
   timestamp2string,
-  renderGroup,
   renderQuota,
   getModelCategories,
   showError,
@@ -46,6 +45,7 @@ import {
   IconEyeOpened,
   IconEyeClosed,
 } from '@douyinfe/semi-icons';
+import { TruncatedTag, TruncatedText } from '../../common/ui/RenderUtils';
 
 // progress color helper
 const getProgressColor = (pct) => {
@@ -108,7 +108,14 @@ const renderGroupColumn = (text, record, t, groupRatios = {}) => {
   const ratio = groupRatios[group];
   return (
     <span className='flex items-center gap-1'>
-      {renderGroup(group)}
+      <TruncatedTag
+        color='white'
+        shape='circle'
+        maxWidth={150}
+        tooltipContent={group}
+      >
+        {group}
+      </TruncatedTag>
       {ratio !== undefined && (
         <Tag size='small' color='green' shape='circle'>
           {ratio}x
@@ -274,9 +281,9 @@ const renderAllowIps = (text, t) => {
   const extraCount = ips.length - displayIps.length;
 
   const ipTags = displayIps.map((ip, idx) => (
-    <Tag key={idx} shape='circle'>
+    <TruncatedTag key={idx} shape='circle' maxWidth={170} tooltipContent={ip}>
       {ip}
-    </Tag>
+    </TruncatedTag>
   ));
 
   if (extraCount > 0) {
@@ -481,32 +488,35 @@ export const getTokensColumns = ({
   setShowEdit,
   refresh,
   groupRatios = {},
+  COLUMN_KEYS,
 }) => {
   return [
     {
+      key: COLUMN_KEYS.NAME,
       title: t('名称'),
       dataIndex: 'name',
+      render: (text) => <TruncatedText maxWidth={180}>{text}</TruncatedText>,
     },
     {
+      key: COLUMN_KEYS.STATUS,
       title: t('状态'),
       dataIndex: 'status',
-      key: 'status',
       render: (text, record) => renderStatus(text, record, t),
     },
     {
+      key: COLUMN_KEYS.QUOTA_USAGE,
       title: t('剩余额度/总额度'),
-      key: 'quota_usage',
       render: (text, record) => renderQuotaUsage(text, record, t),
     },
     {
+      key: COLUMN_KEYS.GROUP,
       title: t('分组'),
       dataIndex: 'group',
-      key: 'group',
       render: (text, record) => renderGroupColumn(text, record, t, groupRatios),
     },
     {
+      key: COLUMN_KEYS.TOKEN_KEY,
       title: t('密钥'),
-      key: 'token_key',
       render: (text, record) =>
         renderTokenKey(
           text,
@@ -521,16 +531,19 @@ export const getTokensColumns = ({
         ),
     },
     {
+      key: COLUMN_KEYS.MODEL_LIMITS,
       title: t('可用模型'),
       dataIndex: 'model_limits',
       render: (text, record) => renderModelLimits(text, record, t),
     },
     {
+      key: COLUMN_KEYS.ALLOW_IPS,
       title: t('IP限制'),
       dataIndex: 'allow_ips',
       render: (text) => renderAllowIps(text, t),
     },
     {
+      key: COLUMN_KEYS.CREATED_TIME,
       title: t('创建时间'),
       dataIndex: 'created_time',
       render: (text, record, index) => {
@@ -538,6 +551,7 @@ export const getTokensColumns = ({
       },
     },
     {
+      key: COLUMN_KEYS.ACCESSED_TIME,
       title: t('最后使用时间'),
       dataIndex: 'accessed_time',
       render: (text, record, index) => {
@@ -545,6 +559,7 @@ export const getTokensColumns = ({
       },
     },
     {
+      key: COLUMN_KEYS.EXPIRED_TIME,
       title: t('过期时间'),
       dataIndex: 'expired_time',
       render: (text, record, index) => {
@@ -556,6 +571,7 @@ export const getTokensColumns = ({
       },
     },
     {
+      key: COLUMN_KEYS.OPERATE,
       title: '',
       dataIndex: 'operate',
       fixed: 'right',

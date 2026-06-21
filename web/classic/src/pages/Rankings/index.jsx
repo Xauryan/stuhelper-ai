@@ -39,7 +39,6 @@ const PERIODS = [
   { value: 'day', label: '24小时' },
   { value: 'week', label: '7天' },
   { value: 'month', label: '30天' },
-  { value: 'all', label: '全部' },
 ];
 
 const METRICS = [

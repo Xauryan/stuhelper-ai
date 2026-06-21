@@ -30,7 +30,7 @@ import EditVendorModal from './modals/EditVendorModal';
 import ChannelMonitorPanel from '../../common/ChannelMonitorPanel';
 import { useModelsData } from '../../../hooks/models/useModelsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
-import { createCardProPagination, isAuditAdmin } from '../../../helpers/utils';
+import { createCardProPagination, isAdmin } from '../../../helpers/utils';
 
 const MARKETPLACE_DISPLAY_NOTICE_STORAGE_KEY =
   'models_marketplace_display_notice_dismissed';
@@ -38,7 +38,7 @@ const MARKETPLACE_DISPLAY_NOTICE_STORAGE_KEY =
 const ModelsPage = () => {
   const modelsData = useModelsData();
   const isMobile = useIsMobile();
-  const canViewChannelMonitor = isAuditAdmin();
+  const canViewChannelMonitor = isAdmin();
 
   const {
     // Edit state

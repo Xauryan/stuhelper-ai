@@ -29,6 +29,14 @@ import SettingsPaymentGatewaySelfServe from '../../pages/Setting/Payment/Setting
 import { API, showError, toBoolean } from '../../helpers';
 import { useTranslation } from 'react-i18next';
 
+const parseOptionNumber = (value) => {
+  if (value === '') {
+    return '';
+  }
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : '';
+};
+
 const PaymentSetting = () => {
   const { t } = useTranslation();
   let [inputs, setInputs] = useState({
@@ -147,8 +155,7 @@ const PaymentSetting = () => {
           case 'SelfServeTopUpUnitPrice':
           case 'SelfServeTopUpSingleMaxAmount':
           case 'SelfServeTopUpDailyMaxAmount':
-            newInputs[item.key] =
-              item.value === '' ? '' : parseFloat(item.value);
+            newInputs[item.key] = parseOptionNumber(item.value);
             break;
           default:
             if (item.key.endsWith('Enabled')) {

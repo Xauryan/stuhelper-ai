@@ -18,9 +18,77 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import React from 'react';
-import { Space, Tag, Typography, Popover } from '@douyinfe/semi-ui';
+import { Space, Tag, Typography, Popover, Tooltip } from '@douyinfe/semi-ui';
 
 const { Text } = Typography;
+
+const truncatedInlineStyle = {
+  display: 'inline-block',
+  maxWidth: '100%',
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  verticalAlign: 'bottom',
+};
+
+export function TruncatedText({
+  children,
+  maxWidth = 200,
+  style,
+  ellipsis = true,
+  ...props
+}) {
+  const content = children === undefined || children === null ? '-' : children;
+  return (
+    <Text
+      {...props}
+      ellipsis={ellipsis ? { showTooltip: true } : false}
+      style={{ ...truncatedInlineStyle, maxWidth, ...style }}
+    >
+      {content}
+    </Text>
+  );
+}
+
+export function TruncatedTag({
+  children,
+  maxWidth = 160,
+  tooltipContent,
+  showTooltip = true,
+  style,
+  contentStyle,
+  ...props
+}) {
+  const content = children === undefined || children === null ? '-' : children;
+  const tag = (
+    <Tag
+      {...props}
+      style={{
+        maxWidth,
+        minWidth: 0,
+        verticalAlign: 'bottom',
+        ...style,
+      }}
+    >
+      <span style={{ ...truncatedInlineStyle, ...contentStyle }}>
+        {content}
+      </span>
+    </Tag>
+  );
+
+  if (!showTooltip) {
+    return tag;
+  }
+
+  return (
+    <Tooltip content={tooltipContent ?? content} position='top' showArrow>
+      <span style={{ display: 'inline-flex', maxWidth, minWidth: 0 }}>
+        {tag}
+      </span>
+    </Tooltip>
+  );
+}
 
 // 通用渲染函数：限制项目数量显示，支持popover展开
 export function renderLimitedItems({ items, renderItem, maxDisplay = 3 }) {
@@ -28,12 +96,18 @@ export function renderLimitedItems({ items, renderItem, maxDisplay = 3 }) {
   const displayItems = items.slice(0, maxDisplay);
   const remainingItems = items.slice(maxDisplay);
   return (
-    <Space spacing={1} wrap>
+    <Space spacing={1} wrap style={{ maxWidth: '100%', minWidth: 0 }}>
       {displayItems.map((item, idx) => renderItem(item, idx))}
       {remainingItems.length > 0 && (
         <Popover
           content={
-            <div className='p-2'>
+            <div
+              className='p-2'
+              style={{
+                maxWidth: 360,
+                overflowWrap: 'anywhere',
+              }}
+            >
               <Space spacing={1} wrap>
                 {remainingItems.map((item, idx) => renderItem(item, idx))}
               </Space>
@@ -52,9 +126,5 @@ export function renderLimitedItems({ items, renderItem, maxDisplay = 3 }) {
 
 // 渲染描述字段，长文本支持tooltip
 export const renderDescription = (text, maxWidth = 200) => {
-  return (
-    <Text ellipsis={{ showTooltip: true }} style={{ maxWidth }}>
-      {text || '-'}
-    </Text>
-  );
+  return <TruncatedText maxWidth={maxWidth}>{text || '-'}</TruncatedText>;
 };

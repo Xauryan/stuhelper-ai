@@ -141,7 +141,15 @@ export default function CCSwitchModal({
       maskClosable={false}
       width={480}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          paddingBottom:
+            currentConfig.modelFields.length === 1 ? 208 : undefined,
+        }}
+      >
         <div>
           <div style={fieldLabelStyle}>{t('应用')}</div>
           <RadioGroup

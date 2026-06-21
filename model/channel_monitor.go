@@ -25,6 +25,7 @@ type ChannelMonitorStatsParams struct {
 	ModelName     string
 	Group         string
 	ErrorLimit    int
+	IncludeNames  bool
 }
 
 type ChannelMonitorStatsBucket struct {
@@ -70,6 +71,11 @@ type ChannelMonitorStatsResponse struct {
 	Probe         ChannelMonitorStatsBucket `json:"probe"`
 	Combined      ChannelMonitorStatsBucket `json:"combined"`
 	Errors        []ChannelMonitorErrorItem `json:"errors"`
+}
+
+type channelMonitorPrivacy struct {
+	IncludeNames bool
+	ChannelNames map[int]string
 }
 
 type channelMonitorClass int
@@ -135,6 +141,10 @@ func GetChannelMonitorStats(params ChannelMonitorStatsParams) (*ChannelMonitorSt
 	}
 
 	channelNames := loadChannelNamesForLogs(logs)
+	privacy := channelMonitorPrivacy{
+		IncludeNames: params.IncludeNames,
+		ChannelNames: channelNames,
+	}
 	result := &ChannelMonitorStatsResponse{
 		WindowSeconds: params.WindowSeconds,
 		GeneratedAt:   common.GetTimestamp(),
@@ -148,15 +158,15 @@ func GetChannelMonitorStats(params ChannelMonitorStatsParams) (*ChannelMonitorSt
 		other := parseLogOtherMap(log.Other)
 		source := channelMonitorSourceForLog(log, other)
 		class := classifyChannelMonitorLog(log, other)
-		addChannelMonitorSample(&result.Combined, log, class)
+		addChannelMonitorSample(&result.Combined, log, other, class, privacy)
 		if source == ChannelMonitorSourceProbe {
-			addChannelMonitorSample(&result.Probe, log, class)
+			addChannelMonitorSample(&result.Probe, log, other, class, privacy)
 		} else {
-			addChannelMonitorSample(&result.Log, log, class)
+			addChannelMonitorSample(&result.Log, log, other, class, privacy)
 		}
 
 		if log.Type == LogTypeError && shouldIncludeChannelMonitorError(params.Source, source) && len(result.Errors) < params.ErrorLimit {
-			item := buildChannelMonitorErrorItem(log, other, source, channelNames)
+			item := buildChannelMonitorErrorItem(log, other, source, privacy)
 			item.Ignored = class == channelMonitorClassIgnored
 			result.Errors = append(result.Errors, item)
 		}
@@ -279,7 +289,7 @@ func isTransientMonitorFailure(statusCode int, lowerCode string, lowerMessage st
 	return false
 }
 
-func addChannelMonitorSample(bucket *ChannelMonitorStatsBucket, log *Log, class channelMonitorClass) {
+func addChannelMonitorSample(bucket *ChannelMonitorStatsBucket, log *Log, other map[string]interface{}, class channelMonitorClass, privacy channelMonitorPrivacy) {
 	if bucket == nil || log == nil {
 		return
 	}
@@ -296,13 +306,13 @@ func addChannelMonitorSample(bucket *ChannelMonitorStatsBucket, log *Log, class 
 		bucket.ChannelFailures++
 		if log.CreatedAt > bucket.LastFailureAt {
 			bucket.LastFailureAt = log.CreatedAt
-			bucket.LastError = common.LocalLogPreview(log.Content)
+			bucket.LastError = common.LocalLogPreview(channelMonitorMessageForRole(log, other, privacy))
 		}
 	case channelMonitorClassTransientFailure:
 		bucket.TransientFailures++
 		if log.CreatedAt > bucket.LastFailureAt {
 			bucket.LastFailureAt = log.CreatedAt
-			bucket.LastError = common.LocalLogPreview(log.Content)
+			bucket.LastError = common.LocalLogPreview(channelMonitorMessageForRole(log, other, privacy))
 		}
 	default:
 		bucket.Ignored++
@@ -335,33 +345,67 @@ func shouldIncludeChannelMonitorError(sourceFilter string, source string) bool {
 	}
 }
 
-func buildChannelMonitorErrorItem(log *Log, other map[string]interface{}, source string, channelNames map[int]string) ChannelMonitorErrorItem {
+func buildChannelMonitorErrorItem(log *Log, other map[string]interface{}, source string, privacy channelMonitorPrivacy) ChannelMonitorErrorItem {
 	item := ChannelMonitorErrorItem{
 		ID:                log.Id,
 		CreatedAt:         log.CreatedAt,
 		Source:            source,
 		ProbeStatus:       otherStringDefault(other, "probe_status"),
 		ChannelID:         log.ChannelId,
-		ChannelName:       otherStringDefault(other, "channel_name"),
 		ModelName:         log.ModelName,
 		Group:             log.Group,
 		StatusCode:        otherInt(other, "status_code"),
 		ErrorCode:         otherStringDefault(other, "error_code"),
 		ErrorType:         otherStringDefault(other, "error_type"),
-		Message:           log.Content,
+		Message:           channelMonitorMessageForRole(log, other, privacy),
 		RequestPath:       otherStringDefault(other, "request_path"),
 		RequestID:         log.RequestId,
 		UpstreamRequestID: log.UpstreamRequestId,
 		IsStream:          log.IsStream,
 		UseTimeSeconds:    log.UseTime,
 	}
-	if item.ChannelName == "" {
-		item.ChannelName = channelNames[log.ChannelId]
+	if privacy.IncludeNames && privacy.ChannelNames != nil {
+		item.ChannelName = otherStringDefault(other, "channel_name")
+		if item.ChannelName == "" {
+			item.ChannelName = privacy.ChannelNames[log.ChannelId]
+		}
 	}
 	if item.Message == "" {
 		item.Message = otherStringDefault(other, "error_message")
+		if !privacy.IncludeNames {
+			item.Message = replaceChannelIdentifierHints(item.Message, log.ChannelId, channelMonitorChannelNameHints(other)...)
+		}
 	}
 	return item
+}
+
+func channelMonitorMessageForRole(log *Log, other map[string]interface{}, privacy channelMonitorPrivacy) string {
+	if log == nil {
+		return ""
+	}
+	message := log.Content
+	if message == "" {
+		message = otherStringDefault(other, "error_message")
+	}
+	if privacy.IncludeNames {
+		return message
+	}
+	hints := channelMonitorChannelNameHints(other)
+	if privacy.ChannelNames != nil {
+		hints = append(hints, privacy.ChannelNames[log.ChannelId])
+	}
+	return replaceChannelIdentifierHints(message, log.ChannelId, hints...)
+}
+
+func channelMonitorChannelNameHints(other map[string]interface{}) []string {
+	if other == nil {
+		return nil
+	}
+	hints := make([]string, 0, 1)
+	if channelName, ok := otherString(other, "channel_name"); ok {
+		hints = append(hints, channelName)
+	}
+	return hints
 }
 
 func loadChannelNamesForLogs(logs []*Log) map[int]string {

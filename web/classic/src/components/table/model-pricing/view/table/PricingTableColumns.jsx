@@ -26,12 +26,14 @@ import {
   calculateModelPrice,
   getModelPriceItems,
   getLobeHubIcon,
+  hasPerformanceSummary,
 } from '../../../../../helpers';
 import {
   renderLimitedItems,
   renderDescription,
 } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
+import { ModelPerformanceSummary } from '../../common/PerformanceMetrics';
 
 function renderQuotaType(type, t) {
   switch (type) {
@@ -113,6 +115,7 @@ export const getPricingTableColumns = ({
   tokenUnit,
   displayPrice,
   showRatio,
+  showPerformance,
 }) => {
   const isMobile = useIsMobile();
   const priceDataCache = new WeakMap();
@@ -142,16 +145,22 @@ export const getPricingTableColumns = ({
     },
   };
 
+  const renderModelName = (text, record) => {
+    const iconName = record?.icon || record?.vendor_icon;
+    const prefixIcon = iconName ? getLobeHubIcon(iconName, 14) : undefined;
+
+    return renderModelTag(text, {
+      prefixIcon,
+      onClick: () => {
+        copyText(text);
+      },
+    });
+  };
+
   const modelNameColumn = {
     title: t('模型名称'),
     dataIndex: 'model_name',
-    render: (text, record, index) => {
-      return renderModelTag(text, {
-        onClick: () => {
-          copyText(text);
-        },
-      });
-    },
+    render: renderModelName,
     onFilter: (value, record) =>
       record.model_name.toLowerCase().includes(value.toLowerCase()),
   };
@@ -181,6 +190,22 @@ export const getPricingTableColumns = ({
     title: t('供应商'),
     dataIndex: 'vendor_name',
     render: (text, record) => renderVendor(text, record.vendor_icon, t),
+  };
+
+  const performanceColumn = {
+    title: t('性能'),
+    dataIndex: 'performance_summary',
+    render: (perf) => <ModelPerformanceSummary perf={perf} t={t} />,
+    sorter: (a, b) => {
+      const aPerf = a.performance_summary;
+      const bPerf = b.performance_summary;
+      if (hasPerformanceSummary(aPerf) !== hasPerformanceSummary(bPerf)) {
+        return hasPerformanceSummary(aPerf) ? 1 : -1;
+      }
+      return (
+        Number(aPerf?.success_rate || 0) - Number(bPerf?.success_rate || 0)
+      );
+    },
   };
 
   const baseColumns = [
@@ -251,6 +276,9 @@ export const getPricingTableColumns = ({
 
   const columns = [...baseColumns];
   columns.push(endpointColumn);
+  if (showPerformance) {
+    columns.push(performanceColumn);
+  }
   if (showRatio) {
     columns.push(ratioColumn);
   }

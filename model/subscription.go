@@ -164,7 +164,9 @@ type SubscriptionPlan struct {
 	// Recommended controls the user-facing recommendation badge and highlight.
 	Recommended bool `json:"recommended" gorm:"default:false"`
 	// AllowBalancePay controls whether users can purchase this plan with wallet quota.
-	AllowBalancePay *bool `json:"allow_balance_pay" gorm:"default:true"`
+	AllowBalancePay *bool `json:"allow_balance_pay"`
+	// Allow falling back to wallet balance after subscription quota is exhausted (empty = true).
+	AllowWalletOverflow *bool `json:"allow_wallet_overflow"`
 
 	StripePriceId  string `json:"stripe_price_id" gorm:"type:varchar(128);default:''"`
 	CreemProductId string `json:"creem_product_id" gorm:"type:varchar(128);default:''"`
@@ -174,6 +176,8 @@ type SubscriptionPlan struct {
 
 	// Upgrade user group after purchase (empty = no change)
 	UpgradeGroup string `json:"upgrade_group" gorm:"type:varchar(64);default:''"`
+	// Downgrade user group on expiry (empty = revert to the group held before purchase)
+	DowngradeGroup string `json:"downgrade_group" gorm:"type:varchar(64);default:''"`
 
 	// Total quota (amount in quota units, 0 = unlimited)
 	TotalAmount int64 `json:"total_amount" gorm:"type:bigint;not null;default:0"`
@@ -252,6 +256,9 @@ func (p *SubscriptionPlan) IsModelAllowed(modelName string) bool {
 func (p *SubscriptionPlan) NormalizeDefaults() {
 	if p.AllowBalancePay == nil {
 		p.AllowBalancePay = common.GetPointer(true)
+	}
+	if p.AllowWalletOverflow == nil {
+		p.AllowWalletOverflow = common.GetPointer(true)
 	}
 }
 
@@ -425,6 +432,10 @@ type UserSubscription struct {
 
 	UpgradeGroup  string `json:"upgrade_group" gorm:"type:varchar(64);default:''"`
 	PrevUserGroup string `json:"prev_user_group" gorm:"type:varchar(64);default:''"`
+	// Downgrade target group on expiry (snapshot from plan; empty = revert to PrevUserGroup)
+	DowngradeGroup string `json:"downgrade_group" gorm:"type:varchar(64);default:''"`
+	// Whether wallet fallback is allowed after this subscription's quota is exhausted.
+	AllowWalletOverflow *bool `json:"allow_wallet_overflow"`
 
 	CreatedAt int64 `json:"created_at" gorm:"bigint"`
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
@@ -629,16 +640,14 @@ func downgradeUserGroupForSubscriptionTx(tx *gorm.DB, sub *UserSubscription, now
 	if tx == nil || sub == nil {
 		return "", errors.New("invalid downgrade args")
 	}
+	downgradeGroup := strings.TrimSpace(sub.DowngradeGroup)
 	upgradeGroup := strings.TrimSpace(sub.UpgradeGroup)
-	if upgradeGroup == "" {
+	if downgradeGroup == "" && upgradeGroup == "" {
 		return "", nil
 	}
 	currentGroup, err := getUserGroupByIdTx(tx, sub.UserId)
 	if err != nil {
 		return "", err
-	}
-	if currentGroup != upgradeGroup {
-		return "", nil
 	}
 	var activeSub UserSubscription
 	activeQuery := tx.Where("user_id = ? AND status = ? AND start_time <= ? AND end_time > ? AND id <> ? AND upgrade_group <> ''",
@@ -649,15 +658,21 @@ func downgradeUserGroupForSubscriptionTx(tx *gorm.DB, sub *UserSubscription, now
 	if activeQuery.Error == nil && activeQuery.RowsAffected > 0 {
 		return "", nil
 	}
-	prevGroup := strings.TrimSpace(sub.PrevUserGroup)
-	if prevGroup == "" || prevGroup == currentGroup {
+	target := downgradeGroup
+	if target == "" {
+		if currentGroup != upgradeGroup {
+			return "", nil
+		}
+		target = strings.TrimSpace(sub.PrevUserGroup)
+	}
+	if target == "" || target == currentGroup {
 		return "", nil
 	}
 	if err := tx.Model(&User{}).Where("id = ?", sub.UserId).
-		Update("group", prevGroup).Error; err != nil {
+		Update("group", target).Error; err != nil {
 		return "", err
 	}
-	return prevGroup, nil
+	return target, nil
 }
 
 func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *SubscriptionPlan, source string) (*UserSubscription, error) {
@@ -735,21 +750,27 @@ func createUserSubscriptionFromPlanTxLocked(tx *gorm.DB, userId int, plan *Subsc
 			}
 		}
 	}
+	allowWalletOverflow := true
+	if plan.AllowWalletOverflow != nil {
+		allowWalletOverflow = *plan.AllowWalletOverflow
+	}
 	sub := &UserSubscription{
-		UserId:        userId,
-		PlanId:        plan.Id,
-		AmountTotal:   plan.TotalAmount,
-		AmountUsed:    0,
-		StartTime:     start.Unix(),
-		EndTime:       endUnix,
-		Status:        "active",
-		Source:        source,
-		LastResetTime: lastReset,
-		NextResetTime: nextReset,
-		UpgradeGroup:  upgradeGroup,
-		PrevUserGroup: prevGroup,
-		CreatedAt:     nowUnix,
-		UpdatedAt:     nowUnix,
+		UserId:              userId,
+		PlanId:              plan.Id,
+		AmountTotal:         plan.TotalAmount,
+		AmountUsed:          0,
+		StartTime:           start.Unix(),
+		EndTime:             endUnix,
+		Status:              "active",
+		Source:              source,
+		LastResetTime:       lastReset,
+		NextResetTime:       nextReset,
+		UpgradeGroup:        upgradeGroup,
+		PrevUserGroup:       prevGroup,
+		DowngradeGroup:      strings.TrimSpace(plan.DowngradeGroup),
+		AllowWalletOverflow: common.GetPointer(allowWalletOverflow),
+		CreatedAt:           nowUnix,
+		UpdatedAt:           nowUnix,
 	}
 	if err := tx.Create(sub).Error; err != nil {
 		return nil, err
@@ -1410,6 +1431,24 @@ func HasActiveUserSubscription(userId int) (bool, error) {
 	return count > 0, nil
 }
 
+// UserActiveSubscriptionsAllowWalletOverflow returns whether wallet balance may be used
+// after the user's subscription quota is exhausted. Any active subscription snapshot
+// with allow_wallet_overflow=false blocks the fallback.
+func UserActiveSubscriptionsAllowWalletOverflow(userId int) (bool, error) {
+	if userId <= 0 {
+		return false, errors.New("invalid userId")
+	}
+	now := common.GetTimestamp()
+	var strictCount int64
+	if err := DB.Model(&UserSubscription{}).
+		Where("user_id = ? AND status = ? AND start_time <= ? AND end_time > ? AND allow_wallet_overflow = ?",
+			userId, "active", now, now, false).
+		Count(&strictCount).Error; err != nil {
+		return false, err
+	}
+	return strictCount == 0, nil
+}
+
 // GetAllUserSubscriptions returns all subscriptions (active and expired) for a user.
 func GetAllUserSubscriptions(userId int) ([]SubscriptionSummary, error) {
 	if userId <= 0 {
@@ -1592,9 +1631,9 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 				return nil
 			}
 
-			// No active upgraded subscription, downgrade to previous group if needed.
+			// No active upgraded subscription, downgrade to explicit target or previous group if needed.
 			var lastExpired UserSubscription
-			expiredQuery := tx.Where("user_id = ? AND status = ? AND upgrade_group <> ''",
+			expiredQuery := tx.Where("user_id = ? AND status = ? AND (downgrade_group <> '' OR upgrade_group <> '')",
 				userId, "expired").
 				Order("end_time desc, id desc").
 				Limit(1).
@@ -1602,23 +1641,30 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 			if expiredQuery.Error != nil || expiredQuery.RowsAffected == 0 {
 				return nil
 			}
-			upgradeGroup := strings.TrimSpace(lastExpired.UpgradeGroup)
-			prevGroup := strings.TrimSpace(lastExpired.PrevUserGroup)
-			if upgradeGroup == "" || prevGroup == "" {
-				return nil
-			}
 			currentGroup, err := getUserGroupByIdTx(tx, userId)
 			if err != nil {
 				return err
 			}
-			if currentGroup != upgradeGroup || currentGroup == prevGroup {
+			target := strings.TrimSpace(lastExpired.DowngradeGroup)
+			if target == "" {
+				upgradeGroup := strings.TrimSpace(lastExpired.UpgradeGroup)
+				prevGroup := strings.TrimSpace(lastExpired.PrevUserGroup)
+				if upgradeGroup == "" || prevGroup == "" {
+					return nil
+				}
+				if currentGroup != upgradeGroup {
+					return nil
+				}
+				target = prevGroup
+			}
+			if target == "" || target == currentGroup {
 				return nil
 			}
 			if err := tx.Model(&User{}).Where("id = ?", userId).
-				Update("group", prevGroup).Error; err != nil {
+				Update("group", target).Error; err != nil {
 				return err
 			}
-			cacheGroup = prevGroup
+			cacheGroup = target
 			return nil
 		})
 		if err != nil {

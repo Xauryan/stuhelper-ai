@@ -34,6 +34,14 @@ import {
 } from '../../../../helpers';
 import { Coins, BarChart2, Users } from 'lucide-react';
 
+const getStableAvatarText = (name) => {
+  const normalized = String(name || '').trim();
+  if (!normalized) return 'NA';
+
+  const letters = Array.from(normalized.replace(/\s+/g, ''));
+  return letters.slice(0, 2).join('').toUpperCase();
+};
+
 const UserInfoHeader = ({ t, userState }) => {
   const getUsername = () => {
     if (userState.user) {
@@ -43,12 +51,13 @@ const UserInfoHeader = ({ t, userState }) => {
     }
   };
 
+  const getDisplayName = () => {
+    const displayName = userState?.user?.display_name?.trim?.();
+    return displayName || getUsername();
+  };
+
   const getAvatarText = () => {
-    const username = getUsername();
-    if (username && username.length > 0) {
-      return username.slice(0, 2).toUpperCase();
-    }
-    return 'NA';
+    return getStableAvatarText(getDisplayName());
   };
 
   return (
@@ -69,7 +78,7 @@ const UserInfoHeader = ({ t, userState }) => {
           <div className='relative z-10 h-full flex flex-col justify-end p-6'>
             <div className='flex items-center'>
               <div className='flex items-stretch gap-3 sm:gap-4 flex-1 min-w-0'>
-                <Avatar size='large' color={stringToColor(getUsername())}>
+                <Avatar size='large' color={stringToColor(getDisplayName())}>
                   {getAvatarText()}
                 </Avatar>
                 <div className='flex-1 min-w-0 flex flex-col justify-between'>
@@ -77,7 +86,7 @@ const UserInfoHeader = ({ t, userState }) => {
                     className='text-3xl font-bold truncate'
                     style={{ color: 'white' }}
                   >
-                    {getUsername()}
+                    {getDisplayName()}
                   </div>
                   <div className='flex flex-wrap items-center gap-2'>
                     {isRoot() ? (

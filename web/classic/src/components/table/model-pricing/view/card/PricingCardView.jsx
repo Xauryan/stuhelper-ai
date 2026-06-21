@@ -45,6 +45,7 @@ import PricingCardSkeleton from './PricingCardSkeleton';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
+import { ModelPerformanceSummary } from '../../common/PerformanceMetrics';
 
 const CARD_STYLES = {
   container:
@@ -276,6 +277,11 @@ const PricingCardView = ({
                             )
                           : formatPriceInfo(priceData, t, siteDisplayType)}
                       </div>
+                      <ModelPerformanceSummary
+                        perf={model.performance_summary}
+                        t={t}
+                        variant='card'
+                      />
                     </div>
                   </div>
 

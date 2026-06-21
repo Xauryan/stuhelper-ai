@@ -106,7 +106,7 @@ func Distribute() func(c *gin.Context) {
 				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
 					affinityUsable := false
 					preferred, err := model.CacheGetChannel(preferredChannelID)
-					if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled {
+					if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled && model.ChannelSupportsRequestPath(preferred, c.Request.URL.Path) {
 						if usingGroup == "auto" {
 							userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 							autoGroups := service.GetContextAutoGroups(c, userGroup)
@@ -134,10 +134,11 @@ func Distribute() func(c *gin.Context) {
 
 				if channel == nil {
 					channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
-						Ctx:        c,
-						ModelName:  modelRequest.Model,
-						TokenGroup: usingGroup,
-						Retry:      common.GetPointer(0),
+						Ctx:         c,
+						ModelName:   modelRequest.Model,
+						RequestPath: c.Request.URL.Path,
+						TokenGroup:  usingGroup,
+						Retry:       common.GetPointer(0),
 					})
 					if err != nil {
 						if errors.Is(err, service.ErrRelayLoopNoAvailableChannel) {
@@ -200,10 +201,11 @@ func setupSelectedChannelWithFallback(c *gin.Context, channel *model.Channel, mo
 		tokenGroup = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 	}
 	retryParam := &service.RetryParam{
-		Ctx:        c,
-		ModelName:  modelName,
-		TokenGroup: tokenGroup,
-		Retry:      common.GetPointer(0),
+		Ctx:         c,
+		ModelName:   modelName,
+		RequestPath: c.Request.URL.Path,
+		TokenGroup:  tokenGroup,
+		Retry:       common.GetPointer(0),
 	}
 
 	for setupErr != nil && service.ShouldRetryChannelSetupError(setupErr) && channel != nil && channel.Id > 0 {
@@ -502,6 +504,13 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	}
 	if relayLoopErr := service.CheckRelayLoopForChannel(c, channel.Id); relayLoopErr != nil {
 		return relayLoopErr
+	}
+	if c != nil && c.Request != nil && c.Request.URL != nil && !model.ChannelSupportsRequestPath(channel, c.Request.URL.Path) {
+		return types.NewErrorWithStatusCode(
+			fmt.Errorf("advanced custom channel #%d does not support request path: %s", channel.Id, c.Request.URL.Path),
+			types.ErrorCodeGetChannelFailed,
+			http.StatusServiceUnavailable,
+		)
 	}
 	common.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
 	common.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)

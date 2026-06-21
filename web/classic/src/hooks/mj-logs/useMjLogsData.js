@@ -30,6 +30,7 @@ import {
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { useTablePageSize } from '../common/useTablePageSize';
 
 export const useMjLogsData = () => {
   const { t } = useTranslation();
@@ -55,7 +56,7 @@ export const useMjLogsData = () => {
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState(1);
   const [logCount, setLogCount] = useState(0);
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [pageSize, setPageSize] = useTablePageSize(ITEMS_PER_PAGE);
   const [showBanner, setShowBanner] = useState(false);
 
   // User and admin
@@ -247,7 +248,7 @@ export const useMjLogsData = () => {
   };
 
   const handlePageSizeChange = async (size) => {
-    localStorage.setItem('mj-page-size', size + '');
+    setPageSize(size);
     await loadLogs(1, size);
   };
 
@@ -278,10 +279,7 @@ export const useMjLogsData = () => {
 
   // Initialize data
   useEffect(() => {
-    const localPageSize =
-      parseInt(localStorage.getItem('mj-page-size')) || ITEMS_PER_PAGE;
-    setPageSize(localPageSize);
-    loadLogs(1, localPageSize).then();
+    loadLogs(1, pageSize).then();
   }, []);
 
   return {

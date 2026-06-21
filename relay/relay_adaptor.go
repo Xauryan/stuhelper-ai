@@ -5,6 +5,7 @@ import (
 
 	"github.com/Xauryan/stuhelper-ai/constant"
 	"github.com/Xauryan/stuhelper-ai/relay/channel"
+	"github.com/Xauryan/stuhelper-ai/relay/channel/advancedcustom"
 	"github.com/Xauryan/stuhelper-ai/relay/channel/ali"
 	"github.com/Xauryan/stuhelper-ai/relay/channel/aws"
 	"github.com/Xauryan/stuhelper-ai/relay/channel/baidu"
@@ -120,6 +121,8 @@ func GetAdaptor(apiType int) channel.Adaptor {
 		return &replicate.Adaptor{}
 	case constant.APITypeCodex:
 		return &codex.Adaptor{}
+	case constant.APITypeAdvancedCustom:
+		return &advancedcustom.Adaptor{}
 	}
 	return nil
 }

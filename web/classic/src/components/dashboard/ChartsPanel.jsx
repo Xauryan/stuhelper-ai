@@ -21,6 +21,7 @@ import React from 'react';
 import { Card, Tabs, TabPane } from '@douyinfe/semi-ui';
 import { PieChart } from 'lucide-react';
 import { VChart } from '@visactor/react-vchart';
+import DashboardFlowPanel from './DashboardFlowPanel';
 
 const ChartsPanel = ({
   activeChartTab,
@@ -31,6 +32,9 @@ const ChartsPanel = ({
   spec_rank_bar,
   spec_user_rank,
   spec_user_trend,
+  flowData,
+  flowLoading,
+  flowRole,
   isAdminUser,
   CARD_PROPS,
   CHART_CONFIG,
@@ -63,12 +67,13 @@ const ChartsPanel = ({
             {isAdminUser && (
               <TabPane tab={<span>{t('用户消耗趋势')}</span>} itemKey='6' />
             )}
+            <TabPane tab={<span>{t('流量流向')}</span>} itemKey='7' />
           </Tabs>
         </div>
       }
       bodyStyle={{ padding: 0 }}
     >
-      <div className='h-96 p-2'>
+      <div className={activeChartTab === '7' ? 'h-[680px] p-3' : 'h-96 p-2'}>
         {activeChartTab === '1' && (
           <VChart spec={spec_line} option={CHART_CONFIG} />
         )}
@@ -86,6 +91,15 @@ const ChartsPanel = ({
         )}
         {activeChartTab === '6' && isAdminUser && (
           <VChart spec={spec_user_trend} option={CHART_CONFIG} />
+        )}
+        {activeChartTab === '7' && (
+          <DashboardFlowPanel
+            data={flowData}
+            loading={flowLoading}
+            flowRole={flowRole}
+            CHART_CONFIG={CHART_CONFIG}
+            t={t}
+          />
         )}
       </div>
     </Card>

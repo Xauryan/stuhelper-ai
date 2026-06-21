@@ -104,12 +104,13 @@ func TestGetChannelMonitorStatsSeparatesLogProbeAndSLA(t *testing.T) {
 		{
 			CreatedAt: now - 20,
 			Type:      LogTypeError,
-			Content:   "invalid api key",
+			Content:   "primary invalid api key",
 			TokenName: "模型测试",
 			ModelName: "gpt-4o",
 			ChannelId: 11,
 			Group:     "default",
 			Other: common.MapToJsonStr(map[string]interface{}{
+				"channel_name":   "primary",
 				"monitor_source": "probe",
 				"probe":          true,
 				"probe_status":   "failed",
@@ -140,6 +141,7 @@ func TestGetChannelMonitorStatsSeparatesLogProbeAndSLA(t *testing.T) {
 		ModelName:     "gpt-4o",
 		Group:         "default",
 		ErrorLimit:    10,
+		IncludeNames:  true,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, stats)
@@ -167,4 +169,22 @@ func TestGetChannelMonitorStatsSeparatesLogProbeAndSLA(t *testing.T) {
 	assert.True(t, stats.Errors[2].Ignored)
 	assert.Equal(t, "log", stats.Errors[3].Source)
 	assert.False(t, stats.Errors[3].Ignored)
+
+	hiddenNameStats, err := GetChannelMonitorStats(ChannelMonitorStatsParams{
+		WindowSeconds: 600,
+		ChannelID:     11,
+		ModelName:     "gpt-4o",
+		Group:         "default",
+		ErrorLimit:    10,
+		IncludeNames:  false,
+	})
+	require.NoError(t, err)
+	require.Len(t, hiddenNameStats.Errors, 4)
+	for _, item := range hiddenNameStats.Errors {
+		assert.Empty(t, item.ChannelName)
+		assert.Equal(t, 11, item.ChannelID)
+		assert.NotContains(t, item.Message, "primary")
+	}
+	assert.NotContains(t, hiddenNameStats.Probe.LastError, "primary")
+	assert.Contains(t, hiddenNameStats.Probe.LastError, "#11")
 }

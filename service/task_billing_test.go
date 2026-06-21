@@ -338,6 +338,40 @@ func TestNewBillingSessionModelLimitedSubscriptionOnlyReturnsQuotaError(t *testi
 	assert.Equal(t, 1000, getTokenRemainQuota(t, tokenID))
 }
 
+func TestNewBillingSessionSubscriptionDisallowsWalletOverflow(t *testing.T) {
+	truncate(t)
+	gin.SetMode(gin.TestMode)
+
+	const userID, tokenID, subID = 910, 911, 912
+	seedUser(t, userID, 1000)
+	seedToken(t, tokenID, userID, "sk-sub-no-wallet-overflow", 1000)
+	seedSubscription(t, subID, userID, 100, 100)
+	require.NoError(t, model.DB.Model(&model.UserSubscription{}).
+		Where("id = ?", subID).
+		Update("allow_wallet_overflow", false).Error)
+
+	ctx, _ := gin.CreateTestContext(nil)
+	relayInfo := &relaycommon.RelayInfo{
+		RequestId:       "sub-no-wallet-overflow",
+		UserId:          userID,
+		TokenId:         tokenID,
+		TokenKey:        "sk-sub-no-wallet-overflow",
+		OriginModelName: "gpt-4o",
+		UserSetting: dto.UserSetting{
+			BillingPreference: "subscription_first",
+		},
+	}
+
+	session, err := NewBillingSession(ctx, relayInfo, 10)
+
+	assert.Nil(t, session)
+	require.NotNil(t, err)
+	assert.Equal(t, types.ErrorCodeInsufficientUserQuota, err.GetErrorCode())
+	assert.Equal(t, 1000, getUserQuota(t, userID))
+	assert.Equal(t, 1000, getTokenRemainQuota(t, tokenID))
+	assert.EqualValues(t, 100, getSubscriptionUsed(t, subID))
+}
+
 func TestBillingSessionSubscriptionSettleAllowsOverLimit(t *testing.T) {
 	truncate(t)
 	gin.SetMode(gin.TestMode)

@@ -18,7 +18,8 @@ For commercial licensing, please contact support@xauryan.com
 */
 
 import React from 'react';
-import { Tag, Space, Skeleton } from '@douyinfe/semi-ui';
+import { Button, Tag, Space, Skeleton, Tooltip } from '@douyinfe/semi-ui';
+import { IconEyeClosed, IconEyeOpened } from '@douyinfe/semi-icons';
 import { renderQuota } from '../../../helpers';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
 import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTime';
@@ -29,6 +30,8 @@ const LogsActions = ({
   showStat,
   compactMode,
   setCompactMode,
+  sensitiveVisible,
+  setSensitiveVisible,
   t,
 }) => {
   const showSkeleton = useMinimumLoadingTime(loadingStat);
@@ -83,11 +86,28 @@ const LogsActions = ({
         </Space>
       </Skeleton>
 
-      <CompactModeToggle
-        compactMode={compactMode}
-        setCompactMode={setCompactMode}
-        t={t}
-      />
+      <div className='flex items-center gap-2'>
+        <Tooltip
+          content={sensitiveVisible ? t('隐藏敏感信息') : t('显示敏感信息')}
+        >
+          <Button
+            size='small'
+            type='tertiary'
+            theme='borderless'
+            className='shrink-0'
+            icon={sensitiveVisible ? <IconEyeOpened /> : <IconEyeClosed />}
+            onClick={() => setSensitiveVisible(!sensitiveVisible)}
+            aria-label={
+              sensitiveVisible ? t('隐藏敏感信息') : t('显示敏感信息')
+            }
+          />
+        </Tooltip>
+        <CompactModeToggle
+          compactMode={compactMode}
+          setCompactMode={setCompactMode}
+          t={t}
+        />
+      </div>
     </div>
   );
 };

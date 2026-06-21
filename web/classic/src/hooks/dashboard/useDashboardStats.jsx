@@ -29,8 +29,46 @@ import {
   IconTypograph,
   IconSend,
 } from '@douyinfe/semi-icons';
-import { renderQuota } from '../../helpers';
+import { renderNumber, renderQuota } from '../../helpers';
 import { createSectionTitle } from '../../helpers/dashboard';
+
+const MAX_INLINE_STAT_CHARS = 9;
+
+function formatFullNumber(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return '0';
+  }
+  const raw = String(value ?? '');
+  const fractionalDigits = raw.includes('.')
+    ? Math.min(raw.split('.')[1]?.length || 0, 3)
+    : 0;
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: fractionalDigits,
+    maximumFractionDigits: fractionalDigits,
+  }).format(num);
+}
+
+function formatStatNumber(value) {
+  const fullValue = formatFullNumber(value);
+  const displayValue =
+    String(fullValue).length > MAX_INLINE_STAT_CHARS
+      ? renderNumber(Number(value))
+      : fullValue;
+
+  return {
+    value: displayValue,
+    fullValue,
+  };
+}
+
+function formatStatQuota(value) {
+  const fullValue = renderQuota(value);
+  return {
+    value: fullValue,
+    fullValue,
+  };
+}
 
 export const useDashboardStats = (
   userState,
@@ -50,7 +88,7 @@ export const useDashboardStats = (
         items: [
           {
             title: t('当前余额'),
-            value: renderQuota(userState?.user?.quota),
+            ...formatStatQuota(userState?.user?.quota),
             icon: <IconMoneyExchangeStroked />,
             avatarColor: 'blue',
             trendData: [],
@@ -58,7 +96,7 @@ export const useDashboardStats = (
           },
           {
             title: t('历史消耗'),
-            value: renderQuota(userState?.user?.used_quota),
+            ...formatStatQuota(userState?.user?.used_quota),
             icon: <IconHistogram />,
             avatarColor: 'purple',
             trendData: [],
@@ -72,7 +110,7 @@ export const useDashboardStats = (
         items: [
           {
             title: t('请求次数'),
-            value: userState.user?.request_count,
+            ...formatStatNumber(userState.user?.request_count),
             icon: <IconSend />,
             avatarColor: 'green',
             trendData: [],
@@ -80,7 +118,7 @@ export const useDashboardStats = (
           },
           {
             title: t('统计次数'),
-            value: times,
+            ...formatStatNumber(times),
             icon: <IconPulse />,
             avatarColor: 'cyan',
             trendData: trendData.times,
@@ -94,7 +132,7 @@ export const useDashboardStats = (
         items: [
           {
             title: t('统计额度'),
-            value: renderQuota(consumeQuota),
+            ...formatStatQuota(consumeQuota),
             icon: <IconCoinMoneyStroked />,
             avatarColor: 'yellow',
             trendData: trendData.consumeQuota,
@@ -102,7 +140,7 @@ export const useDashboardStats = (
           },
           {
             title: t('统计Tokens'),
-            value: isNaN(consumeTokens) ? 0 : consumeTokens.toLocaleString(),
+            ...formatStatNumber(isNaN(consumeTokens) ? 0 : consumeTokens),
             icon: <IconTextStroked />,
             avatarColor: 'pink',
             trendData: trendData.tokens,
@@ -116,7 +154,7 @@ export const useDashboardStats = (
         items: [
           {
             title: t('平均RPM'),
-            value: performanceMetrics.avgRPM,
+            ...formatStatNumber(performanceMetrics.avgRPM),
             icon: <IconStopwatchStroked />,
             avatarColor: 'indigo',
             trendData: trendData.rpm,
@@ -124,7 +162,7 @@ export const useDashboardStats = (
           },
           {
             title: t('平均TPM'),
-            value: performanceMetrics.avgTPM,
+            ...formatStatNumber(performanceMetrics.avgTPM),
             icon: <IconTypograph />,
             avatarColor: 'orange',
             trendData: trendData.tpm,
