@@ -147,6 +147,8 @@ func auditAdminChannelContent(action string, otherMap map[string]interface{}, fa
 		return fmt.Sprintf("Deleted channel %s", auditAdminChannelLabel(channelID))
 	case "channel.key_view":
 		return fmt.Sprintf("Viewed channel key %s", auditAdminChannelLabel(channelID))
+	case "channel.breaker_reset":
+		return fmt.Sprintf("Reset channel circuit breaker %s", auditAdminChannelLabel(channelID))
 	case "channel.copy":
 		return fmt.Sprintf("Copied channel %s to %s", auditAdminChannelLabel(sourceID), auditAdminChannelLabel(channelID))
 	case "channel.delete_batch":

@@ -371,6 +371,7 @@ export const getChannelsColumns = ({
   setShowEditTag,
   setEditingTag,
   copySelectedChannel,
+  resetChannelBreaker,
   refresh,
   activePage,
   channels,
@@ -785,6 +786,9 @@ export const getChannelsColumns = ({
       render: (text, record, index) => {
         if (record.children === undefined) {
           const upstreamUpdateMeta = getUpstreamUpdateMeta(record);
+          const canResetBreaker =
+            record.breaker_state === 'open' ||
+            record.breaker_state === 'half_open';
           const moreMenuItems = [
             {
               node: 'item',
@@ -821,6 +825,23 @@ export const getChannelsColumns = ({
               },
             },
           ];
+
+          if (canResetBreaker && resetChannelBreaker) {
+            moreMenuItems.push({
+              node: 'item',
+              name: t('重置熔断'),
+              type: 'tertiary',
+              onClick: () => {
+                Modal.confirm({
+                  title: t('确定要重置该渠道的熔断状态？'),
+                  content: t(
+                    '只会清除当前服务实例中的熔断和最近可用性统计，不会修改渠道启用状态。',
+                  ),
+                  onOk: () => resetChannelBreaker(record),
+                });
+              },
+            });
+          }
 
           if (upstreamUpdateMeta.supported) {
             moreMenuItems.push({

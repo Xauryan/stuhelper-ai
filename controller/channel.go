@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -444,6 +445,40 @@ func GetChannel(c *gin.Context) {
 		"data":    channel,
 	})
 	return
+}
+
+func ResetChannelBreaker(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, fmt.Errorf("渠道ID格式错误: %v", err))
+		return
+	}
+
+	channel, err := model.GetChannelById(id, false)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.ApiError(c, fmt.Errorf("渠道不存在"))
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+
+	previousState := service.BreakerStateName(id)
+	service.ResetChannelBreaker(id)
+
+	recordManageAudit(c, "channel.breaker_reset", map[string]interface{}{
+		"id":             id,
+		"name":           channel.Name,
+		"previous_state": previousState,
+	})
+
+	common.ApiSuccess(c, gin.H{
+		"id":             id,
+		"breaker_state":  service.BreakerStateName(id),
+		"availability":   service.ChannelAvailabilitySnapshot(id),
+		"previous_state": previousState,
+	})
 }
 
 // GetChannelKey 获取渠道密钥（需要通过安全验证中间件）

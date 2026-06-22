@@ -283,6 +283,7 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/upstream_updates/apply_all", middleware.RequireAdminRole(), controller.ApplyAllChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect", middleware.RequireAdminRole(), controller.DetectChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect_all", middleware.RequireAdminRole(), controller.DetectAllChannelUpstreamModelUpdates)
+			channelRoute.POST("/:id/breaker/reset", middleware.RequireAdminRole(), controller.ResetChannelBreaker)
 			channelRoute.GET("/:id", middleware.RequireAdminRole(), controller.GetChannel)
 			channelRoute.DELETE("/:id", middleware.RequireAdminRole(), controller.DeleteChannel)
 			channelRoute.POST("/:id/key", middleware.RootAuth(), middleware.CriticalRateLimit(), middleware.DisableCache(), middleware.SecureVerificationRequired(), controller.GetChannelKey)

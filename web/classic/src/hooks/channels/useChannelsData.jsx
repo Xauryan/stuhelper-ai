@@ -717,6 +717,44 @@ export const useChannelsData = () => {
     );
   };
 
+  const resetChannelBreaker = async (record) => {
+    if (!record?.id) {
+      return;
+    }
+
+    try {
+      const res = await API.post(`/api/channel/${record.id}/breaker/reset`);
+      const { success, message, data } = res.data || {};
+      if (!success) {
+        showError(message || t('重置渠道熔断失败'));
+        return;
+      }
+
+      const breakerState = data?.breaker_state || 'closed';
+      const availability = data?.availability || null;
+      updateChannelProperty(record.id, (channel) => {
+        channel.breaker_state = breakerState;
+        channel.availability = availability;
+      });
+      setCurrentTestChannel((channel) =>
+        channel && channel.id === record.id
+          ? {
+              ...channel,
+              breaker_state: breakerState,
+              availability,
+            }
+          : channel,
+      );
+      showSuccess(t('渠道熔断状态已重置'));
+    } catch (error) {
+      showError(
+        error?.response?.data?.message ||
+          error?.message ||
+          t('重置渠道熔断失败'),
+      );
+    }
+  };
+
   const deleteFailedModels = async (record, failedModels) => {
     if (!record || !Array.isArray(failedModels) || failedModels.length === 0) {
       showInfo(t('暂无失败模型'));
@@ -1476,6 +1514,7 @@ export const useChannelsData = () => {
     handlePageSizeChange,
     copySelectedChannel,
     updateChannelProperty,
+    resetChannelBreaker,
     deleteFailedModels,
     submitTagEdit,
     closeEdit,

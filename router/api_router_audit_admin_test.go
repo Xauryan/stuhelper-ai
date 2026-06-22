@@ -138,6 +138,7 @@ func TestAuditAdminRouteRegistrationAndWriteGuards(t *testing.T) {
 		{name: "channel search blocked", method: http.MethodGet, path: "/api/channel/search"},
 		{name: "channel monitor blocked", method: http.MethodGet, path: "/api/channel/monitor/summary"},
 		{name: "channel detail blocked", method: http.MethodGet, path: "/api/channel/1"},
+		{name: "channel breaker reset blocked", method: http.MethodPost, path: "/api/channel/1/breaker/reset"},
 		{name: "channel write blocked", method: http.MethodPost, path: "/api/channel/"},
 		{name: "prefill group list blocked", method: http.MethodGet, path: "/api/prefill_group/"},
 		{name: "redemption detail blocked", method: http.MethodGet, path: "/api/redemption/1"},

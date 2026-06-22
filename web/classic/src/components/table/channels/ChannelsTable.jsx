@@ -61,6 +61,7 @@ const ChannelsTable = (channelsData) => {
     setShowEditTag,
     setEditingTag,
     copySelectedChannel,
+    resetChannelBreaker,
     refresh,
     checkOllamaVersion,
     // Multi-key management
@@ -88,6 +89,7 @@ const ChannelsTable = (channelsData) => {
       setShowEditTag,
       setEditingTag,
       copySelectedChannel,
+      resetChannelBreaker,
       refresh,
       activePage,
       channels,
@@ -114,6 +116,7 @@ const ChannelsTable = (channelsData) => {
     setShowEditTag,
     setEditingTag,
     copySelectedChannel,
+    resetChannelBreaker,
     refresh,
     activePage,
     channels,

@@ -37,6 +37,7 @@ import {
   timestamp2string,
   renderQuota,
   getModelCategories,
+  stringToColor,
   showError,
 } from '../../../helpers';
 import {
@@ -98,7 +99,7 @@ const renderGroupColumn = (text, record, t, groupRatios = {}) => {
         )}
         position='top'
       >
-        <Tag color='white' shape='circle'>
+        <Tag color={stringToColor(group)} shape='circle'>
           auto
           {record && record.cross_group_retry ? `(${t('跨分组')})` : ''}
         </Tag>
@@ -109,7 +110,7 @@ const renderGroupColumn = (text, record, t, groupRatios = {}) => {
   return (
     <span className='flex items-center gap-1'>
       <TruncatedTag
-        color='white'
+        color={stringToColor(group)}
         shape='circle'
         maxWidth={150}
         tooltipContent={group}
