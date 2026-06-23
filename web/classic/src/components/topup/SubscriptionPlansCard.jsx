@@ -1011,7 +1011,10 @@ const SubscriptionPlansCard = ({
                         ? Math.max(0, totalAmount - usedAmount)
                         : 0;
                     const planTitle =
-                      planTitleMap.get(subscription?.plan_id) || '';
+                      planTitleMap.get(subscription?.plan_id) ||
+                      sub?.plan?.plan_title ||
+                      sub?.plan?.title ||
+                      '';
                     const remainDays = getRemainingDays(sub);
                     const usagePercent = getUsagePercent(sub);
                     const now = Date.now() / 1000;

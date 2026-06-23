@@ -464,7 +464,8 @@ func subscriptionUpgradeGroupActiveAt(sub *UserSubscription, now int64) bool {
 }
 
 type SubscriptionSummary struct {
-	Subscription *UserSubscription `json:"subscription"`
+	Subscription *UserSubscription     `json:"subscription"`
+	Plan         *SubscriptionPlanInfo `json:"plan,omitempty"`
 }
 
 func calcPlanEndTime(start time.Time, plan *SubscriptionPlan) (int64, error) {
@@ -1479,12 +1480,42 @@ func buildSubscriptionSummaries(subs []UserSubscription) []SubscriptionSummary {
 	if len(subs) == 0 {
 		return []SubscriptionSummary{}
 	}
+	planIds := make([]int, 0)
+	seenPlanIds := make(map[int]struct{})
+	for _, sub := range subs {
+		if sub.PlanId <= 0 {
+			continue
+		}
+		if _, ok := seenPlanIds[sub.PlanId]; ok {
+			continue
+		}
+		seenPlanIds[sub.PlanId] = struct{}{}
+		planIds = append(planIds, sub.PlanId)
+	}
+
+	planInfoById := make(map[int]*SubscriptionPlanInfo, len(planIds))
+	if len(planIds) > 0 {
+		var plans []SubscriptionPlan
+		if err := DB.Select("id", "title").Where("id IN ?", planIds).Find(&plans).Error; err == nil {
+			for _, plan := range plans {
+				planInfoById[plan.Id] = &SubscriptionPlanInfo{
+					PlanId:    plan.Id,
+					PlanTitle: plan.Title,
+				}
+			}
+		}
+	}
+
 	result := make([]SubscriptionSummary, 0, len(subs))
 	for _, sub := range subs {
 		subCopy := sub
-		result = append(result, SubscriptionSummary{
+		summary := SubscriptionSummary{
 			Subscription: &subCopy,
-		})
+		}
+		if planInfo, ok := planInfoById[sub.PlanId]; ok {
+			summary.Plan = planInfo
+		}
+		result = append(result, summary)
 	}
 	return result
 }
@@ -2018,8 +2049,8 @@ func CleanupSubscriptionPreConsumeRecords(olderThanSeconds int64) (int64, error)
 }
 
 type SubscriptionPlanInfo struct {
-	PlanId    int
-	PlanTitle string
+	PlanId    int    `json:"plan_id"`
+	PlanTitle string `json:"plan_title"`
 }
 
 func GetSubscriptionPlanInfoByUserSubscriptionId(userSubscriptionId int) (*SubscriptionPlanInfo, error) {

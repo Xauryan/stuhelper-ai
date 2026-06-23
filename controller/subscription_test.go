@@ -290,6 +290,82 @@ func TestAdminUpdateSubscriptionPlanPersistsRecommendedFlag(t *testing.T) {
 	assert.True(t, reloaded.Recommended)
 }
 
+func TestGetSubscriptionSelfIncludesDisabledPlanSummary(t *testing.T) {
+	db := setupSubscriptionControllerTestDB(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:       79,
+		Username: "disabled-subscription-user",
+		Status:   common.UserStatusEnabled,
+	}).Error)
+	plan := &model.SubscriptionPlan{
+		Id:            9903,
+		Title:         "Disabled Monthly",
+		PriceAmount:   10,
+		Currency:      "USD",
+		DurationUnit:  model.SubscriptionDurationMonth,
+		DurationValue: 1,
+		Enabled:       true,
+		TotalAmount:   1000,
+	}
+	require.NoError(t, db.Create(plan).Error)
+	require.NoError(t, db.Model(&model.SubscriptionPlan{}).
+		Where("id = ?", plan.Id).
+		Update("enabled", false).Error)
+	now := common.GetTimestamp()
+	sub := &model.UserSubscription{
+		UserId:      79,
+		PlanId:      plan.Id,
+		AmountTotal: 1000,
+		AmountUsed:  320,
+		StartTime:   now - 60,
+		EndTime:     now + 3600,
+		Status:      "active",
+		Source:      "balance",
+	}
+	require.NoError(t, db.Create(sub).Error)
+
+	plansCtx, plansRecorder := newSubscriptionControllerContext(t, http.MethodGet, "/api/subscription/plans", gin.H{})
+	GetSubscriptionPlans(plansCtx)
+	require.Equal(t, http.StatusOK, plansRecorder.Code)
+	var plansResponse struct {
+		Success bool                  `json:"success"`
+		Data    []SubscriptionPlanDTO `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(plansRecorder.Body.Bytes(), &plansResponse))
+	require.True(t, plansResponse.Success)
+	require.Empty(t, plansResponse.Data)
+
+	ctx, recorder := newSubscriptionControllerContext(t, http.MethodGet, "/api/subscription/self", gin.H{})
+	ctx.Set("id", 79)
+	GetSubscriptionSelf(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Subscriptions []struct {
+				Subscription model.UserSubscription      `json:"subscription"`
+				Plan         *model.SubscriptionPlanInfo `json:"plan"`
+			} `json:"subscriptions"`
+			AllSubscriptions []struct {
+				Subscription model.UserSubscription      `json:"subscription"`
+				Plan         *model.SubscriptionPlanInfo `json:"plan"`
+			} `json:"all_subscriptions"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	require.Len(t, response.Data.Subscriptions, 1)
+	require.Len(t, response.Data.AllSubscriptions, 1)
+	assert.Equal(t, sub.Id, response.Data.Subscriptions[0].Subscription.Id)
+	assert.Equal(t, int64(320), response.Data.Subscriptions[0].Subscription.AmountUsed)
+	require.NotNil(t, response.Data.Subscriptions[0].Plan)
+	assert.Equal(t, plan.Id, response.Data.Subscriptions[0].Plan.PlanId)
+	assert.Equal(t, plan.Title, response.Data.Subscriptions[0].Plan.PlanTitle)
+	require.NotNil(t, response.Data.AllSubscriptions[0].Plan)
+	assert.Equal(t, plan.Title, response.Data.AllSubscriptions[0].Plan.PlanTitle)
+}
+
 func TestAdminSubscriptionUserActionsRejectAuditAdminTargets(t *testing.T) {
 	db := setupSubscriptionControllerTestDB(t)
 	target := model.User{

@@ -28,3 +28,18 @@ export function getRechargeTabKeys(shouldShowSubscription) {
     ? [RECHARGE_TAB_TOPUP, RECHARGE_TAB_SUBSCRIPTION]
     : [RECHARGE_TAB_TOPUP];
 }
+
+export function shouldShowSubscriptionTab({
+  loading = false,
+  plans = [],
+  activeSubscriptions = [],
+  allSubscriptions = [],
+} = {}) {
+  const hasSubscriptionRecords =
+    (Array.isArray(activeSubscriptions) && activeSubscriptions.length > 0) ||
+    (Array.isArray(allSubscriptions) && allSubscriptions.length > 0);
+  if (hasSubscriptionRecords) {
+    return true;
+  }
+  return !loading && Array.isArray(plans) && plans.length > 0;
+}

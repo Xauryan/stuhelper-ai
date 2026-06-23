@@ -30,6 +30,13 @@
 - classic 订阅卡片的使用百分比封顶为 100%。
 - 管理端仍可以看到原始 `amount_used / amount_total`，用于审计超额结算是否来自真实请求。
 
+停用订阅套餐或关闭订阅购买入口只表示不再向用户提供新的可购买套餐，不能影响已有订阅的自查：
+
+- `/api/subscription/plans` 只返回仍启用的可购买套餐。
+- `/api/subscription/self` 必须继续返回当前用户已有的生效、未开始、过期或作废订阅，以及 `amount_used / amount_total` 等用量字段。
+- classic 充值页在没有可购买套餐但用户已有订阅时，仍必须显示订阅页签和“我的订阅”用量信息；购买区域可以显示“暂无可购买套餐”。
+- 个人订阅摘要应包含对应套餐标题，即使该套餐已被禁用，避免停用套餐后历史订阅只剩订阅编号。
+
 ## Redis quota 缓存
 
 用户钱包额度的热路径使用 Redis `HINCRBY` / `HDECRBY` 类原子增减。`model.GetUserQuota(id, fromDB=true)` 从数据库 fallback 读到的是快照，不能异步写回 Redis，否则可能覆盖并发请求刚刚写入的额度 delta。

@@ -57,6 +57,7 @@ import {
   getRechargeTabKeys,
   RECHARGE_TAB_SUBSCRIPTION,
   RECHARGE_TAB_TOPUP,
+  shouldShowSubscriptionTab,
 } from './rechargeTabs';
 import SubscriptionPlansCard from './SubscriptionPlansCard';
 
@@ -131,8 +132,14 @@ const RechargeCard = ({
   const redeemFormApiRef = useRef(null);
   const showAmountSkeleton = useMinimumLoadingTime(amountLoading);
   const [activeTab, setActiveTab] = useState(getInitialRechargeTabKey);
-  const shouldShowSubscription =
-    !subscriptionLoading && subscriptionPlans.length > 0;
+  const hasSubscriptionRecords =
+    activeSubscriptions.length > 0 || allSubscriptions.length > 0;
+  const shouldShowSubscription = shouldShowSubscriptionTab({
+    loading: subscriptionLoading,
+    plans: subscriptionPlans,
+    activeSubscriptions,
+    allSubscriptions,
+  });
   const rechargeTabKeys = getRechargeTabKeys(shouldShowSubscription);
   const regularPayMethods = payMethods || [];
   const hasRegularTopUp =
@@ -706,7 +713,7 @@ const RechargeCard = ({
                 <div className='py-2'>
                   <SubscriptionPlansCard
                     t={t}
-                    loading={subscriptionLoading}
+                    loading={subscriptionLoading && !hasSubscriptionRecords}
                     plans={subscriptionPlans}
                     payMethods={payMethods}
                     enableOnlineTopUp={enableOnlineTopUp}
