@@ -83,9 +83,9 @@ func RequestSelfServeTopUp(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "自助充值支付方式未启用"})
 		return
 	}
-	if strings.TrimSpace(req.TransactionNo) == "" {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "请填写交易订单号"})
-		return
+	if model.NormalizeSelfServePaymentMethod(req.PaymentMethod) == model.PaymentMethodWechatSelfServe &&
+		!setting.SelfServeWechatPayModeRequiresTransactionNo(setting.SelfServeWechatPayMode) {
+		req.TransactionNo = ""
 	}
 
 	result, err := model.CreateSelfServeTopUp(model.SelfServeTopUpCreateParams{
@@ -147,8 +147,7 @@ func AdminApproveSelfServeTopUp(c *gin.Context) {
 func AdminUpdateSelfServeTopUp(c *gin.Context) {
 	var req AdminSelfServeTopUpUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil ||
-		strings.TrimSpace(req.TradeNo) == "" ||
-		strings.TrimSpace(req.TransactionNo) == "" {
+		strings.TrimSpace(req.TradeNo) == "" {
 		common.ApiErrorMsg(c, "参数错误")
 		return
 	}

@@ -136,6 +136,18 @@ const normalizeSelfServeLimits = (limits) => ({
   daily_max_money: positiveMoney(limits?.daily_max_money),
 });
 
+const normalizeSelfServeWechatMode = (mode) => {
+  const value = String(mode || '').trim().toLowerCase();
+  return value === 'enterprise_red_packet' ? 'enterprise_red_packet' : 'personal_qr';
+};
+
+const requiresSelfServeTransactionNo = (paymentMethod, wechatPayMode) => {
+  if (paymentMethod !== 'wxpay_self_serve') {
+    return true;
+  }
+  return normalizeSelfServeWechatMode(wechatPayMode) !== 'enterprise_red_packet';
+};
+
 const getSelfServeFallbackDisplayAmount = (record) => {
   const declaredMoney = Number(record?.declared_money ?? record?.money);
   return Number.isFinite(declaredMoney) && declaredMoney > 0
@@ -212,6 +224,9 @@ const TopupBillingTable = ({
     transactionNo: '',
     reason: '',
   });
+  const [selfServeWechatPayMode, setSelfServeWechatPayMode] = useState(
+    'personal_qr',
+  );
   const [selfServeLimits, setSelfServeLimits] = useState(
     EMPTY_SELF_SERVE_LIMITS,
   );
@@ -350,6 +365,9 @@ const TopupBillingTable = ({
         const res = await API.get('/api/user/topup/info');
         const { success, data } = res.data;
         if (!cancelled && success) {
+          setSelfServeWechatPayMode(
+            normalizeSelfServeWechatMode(data?.self_serve_wechat_pay_mode),
+          );
           setSelfServeLimits(normalizeSelfServeLimits(data?.self_serve_limits));
         }
       } catch (e) {
@@ -832,6 +850,10 @@ const TopupBillingTable = ({
     const declaredMoney =
       Math.round(Number(selfServeEditForm.declaredMoney || 0) * 100) / 100;
     const transactionNo = selfServeEditForm.transactionNo.trim();
+    const needsTransactionNo = requiresSelfServeTransactionNo(
+      selfServeEditRecord.payment_method,
+      selfServeWechatPayMode,
+    );
     if (!declaredMoney || declaredMoney <= 0) {
       Toast.error({ content: t('请输入充值金额') });
       return;
@@ -848,7 +870,7 @@ const TopupBillingTable = ({
       });
       return;
     }
-    if (!transactionNo) {
+    if (needsTransactionNo && !transactionNo) {
       Toast.error({ content: t('请输入交易订单号') });
       return;
     }
@@ -857,7 +879,7 @@ const TopupBillingTable = ({
       const res = await API.post('/api/user/topup/self-serve/update', {
         trade_no: selfServeEditRecord.trade_no,
         declared_money: declaredMoney,
-        transaction_no: transactionNo,
+        transaction_no: needsTransactionNo ? transactionNo : '',
         reason: selfServeEditForm.reason,
       });
       const { success, message } = res.data;
@@ -1615,18 +1637,29 @@ const TopupBillingTable = ({
                 : t('请先配置自助充值限额')}
             </Text>
           </div>
-          <div>
-            <Text type='tertiary'>{t('交易订单号')}</Text>
-            <Input
-              value={selfServeEditForm.transactionNo}
-              onChange={(value) =>
-                setSelfServeEditField('transactionNo', value)
-              }
-              placeholder={t('请输入交易订单号')}
-              showClear
-              style={{ marginTop: 6 }}
-            />
-          </div>
+          {requiresSelfServeTransactionNo(
+            selfServeEditRecord?.payment_method,
+            selfServeWechatPayMode,
+          ) ? (
+            <div>
+              <Text type='tertiary'>{t('交易订单号')}</Text>
+              <Input
+                value={selfServeEditForm.transactionNo}
+                onChange={(value) =>
+                  setSelfServeEditField('transactionNo', value)
+                }
+                placeholder={t('请输入交易订单号')}
+                showClear
+                style={{ marginTop: 6 }}
+              />
+            </div>
+          ) : (
+            <div className='rounded-md border border-dashed border-[var(--semi-color-border)] p-3'>
+              <Text type='warning' size='small'>
+                {t('企业微信红包模式下无需填写交易订单号，保存后仍使用系统内部流水号。')}
+              </Text>
+            </div>
+          )}
           <div>
             <Text type='tertiary'>{t('审核备注')}</Text>
             <Input

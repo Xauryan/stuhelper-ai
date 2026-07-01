@@ -231,8 +231,10 @@ func TestSelfServeTopUpEnabledRequiresPricingLimitsAndQRCode(t *testing.T) {
 	originalEnabled := setting.SelfServeTopUpEnabled
 	originalAlipayEnabled := setting.SelfServeAlipayEnabled
 	originalWechatPayEnabled := setting.SelfServeWechatPayEnabled
+	originalWechatPayMode := setting.SelfServeWechatPayMode
 	originalAlipayQRCode := setting.SelfServeAlipayQRCode
 	originalWechatPayQRCode := setting.SelfServeWechatPayQRCode
+	originalWechatPayEnterpriseQRCode := setting.SelfServeWechatPayEnterpriseQRCode
 	originalUnitPrice := setting.SelfServeTopUpUnitPrice
 	originalSingleMax := setting.SelfServeTopUpSingleMaxAmount
 	originalDailyMax := setting.SelfServeTopUpDailyMaxAmount
@@ -240,8 +242,10 @@ func TestSelfServeTopUpEnabledRequiresPricingLimitsAndQRCode(t *testing.T) {
 		setting.SelfServeTopUpEnabled = originalEnabled
 		setting.SelfServeAlipayEnabled = originalAlipayEnabled
 		setting.SelfServeWechatPayEnabled = originalWechatPayEnabled
+		setting.SelfServeWechatPayMode = originalWechatPayMode
 		setting.SelfServeAlipayQRCode = originalAlipayQRCode
 		setting.SelfServeWechatPayQRCode = originalWechatPayQRCode
+		setting.SelfServeWechatPayEnterpriseQRCode = originalWechatPayEnterpriseQRCode
 		setting.SelfServeTopUpUnitPrice = originalUnitPrice
 		setting.SelfServeTopUpSingleMaxAmount = originalSingleMax
 		setting.SelfServeTopUpDailyMaxAmount = originalDailyMax
@@ -249,17 +253,21 @@ func TestSelfServeTopUpEnabledRequiresPricingLimitsAndQRCode(t *testing.T) {
 
 	setting.SelfServeTopUpEnabled = true
 	setting.SelfServeAlipayEnabled = true
-	setting.SelfServeWechatPayEnabled = false
+	setting.SelfServeWechatPayEnabled = true
 	setting.SelfServeAlipayQRCode = "https://qr.alipay.com/45t165972y9chxii0fm3fe8"
-	setting.SelfServeWechatPayQRCode = ""
+	setting.SelfServeWechatPayMode = setting.SelfServeWechatPayModePersonalQRCode
+	setting.SelfServeWechatPayQRCode = "https://pay.example.com/wechat-personal"
+	setting.SelfServeWechatPayEnterpriseQRCode = ""
 	setting.SelfServeTopUpUnitPrice = 1.23
 	setting.SelfServeTopUpSingleMaxAmount = 199.99
 	setting.SelfServeTopUpDailyMaxAmount = 499.99
 	require.True(t, isSelfServeTopUpEnabled())
 	require.True(t, isSelfServeAlipayTopUpEnabled())
+	require.True(t, isSelfServeWechatPayTopUpEnabled())
+	require.Equal(t, "https://pay.example.com/wechat-personal", setting.SelfServeWechatPayQRCodeContent())
 
 	setting.SelfServeAlipayQRCode = "data:image/png;base64,Zm9v"
-	require.False(t, isSelfServeTopUpEnabled())
+	require.True(t, isSelfServeTopUpEnabled())
 	require.False(t, isSelfServeAlipayTopUpEnabled())
 
 	setting.SelfServeAlipayQRCode = "https://qr.alipay.com/45t165972y9chxii0fm3fe8"
@@ -274,6 +282,18 @@ func TestSelfServeTopUpEnabledRequiresPricingLimitsAndQRCode(t *testing.T) {
 
 	setting.SelfServeTopUpSingleMaxAmount = 199.99
 	setting.SelfServeAlipayQRCode = ""
-	require.False(t, isSelfServeTopUpEnabled())
+	require.True(t, isSelfServeTopUpEnabled())
 	require.False(t, isSelfServeAlipayTopUpEnabled())
+
+	setting.SelfServeAlipayQRCode = "https://qr.alipay.com/45t165972y9chxii0fm3fe8"
+	setting.SelfServeWechatPayMode = setting.SelfServeWechatPayModeEnterpriseRedPacket
+	setting.SelfServeWechatPayQRCode = "https://pay.example.com/wechat-personal"
+	setting.SelfServeWechatPayEnterpriseQRCode = "https://pay.example.com/wechat-enterprise"
+	require.True(t, isSelfServeWechatPayTopUpEnabled())
+	require.Equal(t, "https://pay.example.com/wechat-enterprise", setting.SelfServeWechatPayQRCodeContent())
+	require.False(t, setting.SelfServeWechatPayModeRequiresTransactionNo(setting.SelfServeWechatPayMode))
+
+	setting.SelfServeWechatPayEnterpriseQRCode = ""
+	require.False(t, isSelfServeWechatPayTopUpEnabled())
+	require.Equal(t, "", setting.SelfServeWechatPayQRCodeContent())
 }

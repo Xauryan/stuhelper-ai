@@ -2512,12 +2512,51 @@ func NormalizeSelfServePaymentMethod(paymentMethod string) string {
 	}
 }
 
+func selfServeWechatPayAutoTransactionNoEnabled() bool {
+	return NormalizeSelfServePaymentMethod(PaymentMethodWechatSelfServe) == PaymentMethodWechatSelfServe &&
+		!setting.SelfServeWechatPayModeRequiresTransactionNo(setting.SelfServeWechatPayMode)
+}
+
+func selfServeResolveAuditTransactionNo(paymentMethod string, subscription bool, userID int, transactionNo string) (string, error) {
+	paymentMethod = NormalizeSelfServePaymentMethod(paymentMethod)
+	if paymentMethod == "" {
+		return "", ErrPaymentMethodMismatch
+	}
+	trimmed := strings.TrimSpace(transactionNo)
+	if paymentMethod == PaymentMethodWechatSelfServe && selfServeWechatPayAutoTransactionNoEnabled() {
+		return BuildSelfServeAuditTransactionNo(paymentMethod, subscription, userID), nil
+	}
+	if trimmed == "" {
+		return "", errors.New("请填写交易订单号")
+	}
+	if len(trimmed) < 6 || len(trimmed) > 128 {
+		return "", errors.New("交易订单号长度必须为 6 到 128 个字符")
+	}
+	return trimmed, nil
+}
+
 func SelfServeTopUpPaymentMethodName(paymentMethod string) string {
 	switch NormalizeSelfServePaymentMethod(paymentMethod) {
 	case PaymentMethodAlipaySelfServe:
 		return "支付宝自助"
 	case PaymentMethodWechatSelfServe:
 		return "微信自助"
+	default:
+		return "自助充值"
+	}
+}
+
+func SelfServeTopUpPaymentModeLabel(paymentMethod string) string {
+	switch NormalizeSelfServePaymentMethod(paymentMethod) {
+	case PaymentMethodWechatSelfServe:
+		switch setting.NormalizeSelfServeWechatPayMode(setting.SelfServeWechatPayMode) {
+		case setting.SelfServeWechatPayModeEnterpriseRedPacket:
+			return "微信自助"
+		default:
+			return "微信自助"
+		}
+	case PaymentMethodAlipaySelfServe:
+		return "支付宝自助"
 	default:
 		return "自助充值"
 	}
@@ -2664,10 +2703,6 @@ func CreateSelfServeTopUp(params SelfServeTopUpCreateParams) (*SelfServeTopUpRev
 	if paymentMethod == "" {
 		return nil, ErrPaymentMethodMismatch
 	}
-	transactionNo := strings.TrimSpace(params.TransactionNo)
-	if len(transactionNo) < 6 || len(transactionNo) > 128 {
-		return nil, errors.New("交易订单号长度必须为 6 到 128 个字符")
-	}
 	money := normalizeSelfServeMoney(params.DeclaredMoney)
 	if _, err := validateSelfServeTopUpMoneyTx(DB, params.UserId, money, 0); err != nil {
 		return nil, err
@@ -2681,6 +2716,10 @@ func CreateSelfServeTopUp(params SelfServeTopUpCreateParams) (*SelfServeTopUpRev
 	var result SelfServeTopUpReviewResult
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		if _, err := validateSelfServeTopUpMoneyTx(tx, params.UserId, money, 0); err != nil {
+			return err
+		}
+		transactionNo, err := selfServeResolveAuditTransactionNo(paymentMethod, false, params.UserId, params.TransactionNo)
+		if err != nil {
 			return err
 		}
 		var existingAudit SelfServeTopUpAudit
@@ -2799,10 +2838,6 @@ func UpdateSelfServeTopUp(params SelfServeTopUpEditParams) (*SelfServeTopUpRevie
 	if tradeNo == "" {
 		return nil, errors.New("未提供订单号")
 	}
-	transactionNo := strings.TrimSpace(params.TransactionNo)
-	if len(transactionNo) < 6 || len(transactionNo) > 128 {
-		return nil, errors.New("交易订单号长度必须为 6 到 128 个字符")
-	}
 	money := normalizeSelfServeMoney(params.DeclaredMoney)
 	now := common.GetTimestamp()
 	var result SelfServeTopUpReviewResult
@@ -2823,6 +2858,18 @@ func UpdateSelfServeTopUp(params SelfServeTopUpEditParams) (*SelfServeTopUpRevie
 		}
 		if _, err := validateSelfServeTopUpMoneyTx(tx, topUp.UserId, money, audit.Id); err != nil {
 			return err
+		}
+		transactionNo := strings.TrimSpace(audit.TransactionNo)
+		if NormalizeSelfServePaymentMethod(topUp.PaymentMethod) == PaymentMethodWechatSelfServe && selfServeWechatPayAutoTransactionNoEnabled() {
+			if transactionNo == "" {
+				transactionNo = BuildSelfServeAuditTransactionNo(topUp.PaymentMethod, false, topUp.UserId)
+			}
+		} else {
+			resolvedTransactionNo, err := selfServeResolveAuditTransactionNo(topUp.PaymentMethod, false, topUp.UserId, params.TransactionNo)
+			if err != nil {
+				return err
+			}
+			transactionNo = resolvedTransactionNo
 		}
 		if transactionNo != audit.TransactionNo {
 			var duplicate SelfServeTopUpAudit

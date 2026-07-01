@@ -31,6 +31,21 @@ func setSelfServeTopUpPricingForTest(t *testing.T) {
 	setting.SelfServeTopUpDailyMaxAmount = 499.99
 }
 
+func setSelfServeEnterpriseWechatPayModeForTest(t *testing.T) {
+	t.Helper()
+	originalMode := setting.SelfServeWechatPayMode
+	originalPersonalQRCode := setting.SelfServeWechatPayQRCode
+	originalEnterpriseQRCode := setting.SelfServeWechatPayEnterpriseQRCode
+	t.Cleanup(func() {
+		setting.SelfServeWechatPayMode = originalMode
+		setting.SelfServeWechatPayQRCode = originalPersonalQRCode
+		setting.SelfServeWechatPayEnterpriseQRCode = originalEnterpriseQRCode
+	})
+	setting.SelfServeWechatPayMode = setting.SelfServeWechatPayModeEnterpriseRedPacket
+	setting.SelfServeWechatPayQRCode = "https://pay.example.com/wechat-personal"
+	setting.SelfServeWechatPayEnterpriseQRCode = "https://pay.example.com/wechat-enterprise"
+}
+
 func getSelfServeAuditForTest(t *testing.T, tradeNo string) SelfServeTopUpAudit {
 	t.Helper()
 	var audit SelfServeTopUpAudit
@@ -133,6 +148,27 @@ func TestCreateSelfServeTopUpUsesIndependentSelfServeUnitPrice(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, int64(5000), result.QuotaDelta)
 	assert.Equal(t, int64(5000), result.Audit.CreditedQuota)
+}
+
+func TestCreateSelfServeTopUpAllowsEmptyTransactionNoInEnterpriseWechatMode(t *testing.T) {
+	truncateTables(t)
+	setSelfServeTopUpPricingForTest(t)
+	setSelfServeEnterpriseWechatPayModeForTest(t)
+
+	insertRankingUser(t, 5114, "self-serve-enterprise-wechat-user")
+
+	result, err := CreateSelfServeTopUp(SelfServeTopUpCreateParams{
+		UserId:        5114,
+		PaymentMethod: PaymentMethodWechatSelfServe,
+		DeclaredMoney: 10,
+		TransactionNo: "",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Audit)
+	assert.Equal(t, SelfServeTopUpAuditStatusPending, result.Audit.Status)
+	assert.Regexp(t, `^WX_SS_TX_5114_[A-Za-z0-9]{12}$`, result.Audit.TransactionNo)
+	assert.NotEmpty(t, result.Audit.TransactionNo)
 }
 
 func TestCreateSelfServeTopUpRejectsInvalidUnitPrice(t *testing.T) {
@@ -478,4 +514,39 @@ func TestPurchaseSubscriptionWithSelfServeCreatesPendingAuditAndRejectCancelsSub
 	require.NotNil(t, topUp)
 	assert.Equal(t, common.TopUpStatusRefunded, topUp.Status)
 	assert.Equal(t, 24.68, topUp.RefundedMoney)
+}
+
+func TestPurchaseSubscriptionWithSelfServeAllowsEmptyTransactionNoInEnterpriseWechatMode(t *testing.T) {
+	truncateTables(t)
+	setSelfServeTopUpPricingForTest(t)
+	setSelfServeEnterpriseWechatPayModeForTest(t)
+	setting.SelfServeTopUpUnitPrice = 2
+
+	insertRankingUser(t, 5115, "self-serve-enterprise-subscription-user")
+	plan := &SubscriptionPlan{
+		Id:            5115,
+		Title:         "Enterprise Self Serve Plan",
+		PriceAmount:   12.34,
+		Currency:      "USD",
+		DurationUnit:  SubscriptionDurationMonth,
+		DurationValue: 1,
+		Enabled:       true,
+		TotalAmount:   123456,
+		UpgradeGroup:  "vip",
+	}
+	require.NoError(t, DB.Create(plan).Error)
+
+	result, err := PurchaseSubscriptionWithSelfServe(SelfServeSubscriptionPurchaseParams{
+		UserId:        5115,
+		PlanId:        plan.Id,
+		PaymentMethod: PaymentMethodWechatSelfServe,
+		DeclaredMoney: 24.68,
+		TransactionNo: "",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Audit)
+	assert.Equal(t, SelfServeTopUpAuditStatusPending, result.Audit.Status)
+	assert.Regexp(t, `^WXSUB_SS_TX_5115_[A-Za-z0-9]{12}$`, result.Audit.TransactionNo)
+	assert.NotEmpty(t, result.Audit.TransactionNo)
 }

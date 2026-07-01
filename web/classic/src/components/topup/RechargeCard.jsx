@@ -118,6 +118,7 @@ const RechargeCard = ({
   enableWechatPayOfficialTopUp,
   enableSelfServeTopUp,
   selfServeQrCodes,
+  selfServeWechatPayMode,
   selfServeLimits,
   subscriptionLoading = false,
   subscriptionPlans = [],
@@ -723,6 +724,7 @@ const RechargeCard = ({
                     enableWechatPayOfficialTopUp={enableWechatPayOfficialTopUp}
                     enableSelfServeTopUp={enableSelfServeTopUp}
                     selfServeQrCodes={selfServeQrCodes}
+                    selfServeWechatPayMode={selfServeWechatPayMode}
                     selfServeLimits={selfServeLimits}
                     priceRatio={priceRatio}
                     getPaymentServiceFeePercent={getPaymentServiceFeePercent}

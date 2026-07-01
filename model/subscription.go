@@ -1289,10 +1289,6 @@ func PurchaseSubscriptionWithSelfServe(params SelfServeSubscriptionPurchaseParam
 	if paymentMethod == "" {
 		return nil, ErrPaymentMethodMismatch
 	}
-	transactionNo := strings.TrimSpace(params.TransactionNo)
-	if len(transactionNo) < 6 || len(transactionNo) > 128 {
-		return nil, errors.New("交易订单号长度必须为 6 到 128 个字符")
-	}
 	declaredMoney := normalizeSelfServeMoney(params.DeclaredMoney)
 	if !declaredMoney.IsPositive() {
 		return nil, errors.New("支付金额必须大于 0")
@@ -1320,6 +1316,10 @@ func PurchaseSubscriptionWithSelfServe(params SelfServeSubscriptionPurchaseParam
 			return fmt.Errorf("自助订阅支付金额应为 %.2f 元", expectedMoney.InexactFloat64())
 		}
 		if _, err := validateSelfServeTopUpMoneyTx(tx, params.UserId, declaredMoney, 0); err != nil {
+			return err
+		}
+		transactionNo, err := selfServeResolveAuditTransactionNo(paymentMethod, true, params.UserId, params.TransactionNo)
+		if err != nil {
 			return err
 		}
 		var existingAudit SelfServeTopUpAudit

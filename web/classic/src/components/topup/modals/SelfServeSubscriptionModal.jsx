@@ -32,6 +32,18 @@ const getSelfServePaymentIcon = (paymentMethod) => {
   return <SiWechat size={18} color='#07C160' />;
 };
 
+const getSelfServeWechatMode = (paymentMethodMode) => {
+  const mode = String(paymentMethodMode || '').trim().toLowerCase();
+  return mode === 'enterprise_red_packet' ? 'enterprise_red_packet' : 'personal_qr';
+};
+
+const requiresTransactionNo = (paymentMethod, wechatMode) => {
+  if (paymentMethod !== 'wxpay_self_serve') {
+    return true;
+  }
+  return getSelfServeWechatMode(wechatMode) !== 'enterprise_red_packet';
+};
+
 const SelfServeSubscriptionModal = ({
   t,
   visible,
@@ -40,6 +52,7 @@ const SelfServeSubscriptionModal = ({
   paymentName,
   qrCode,
   expectedMoney,
+  wechatPayMode,
   transactionNo,
   setTransactionNo,
   confirmed,
@@ -51,6 +64,7 @@ const SelfServeSubscriptionModal = ({
   const plan = selectedPlan?.plan;
   const money = Number(expectedMoney || 0);
   const label = paymentName || t('自助充值');
+  const autoTransactionNo = !requiresTransactionNo(paymentMethod, wechatPayMode);
 
   return (
     <Modal
@@ -75,7 +89,9 @@ const SelfServeSubscriptionModal = ({
           type='warning'
           icon={<ShieldAlert size={16} />}
           description={t(
-            '提交后订阅会立即开通。请按应付金额扫码付款并填写真实交易订单号，虚假填写、重复提交或金额不符会被拒绝、取消订阅，账户可能被封禁，概不退款。',
+            autoTransactionNo
+              ? '提交后订阅会立即开通。请扫码添加好友，然后发送红包，红包备注填写用户名，必须发红包，严禁转账。虚假填写、重复提交或金额不符会被拒绝、取消订阅，账户可能被封禁，概不退款。'
+              : '提交后订阅会立即开通。请按应付金额扫码付款并填写真实交易订单号，虚假填写、重复提交或金额不符会被拒绝、取消订阅，账户可能被封禁，概不退款。',
           )}
           closeIcon={null}
         />
@@ -103,25 +119,38 @@ const SelfServeSubscriptionModal = ({
               {t('管理员未配置收款码')}
             </div>
           )}
-          <Text type='secondary'>{t('请先扫码支付，再填写下方表单')}</Text>
+          <Text type='secondary'>
+            {autoTransactionNo
+              ? t('请先扫码添加好友，然后发送红包')
+              : t('请先扫码支付，再填写下方表单')}
+          </Text>
+          {autoTransactionNo ? (
+            <Text type='warning'>
+              {t('红包备注请填写用户名，必须发红包，严禁转账')}
+            </Text>
+          ) : null}
         </div>
 
-        <div>
-          <Text type='tertiary'>{t('交易订单号')}</Text>
-          <Input
-            value={transactionNo}
-            onChange={setTransactionNo}
-            placeholder={t('请输入微信或支付宝的交易订单号，不是商户订单号')}
-            showClear
-            style={{ marginTop: 6 }}
-          />
-        </div>
+        {!autoTransactionNo ? (
+          <div>
+            <Text type='tertiary'>{t('交易订单号')}</Text>
+            <Input
+              value={transactionNo}
+              onChange={setTransactionNo}
+              placeholder={t('请输入微信或支付宝的交易订单号，不是商户订单号')}
+              showClear
+              style={{ marginTop: 6 }}
+            />
+          </div>
+        ) : null}
 
         <Checkbox
           checked={confirmed}
           onChange={(event) => setConfirmed(event.target.checked)}
         >
-          {t('我确认已完成付款，并承诺金额和交易订单号真实有效')}
+          {autoTransactionNo
+            ? t('我确认已完成付款，并承诺已发红包，备注填写用户名，且没有进行转账')
+            : t('我确认已完成付款，并承诺金额和交易订单号真实有效')}
         </Checkbox>
       </div>
     </Modal>

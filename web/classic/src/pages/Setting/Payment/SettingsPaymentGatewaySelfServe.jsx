@@ -62,8 +62,10 @@ export default function SettingsPaymentGatewaySelfServe(props) {
     SelfServeTopUpEnabled: false,
     SelfServeAlipayEnabled: false,
     SelfServeWechatPayEnabled: false,
+    SelfServeWechatPayMode: 'personal_qr',
     SelfServeAlipayQRCode: '',
     SelfServeWechatPayQRCode: '',
+    SelfServeWechatPayEnterpriseQRCode: '',
     SelfServeTopUpUnitPrice: 1.0,
     SelfServeTopUpSingleMaxAmount: '',
     SelfServeTopUpDailyMaxAmount: '',
@@ -71,7 +73,8 @@ export default function SettingsPaymentGatewaySelfServe(props) {
   const [originInputs, setOriginInputs] = useState({});
   const formApiRef = useRef(null);
   const alipayFileRef = useRef(null);
-  const wechatFileRef = useRef(null);
+  const wechatPersonalFileRef = useRef(null);
+  const wechatEnterpriseFileRef = useRef(null);
 
   useEffect(() => {
     if (props.options && formApiRef.current) {
@@ -81,8 +84,11 @@ export default function SettingsPaymentGatewaySelfServe(props) {
         SelfServeWechatPayEnabled: Boolean(
           props.options.SelfServeWechatPayEnabled,
         ),
+        SelfServeWechatPayMode: props.options.SelfServeWechatPayMode || 'personal_qr',
         SelfServeAlipayQRCode: props.options.SelfServeAlipayQRCode || '',
         SelfServeWechatPayQRCode: props.options.SelfServeWechatPayQRCode || '',
+        SelfServeWechatPayEnterpriseQRCode:
+          props.options.SelfServeWechatPayEnterpriseQRCode || '',
         SelfServeTopUpUnitPrice:
           props.options.SelfServeTopUpUnitPrice !== undefined
             ? parseFloat(props.options.SelfServeTopUpUnitPrice)
@@ -108,6 +114,9 @@ export default function SettingsPaymentGatewaySelfServe(props) {
     setInputs((prev) => ({ ...prev, [field]: value }));
     formApiRef.current?.setValue(field, value);
   };
+
+  const isEnterpriseWechatMode = (mode) =>
+    String(mode || '').trim() === 'enterprise_red_packet';
 
   const handleQRCodeFile = async (field, event) => {
     const file = event.target.files?.[0];
@@ -171,6 +180,7 @@ export default function SettingsPaymentGatewaySelfServe(props) {
     if (
       inputs.SelfServeTopUpEnabled &&
       inputs.SelfServeWechatPayEnabled &&
+      !isEnterpriseWechatMode(inputs.SelfServeWechatPayMode) &&
       !inputs.SelfServeWechatPayQRCode
     ) {
       showError(t('请上传或填写微信收款码'));
@@ -179,9 +189,28 @@ export default function SettingsPaymentGatewaySelfServe(props) {
     if (
       inputs.SelfServeTopUpEnabled &&
       inputs.SelfServeWechatPayEnabled &&
+      isEnterpriseWechatMode(inputs.SelfServeWechatPayMode) &&
+      !inputs.SelfServeWechatPayEnterpriseQRCode
+    ) {
+      showError(t('请上传或填写企业微信红包收款码'));
+      return false;
+    }
+    if (
+      inputs.SelfServeTopUpEnabled &&
+      inputs.SelfServeWechatPayEnabled &&
+      !isEnterpriseWechatMode(inputs.SelfServeWechatPayMode) &&
       isImageDataQRCode(inputs.SelfServeWechatPayQRCode)
     ) {
       showError(t('请上传微信收款码图片，系统会自动解码保存二维码内容'));
+      return false;
+    }
+    if (
+      inputs.SelfServeTopUpEnabled &&
+      inputs.SelfServeWechatPayEnabled &&
+      isEnterpriseWechatMode(inputs.SelfServeWechatPayMode) &&
+      isImageDataQRCode(inputs.SelfServeWechatPayEnterpriseQRCode)
+    ) {
+      showError(t('请上传企业微信红包收款码图片，系统会自动解码保存二维码内容'));
       return false;
     }
     return true;
@@ -195,8 +224,10 @@ export default function SettingsPaymentGatewaySelfServe(props) {
         'SelfServeTopUpEnabled',
         'SelfServeAlipayEnabled',
         'SelfServeWechatPayEnabled',
+        'SelfServeWechatPayMode',
         'SelfServeAlipayQRCode',
         'SelfServeWechatPayQRCode',
+        'SelfServeWechatPayEnterpriseQRCode',
         'SelfServeTopUpUnitPrice',
         'SelfServeTopUpSingleMaxAmount',
         'SelfServeTopUpDailyMaxAmount',
@@ -334,6 +365,26 @@ export default function SettingsPaymentGatewaySelfServe(props) {
             gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
             style={{ marginTop: 8 }}
           >
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Select
+                field='SelfServeWechatPayMode'
+                label={t('微信自助收款模式')}
+                extraText={t('对外展示仍然是微信自助')}
+                style={{ width: '100%' }}
+              >
+                <Form.Select.Option value='personal_qr'>
+                  {t('个人收款码')}
+                </Form.Select.Option>
+                <Form.Select.Option value='enterprise_red_packet'>
+                  {t('企业微信红包收款')}
+                </Form.Select.Option>
+              </Form.Select>
+            </Col>
+          </Row>
+          <Row
+            gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+            style={{ marginTop: 8 }}
+          >
             <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.InputNumber
                 field='SelfServeTopUpUnitPrice'
@@ -385,8 +436,15 @@ export default function SettingsPaymentGatewaySelfServe(props) {
             <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               {renderQRCodeInput({
                 field: 'SelfServeWechatPayQRCode',
-                label: t('微信收款码'),
-                fileRef: wechatFileRef,
+                label: t('微信个人收款码'),
+                fileRef: wechatPersonalFileRef,
+              })}
+            </Col>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              {renderQRCodeInput({
+                field: 'SelfServeWechatPayEnterpriseQRCode',
+                label: t('企业微信红包收款码'),
+                fileRef: wechatEnterpriseFileRef,
               })}
             </Col>
           </Row>

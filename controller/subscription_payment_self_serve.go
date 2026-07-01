@@ -3,7 +3,6 @@ package controller
 import (
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/Xauryan/stuhelper-ai/common"
 	"github.com/Xauryan/stuhelper-ai/logger"
@@ -34,10 +33,6 @@ func SubscriptionRequestSelfServePay(c *gin.Context) {
 	req.PaymentMethod = model.NormalizeSelfServePaymentMethod(req.PaymentMethod)
 	if req.PaymentMethod == "" || !isSelfServePaymentMethodEnabled(req.PaymentMethod) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "自助充值支付方式未启用"})
-		return
-	}
-	if strings.TrimSpace(req.TransactionNo) == "" {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "请填写交易订单号"})
 		return
 	}
 

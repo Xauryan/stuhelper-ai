@@ -109,6 +109,7 @@ const SubscriptionPlansCard = ({
   enableWechatPayOfficialTopUp = false,
   enableSelfServeTopUp = false,
   selfServeQrCodes = {},
+  selfServeWechatPayMode = 'personal_qr',
   selfServeLimits = {},
   priceRatio,
   getPaymentServiceFeePercent,
@@ -175,6 +176,9 @@ const SubscriptionPlansCard = ({
     setSelfServeTransactionNo('');
     setSelfServeConfirmed(false);
   };
+
+  const isWechatSelfServeRedPacket = () =>
+    String(selfServeWechatPayMode || '').trim() === 'enterprise_red_packet';
 
   const checkWechatQrOrderStatus = async (orderId) => {
     if (!orderId) {
@@ -244,6 +248,7 @@ const SubscriptionPlansCard = ({
         hasAlipayOfficial,
         hasWechatPayOfficial,
         selfServeQrCodes,
+        selfServeWechatPayMode,
         selfServeUnitPrice: selfServeLimits?.unit_price,
       }),
     );
@@ -262,6 +267,7 @@ const SubscriptionPlansCard = ({
     hasAlipayOfficial,
     hasWechatPayOfficial,
     selfServeQrCodes,
+    selfServeWechatPayMode,
     selfServeLimits?.unit_price,
     t,
   ]);
@@ -777,7 +783,10 @@ const SubscriptionPlansCard = ({
       showError(t('请先配置自助充值价格'));
       return;
     }
-    if (!selfServeTransactionNo.trim()) {
+    const needsTransactionNo =
+      selectedPaymentMethod?.type !== 'wxpay_self_serve' ||
+      !isWechatSelfServeRedPacket();
+    if (needsTransactionNo && !selfServeTransactionNo.trim()) {
       showError(t('请输入交易订单号'));
       return;
     }
@@ -791,7 +800,7 @@ const SubscriptionPlansCard = ({
         plan_id: selectedPlan.plan.id,
         payment_method: selectedPaymentMethod.type,
         declared_money: selectedSelfServeExpectedMoney,
-        transaction_no: selfServeTransactionNo.trim(),
+        transaction_no: needsTransactionNo ? selfServeTransactionNo.trim() : '',
       });
       if (isApiSuccess(res.data)) {
         showSuccess(t('自助订阅已提交，订阅已立即开通'));
@@ -1432,6 +1441,7 @@ const SubscriptionPlansCard = ({
         paymentMethod={selectedPaymentMethod?.type}
         paymentName={selectedPaymentMethod?.name}
         qrCode={selectedPaymentMethod?.qrCode}
+        wechatPayMode={selfServeWechatPayMode}
         expectedMoney={selectedSelfServeExpectedMoney || 0}
         transactionNo={selfServeTransactionNo}
         setTransactionNo={setSelfServeTransactionNo}

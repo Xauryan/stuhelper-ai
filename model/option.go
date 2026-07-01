@@ -165,8 +165,10 @@ func InitOptionMap() {
 	common.OptionMap["SelfServeTopUpEnabled"] = strconv.FormatBool(setting.SelfServeTopUpEnabled)
 	common.OptionMap["SelfServeAlipayEnabled"] = strconv.FormatBool(setting.SelfServeAlipayEnabled)
 	common.OptionMap["SelfServeWechatPayEnabled"] = strconv.FormatBool(setting.SelfServeWechatPayEnabled)
+	common.OptionMap["SelfServeWechatPayMode"] = setting.SelfServeWechatPayMode
 	common.OptionMap["SelfServeAlipayQRCode"] = setting.SelfServeAlipayQRCode
 	common.OptionMap["SelfServeWechatPayQRCode"] = setting.SelfServeWechatPayQRCode
+	common.OptionMap["SelfServeWechatPayEnterpriseQRCode"] = setting.SelfServeWechatPayEnterpriseQRCode
 	common.OptionMap["SelfServeTopUpUnitPrice"] = strconv.FormatFloat(setting.SelfServeTopUpUnitPrice, 'f', -1, 64)
 	common.OptionMap["SelfServeTopUpSingleMaxAmount"] = formatSelfServeTopUpLimitOption(setting.SelfServeTopUpSingleMaxAmount)
 	common.OptionMap["SelfServeTopUpDailyMaxAmount"] = formatSelfServeTopUpLimitOption(setting.SelfServeTopUpDailyMaxAmount)
@@ -625,6 +627,10 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.SelfServeAlipayQRCode = strings.TrimSpace(value)
 	case "SelfServeWechatPayQRCode":
 		setting.SelfServeWechatPayQRCode = strings.TrimSpace(value)
+	case "SelfServeWechatPayEnterpriseQRCode":
+		setting.SelfServeWechatPayEnterpriseQRCode = strings.TrimSpace(value)
+	case "SelfServeWechatPayMode":
+		setting.SelfServeWechatPayMode = setting.NormalizeSelfServeWechatPayMode(value)
 	case "SelfServeTopUpUnitPrice":
 		setting.SelfServeTopUpUnitPrice, _ = strconv.ParseFloat(strings.TrimSpace(value), 64)
 	case "SelfServeTopUpSingleMaxAmount":
@@ -787,9 +793,13 @@ func validateOptionValue(key string, value string) error {
 		if err != nil || maxRecharges < 0 {
 			return fmt.Errorf("invalid ReferralCommissionMaxRecharges: %s", value)
 		}
-	case "SelfServeAlipayQRCode", "SelfServeWechatPayQRCode":
+	case "SelfServeAlipayQRCode", "SelfServeWechatPayQRCode", "SelfServeWechatPayEnterpriseQRCode":
 		if err := validateSelfServeQRCodeValue(key, value); err != nil {
 			return err
+		}
+	case "SelfServeWechatPayMode":
+		if !setting.IsValidSelfServeWechatPayMode(value) {
+			return fmt.Errorf("invalid %s: %s", key, value)
 		}
 	case "SelfServeTopUpUnitPrice":
 		if err := validatePositiveFloatOption(key, value); err != nil {

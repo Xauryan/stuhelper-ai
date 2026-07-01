@@ -128,6 +128,9 @@ const TopUp = () => {
     useState(false);
   const [enableSelfServeTopUp, setEnableSelfServeTopUp] = useState(false);
   const [selfServeQrCodes, setSelfServeQrCodes] = useState({});
+  const [selfServeWechatPayMode, setSelfServeWechatPayMode] = useState(
+    'personal_qr',
+  );
   const [selfServeLimits, setSelfServeLimits] = useState(
     EMPTY_SELF_SERVE_LIMITS,
   );
@@ -210,6 +213,13 @@ const TopUp = () => {
 
   const isSelfServePayment = (payment) =>
     payment === 'alipay_self_serve' || payment === 'wxpay_self_serve';
+
+  const isWechatSelfServeRedPacket = () =>
+    String(selfServeWechatPayMode || '').trim() === 'enterprise_red_packet';
+
+  const requiresSelfServeTransactionNo = () =>
+    selfServePaymentMethod !== 'wxpay_self_serve' ||
+    !isWechatSelfServeRedPacket();
 
   const getSelfServeTopupGroupRatio = () =>
     positiveRatio(
@@ -854,7 +864,8 @@ const TopUp = () => {
       );
       return;
     }
-    if (!selfServeTransactionNo.trim()) {
+    const needsTransactionNo = requiresSelfServeTransactionNo();
+    if (needsTransactionNo && !selfServeTransactionNo.trim()) {
       showError(t('请输入交易订单号'));
       return;
     }
@@ -867,7 +878,7 @@ const TopUp = () => {
       const res = await API.post('/api/user/self-serve/pay', {
         payment_method: selfServePaymentMethod,
         declared_money: normalizedMoney,
-        transaction_no: selfServeTransactionNo.trim(),
+        transaction_no: needsTransactionNo ? selfServeTransactionNo.trim() : '',
       });
       const { success, message, data } = res.data;
       if (success) {
@@ -1190,6 +1201,9 @@ const TopUp = () => {
           setEnableWechatPayOfficialTopUp(enableWechatPayOfficialTopUp);
           setEnableSelfServeTopUp(enableSelfServeTopUp);
           setSelfServeQrCodes(data.self_serve_qrcodes || {});
+          setSelfServeWechatPayMode(
+            data.self_serve_wechat_pay_mode || 'personal_qr',
+          );
           setSelfServeLimits(normalizeSelfServeLimits(data.self_serve_limits));
           setMinTopUp(minTopUpValue);
           setTopUpCount(minTopUpValue);
@@ -1515,6 +1529,7 @@ const TopUp = () => {
         visible={selfServeOpen}
         paymentMethod={selfServePaymentMethod}
         qrCode={selfServeQrCodes?.[selfServePaymentMethod]}
+        wechatPayMode={selfServeWechatPayMode}
         declaredMoney={selfServeDeclaredMoney}
         setDeclaredMoney={setSelfServeDeclaredMoney}
         transactionNo={selfServeTransactionNo}
@@ -1572,6 +1587,7 @@ const TopUp = () => {
           enableWechatPayOfficialTopUp={enableWechatPayOfficialTopUp}
           enableSelfServeTopUp={enableSelfServeTopUp}
           selfServeQrCodes={selfServeQrCodes}
+          selfServeWechatPayMode={selfServeWechatPayMode}
           selfServeLimits={selfServeLimits}
           presetAmounts={presetAmounts}
           selectedPreset={selectedPreset}

@@ -125,6 +125,8 @@ func GetTopUpInfo(c *gin.Context) {
 	}
 
 	enableSelfServeAlipay := isSelfServeAlipayTopUpEnabled()
+	selfServeWechatPayMode := setting.NormalizeSelfServeWechatPayMode(setting.SelfServeWechatPayMode)
+	selfServeWechatPayQRCode := setting.SelfServeWechatPayQRCodeContent()
 	if enableSelfServeAlipay {
 		payMethods = append(payMethods, map[string]string{
 			"name":             "支付宝自助",
@@ -173,9 +175,10 @@ func GetTopUpInfo(c *gin.Context) {
 		"enable_self_serve_topup":          isSelfServeTopUpEnabled(),
 		"enable_self_serve_alipay_topup":   enableSelfServeAlipay,
 		"enable_self_serve_wechat_topup":   enableSelfServeWechatPay,
+		"self_serve_wechat_pay_mode":       selfServeWechatPayMode,
 		"self_serve_qrcodes": gin.H{
 			model.PaymentMethodAlipaySelfServe: selfServeQRCodeContent(setting.SelfServeAlipayQRCode),
-			model.PaymentMethodWechatSelfServe: selfServeQRCodeContent(setting.SelfServeWechatPayQRCode),
+			model.PaymentMethodWechatSelfServe: selfServeQRCodeContent(selfServeWechatPayQRCode),
 		},
 		"self_serve_limits": gin.H{
 			"single_max_money":  setting.SelfServeTopUpSingleMaxAmount,

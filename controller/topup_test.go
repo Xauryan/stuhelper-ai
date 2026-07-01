@@ -291,6 +291,75 @@ func TestGetTopUpInfoIncludesSelfServeUnitPriceAndTopupGroupRatio(t *testing.T) 
 	require.Equal(t, "https://qr.alipay.com/45t165972y9chxii0fm3fe8", payload.Data.SelfServeQRCodes[model.PaymentMethodAlipaySelfServe])
 }
 
+func TestGetTopUpInfoReturnsEnterpriseWechatRedPacketQRCode(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalPayAddress := operation_setting.PayAddress
+	originalEpayID := operation_setting.EpayId
+	originalEpayKey := operation_setting.EpayKey
+	originalPayMethods := operation_setting.PayMethods
+	originalSelfServeTopUpEnabled := setting.SelfServeTopUpEnabled
+	originalSelfServeAlipayEnabled := setting.SelfServeAlipayEnabled
+	originalSelfServeWechatPayEnabled := setting.SelfServeWechatPayEnabled
+	originalSelfServeWechatPayMode := setting.SelfServeWechatPayMode
+	originalSelfServeAlipayQRCode := setting.SelfServeAlipayQRCode
+	originalSelfServeWechatPayQRCode := setting.SelfServeWechatPayQRCode
+	originalSelfServeWechatPayEnterpriseQRCode := setting.SelfServeWechatPayEnterpriseQRCode
+	originalSelfServeTopUpUnitPrice := setting.SelfServeTopUpUnitPrice
+	originalSelfServeSingleMax := setting.SelfServeTopUpSingleMaxAmount
+	originalSelfServeDailyMax := setting.SelfServeTopUpDailyMaxAmount
+	t.Cleanup(func() {
+		operation_setting.PayAddress = originalPayAddress
+		operation_setting.EpayId = originalEpayID
+		operation_setting.EpayKey = originalEpayKey
+		operation_setting.PayMethods = originalPayMethods
+		setting.SelfServeTopUpEnabled = originalSelfServeTopUpEnabled
+		setting.SelfServeAlipayEnabled = originalSelfServeAlipayEnabled
+		setting.SelfServeWechatPayEnabled = originalSelfServeWechatPayEnabled
+		setting.SelfServeWechatPayMode = originalSelfServeWechatPayMode
+		setting.SelfServeAlipayQRCode = originalSelfServeAlipayQRCode
+		setting.SelfServeWechatPayQRCode = originalSelfServeWechatPayQRCode
+		setting.SelfServeWechatPayEnterpriseQRCode = originalSelfServeWechatPayEnterpriseQRCode
+		setting.SelfServeTopUpUnitPrice = originalSelfServeTopUpUnitPrice
+		setting.SelfServeTopUpSingleMaxAmount = originalSelfServeSingleMax
+		setting.SelfServeTopUpDailyMaxAmount = originalSelfServeDailyMax
+	})
+
+	operation_setting.PayAddress = ""
+	operation_setting.EpayId = ""
+	operation_setting.EpayKey = ""
+	operation_setting.PayMethods = []map[string]string{}
+	setting.SelfServeTopUpEnabled = true
+	setting.SelfServeAlipayEnabled = false
+	setting.SelfServeWechatPayEnabled = true
+	setting.SelfServeWechatPayMode = setting.SelfServeWechatPayModeEnterpriseRedPacket
+	setting.SelfServeAlipayQRCode = ""
+	setting.SelfServeWechatPayQRCode = "https://pay.example.com/wechat-personal"
+	setting.SelfServeWechatPayEnterpriseQRCode = "https://pay.example.com/wechat-enterprise"
+	setting.SelfServeTopUpUnitPrice = 1.23
+	setting.SelfServeTopUpSingleMaxAmount = 199.99
+	setting.SelfServeTopUpDailyMaxAmount = 499.99
+
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/user/topup/info", nil)
+
+	GetTopUpInfo(ctx)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var payload struct {
+		Success bool `json:"success"`
+		Data    struct {
+			SelfServeWechatPayMode string            `json:"self_serve_wechat_pay_mode"`
+			SelfServeQRCodes       map[string]string `json:"self_serve_qrcodes"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	require.Equal(t, setting.SelfServeWechatPayModeEnterpriseRedPacket, payload.Data.SelfServeWechatPayMode)
+	require.Equal(t, "https://pay.example.com/wechat-enterprise", payload.Data.SelfServeQRCodes[model.PaymentMethodWechatSelfServe])
+}
+
 func TestBuildOfficialTradeNoUsesAlipaySafeCharacters(t *testing.T) {
 	tradeNo := buildOfficialTradeNo("ALIPAY", 42)
 

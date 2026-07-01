@@ -137,7 +137,7 @@ func isSelfServeWechatPayTopUpEnabled() bool {
 		setting.SelfServeTopUpLimitsConfigured() &&
 		setting.SelfServeTopUpPricingConfigured() &&
 		setting.SelfServeWechatPayEnabled &&
-		selfServeQRCodeContent(setting.SelfServeWechatPayQRCode) != ""
+		selfServeQRCodeContent(setting.SelfServeWechatPayQRCodeContent()) != ""
 }
 
 func isEpayTopUpEnabled() bool {
